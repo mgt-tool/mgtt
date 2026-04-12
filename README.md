@@ -1,4 +1,4 @@
-# MGTT — Model Guided Troubleshooting Tool
+## `mgtt` — **m**odel **g**uided **t**roubleshooting **t**ool
 
 If you build or maintain anything with more than two components — a web app with a frontend, an API, and a database; a set of microservices behind a load balancer; a data pipeline with queues, workers, and storage — you know the drill:
 

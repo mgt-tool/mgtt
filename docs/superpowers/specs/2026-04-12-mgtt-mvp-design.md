@@ -92,27 +92,43 @@ Single Go binary, `cmd/mgtt/main.go` wires cobra commands to internal packages. 
 **Dependency direction:**
 
 ```
-cli → {incident, facts, engine, probe, simulate, render}
+cli → {incident, facts, engine, probe, simulate, render, model, provider}
 simulate → {model, provider, engine, facts}
 engine → {model, provider, facts, state, expr}
 state → {expr, provider, facts}
 probe → {provider, (exec|fixture)}
 provider → {expr}
 model → {expr, provider}
+render → {engine, model, facts, state, incident, simulate, provider}
+incident → {facts}
 facts → {}
 expr → {}
-render → {} (takes structured inputs, never reaches back)
 ```
 
-Graph is acyclic. `engine`, `expr`, `facts`, `render` are leaves with no MGTT-internal dependencies.
+Graph is acyclic. `expr` and `facts` are true leaves (no MGTT-internal dependencies). `render` is a **terminal sink** — it imports most packages for their types but nothing imports render except `cli`. The directional isolation ("data flows into render, never out") is the real invariant.
 
 **Boundary rules:**
 
-- `render` is the *only* package that writes to stdout/stderr. Other packages return structured data.
-- `engine` is pure — no I/O, no probe execution, no filesystem access. Same input → same output.
-- `probe` owns the `Executor` interface; backends satisfy it; swapping backends changes nothing above.
-- `provider` owns pecking-order resolution. `model` and `engine` ask it "what facts does component X have?" and never touch YAML directly.
+- `render` is the *only* package that writes to stdout/stderr. Other packages return structured data. `render` imports other packages for their output types but never mutates them or calls back into them — it is a pure consumer.
+- `engine` is pure — no I/O, no probe execution, no filesystem access. Same input → same output. Engine accesses provider type definitions via query methods on `provider.Registry` (see below), not by reaching into raw structs.
+- `probe` owns the `Executor` interface, probe command substitution, and shell-metachar validation. Backends satisfy the interface; swapping backends changes nothing above. The `cli` layer passes model vars and component name as parameters — `probe` never imports `model`.
+- `provider` owns pecking-order resolution and exposes query methods for the engine. `model` and `engine` ask it "what facts does component X have?" and never touch YAML directly.
 - `cli` is thin glue — each subcommand is ~30–80 lines.
+
+**Provider query methods for engine decoupling:**
+
+Instead of `engine` reaching directly into `provider.Type.FailureModes[stateName]` etc., `provider.Registry` exposes focused query methods:
+
+```go
+func (r *Registry) FailureModesFor(componentType string, stateName string) ([]string, error)
+func (r *Registry) DefaultActiveStateFor(componentType string) (string, error)
+func (r *Registry) HealthyConditionsFor(componentType string) ([]expr.Node, error)
+func (r *Registry) FactsFor(componentType string) (map[string]*FactSpec, error)
+func (r *Registry) StatesFor(componentType string) ([]StateDef, error)
+func (r *Registry) ProbeCostFor(componentType string, factName string) (string, error)
+```
+
+The engine states what it needs; the provider implements the lookup. This insulates the engine from provider struct evolution and keeps the coupling to a specced interface rather than internal field layout. Direct struct access is still fine for one-shot reads elsewhere (e.g. `cli/provider_inspect` rendering the full type definition).
 
 **Runtime data flow (troubleshooting):**
 
@@ -292,7 +308,95 @@ if no match:
 
 First match wins. Provider YAML must order states most-specific to least-specific. A missing fact only blocks states that reference it; other states still get evaluated.
 
-### 4.5 engine package
+### 4.5 Type system and stdlib
+
+The type system is two-layered: stdlib primitives (always available) and provider-defined types (built on stdlib). Both share the same Go representation.
+
+```go
+type DataType struct {
+    Name    string
+    Base    string     // stdlib primitive: "int", "float", "bool", "string"
+    Units   []string   // valid suffixes: ["ms","s","m","h","d"] for duration; nil for unitless
+    Range   *Range     // min..max constraints; nil for unconstrained
+    Default any        // suggested value (provider-defined types only)
+}
+
+type Range struct {
+    Min *float64       // nil = unbounded below
+    Max *float64       // nil = unbounded above
+}
+```
+
+**Stdlib** is a hardcoded built-in provider named `mgtt`, always registered first in `provider.Registry` before any installed provider. Not a YAML file — a Go `var` with the 10 primitives from spec §4.1:
+
+```go
+var Stdlib = map[string]DataType{
+    "int":        {Name: "int",        Base: "int",    Units: nil,                              Range: nil},
+    "float":      {Name: "float",      Base: "float",  Units: nil,                              Range: nil},
+    "bool":       {Name: "bool",       Base: "bool",   Units: nil,                              Range: nil},
+    "string":     {Name: "string",     Base: "string", Units: nil,                              Range: nil},
+    "duration":   {Name: "duration",   Base: "float",  Units: []string{"ms","s","m","h","d"},   Range: &Range{Min: ptr(0.0)}},
+    "bytes":      {Name: "bytes",      Base: "int",    Units: []string{"b","kb","mb","gb","tb"}, Range: &Range{Min: ptr(0.0)}},
+    "ratio":      {Name: "ratio",      Base: "float",  Units: nil,                              Range: &Range{Min: ptr(0.0), Max: ptr(1.0)}},
+    "percentage": {Name: "percentage", Base: "float",  Units: nil,                              Range: &Range{Min: ptr(0.0), Max: ptr(100.0)}},
+    "count":      {Name: "count",      Base: "int",    Units: nil,                              Range: &Range{Min: ptr(0.0)}},
+    "timestamp":  {Name: "timestamp",  Base: "string", Units: []string{"ISO8601"},              Range: nil},
+}
+```
+
+**Provider-defined types** reference stdlib via `base`:
+
+```yaml
+# provider.yaml data_types block
+data_types:
+  hit_ratio:
+    base:    mgtt.ratio        # resolves to stdlib ratio → base "float", range 0.0..1.0
+    unit:    ~
+    range:   0.0..1.0
+    default: 0.9
+```
+
+Resolved at `provider.Load` time. `base` must resolve to a stdlib primitive or another provider-defined type that eventually resolves to a stdlib primitive (one level of chaining in v0; deeper chaining deferred with cross-provider refs).
+
+**Type validation at three points:**
+
+1. **`provider.Load`** — `data_types.base` must resolve to a stdlib primitive. `default` must satisfy declared `unit` and `range`. Missing or invalid → error with suggestion.
+
+2. **`model.Validate`** — expression literals checked against the type of the referenced fact. `5s` against a `mgtt.duration` fact → valid. `5s` against a `mgtt.int` fact → error: "literal '5s' has unit 's' but fact 'restart_count' is type mgtt.int (unitless)."
+
+3. **`facts.Append`** — value type-checked against the fact's declared type at collection time. An int fact rejects a string value; a duration fact rejects a bare int without unit context from the probe's parse mode.
+
+**Expression literal resolution** (deferred in v0 for duration/bytes, but the pipeline is defined):
+
+```
+expression literal "5s"
+  → parser recognises numeric + unit suffix "s"
+  → looks up which DataType declares "s" as a valid unit → finds mgtt.duration
+  → parses "5" as base type (float), attaches unit "s"
+  → at eval time, compared against the referenced fact's value (also a duration)
+  → comparison uses canonical units (all durations normalised to ms internally)
+```
+
+The storefront scenarios use only `mgtt.int` and `mgtt.bool` — no unit-suffixed literals. But the `DataType` struct, `Stdlib` var, and the validation pipeline at points 1 and 3 are implemented in v0 because they're needed for `mgtt stdlib ls/inspect` and for `provider.Load` to validate fact type declarations.
+
+**`mgtt stdlib ls` and `mgtt stdlib inspect`** read from the `Stdlib` var:
+
+```
+$ mgtt stdlib ls
+
+  int         base: int    unit: ~              range: ~
+  float       base: float  unit: ~              range: ~
+  bool        base: bool   unit: ~              range: ~
+  string      base: string unit: ~              range: ~
+  duration    base: float  unit: ms|s|m|h|d     range: 0..
+  bytes       base: int    unit: b|kb|mb|gb|tb  range: 0..
+  ratio       base: float  unit: ~              range: 0.0..1.0
+  percentage  base: float  unit: ~              range: 0.0..100.0
+  count       base: int    unit: ~              range: 0..
+  timestamp   base: string unit: ISO8601        range: ~
+```
+
+### 4.6 engine package
 
 ```go
 type PathTree struct {
@@ -664,13 +768,22 @@ Dot-path JSON resolver only — no full JSONPath. Rejected: `$`, `[?]` filters, 
 
 ### 6.7 Probe command substitution
 
-Variables substituted at probe-run time (not at provider-load time) because `{name}` and `{namespace}` depend on the component and model `meta.vars`:
+**Ownership: `probe` package.** Substitution, metachar validation, and the rendered command all live in `probe`. The `cli` layer passes model vars and the component name as parameters — `probe` never imports `model`.
 
-```go
-func substitute(template string, component string, modelVars map[string]string, providerVars map[string]Variable) string
+Call flow:
+
+```
+cli/plan.go:
+    rendered := probe.Substitute(probeDef.Cmd, component, model.Meta.Vars, providerVars)
+    result, err := executor.Run(ctx, probe.Command{Raw: rendered, Parse: probeDef.Parse, ...})
 ```
 
-Naive `strings.Replacer` on `{name}`, `{namespace}`, provider-declared vars. After substitution, validate that the resulting command contains no shell metacharacters that weren't already in the template (defensive against `name: "api; rm -rf /"` in a model file). Crude first layer; spec §17.8 tracks the open question for richer sandboxing.
+```go
+// probe/substitute.go
+func Substitute(template string, component string, modelVars map[string]string, providerVars map[string]Variable) string
+```
+
+Variables substituted at probe-run time (not at provider-load time) because `{name}` and `{namespace}` depend on the component being probed and the model's `meta.vars`. Naive `strings.Replacer` on `{name}`, `{namespace}`, provider-declared vars. After substitution, `ValidateCommand(rendered, template)` checks that the resulting command contains no shell metacharacters that weren't already in the template (defensive against `name: "api; rm -rf /"` in a model file). Crude first layer; spec §17.8 tracks the open question for richer sandboxing.
 
 ### 6.8 Provider install
 
@@ -1016,6 +1129,18 @@ Manual fallback is a one-line `mgtt fact add ...` copy-pasteable. Non-TTY mode l
 ### 9.9 Panic safety
 
 Core packages (`engine`, `expr`, `state`, `facts`, `provider`, `model`) must not panic on any YAML-sourced input. Parser errors return errors; evaluator errors return errors. `cmd/mgtt/main.go` has a top-level `recover` that prints a bug-report message and exits 3 — last-line defense, not a normal path.
+
+## 9A. Architectural notes for future maintainability
+
+Three items that are acceptable in v0 but should be revisited as the codebase grows:
+
+1. **`state.Derive` receives the full `*facts.Store`** but only calls `Latest(component, key)`. If the fact store grows an interface (`FactLookup` with just `Latest`), `state` decouples from the store's I/O methods. Go's implicit interface satisfaction means this can be added later without changing callers.
+
+2. **`model.Validate` orchestrates multiple concerns** — expression parsing, type resolution, graph analysis, tautology detection. If it grows past ~200 lines, split into focused validation passes (each in its own file within the `model` package, not separate packages). Keep the public API as `model.Validate()`.
+
+3. **`render.Deterministic` is a package-level `var`**, not injected. A `RenderOptions{Deterministic bool, Now func() time.Time}` struct passed to each render function would be cleaner for testing and removes the global state. Cosmetic for v0.
+
+These are not v0 blockers. They're flagged here so the plan doesn't have to invent them, and so future refactoring has a clear mandate.
 
 ## 10. Build sequencing (Approach A)
 

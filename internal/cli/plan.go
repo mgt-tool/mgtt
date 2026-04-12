@@ -14,6 +14,7 @@ import (
 	"mgtt/internal/facts"
 	"mgtt/internal/model"
 	"mgtt/internal/probe"
+	probeexec "mgtt/internal/probe/exec"
 	"mgtt/internal/probe/fixture"
 	"mgtt/internal/provider"
 	"mgtt/internal/render"
@@ -23,6 +24,7 @@ import (
 )
 
 var planModelPath string
+var planComponent string
 
 var planCmd = &cobra.Command{
 	Use:   "plan",
@@ -32,6 +34,7 @@ var planCmd = &cobra.Command{
 
 func init() {
 	planCmd.Flags().StringVar(&planModelPath, "model", "system.model.yaml", "path to system.model.yaml")
+	planCmd.Flags().StringVar(&planComponent, "component", "", "start from a specific component instead of outermost")
 	rootCmd.AddCommand(planCmd)
 }
 
@@ -79,7 +82,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		}
 		executor = ex
 	} else {
-		return fmt.Errorf("live probe execution not yet implemented; set MGTT_FIXTURES to use fixture backend")
+		executor = probeexec.Default()
 	}
 
 	// 4. Create fact store (in-memory for now; incident integration is separate).
@@ -89,10 +92,13 @@ func runPlan(cmd *cobra.Command, args []string) error {
 
 	// 5. Plan loop.
 	entry := m.EntryPoint()
+	if planComponent != "" {
+		entry = planComponent
+	}
 	render.PlanHeader(w, entry)
 
 	for iteration := 0; iteration < 50; iteration++ { // safety limit
-		tree := engine.Plan(m, reg, store, "")
+		tree := engine.Plan(m, reg, store, entry)
 
 		render.PlanSuggestion(w, tree)
 

@@ -23,6 +23,9 @@ func ParseOutput(mode string, stdout string, exitCode int) (any, error) {
 	switch {
 	case mode == "int":
 		s := strings.TrimSpace(stdout)
+		if s == "" {
+			return 0, nil
+		}
 		v, err := strconv.Atoi(s)
 		if err != nil {
 			return nil, fmt.Errorf("parse int: %w", err)

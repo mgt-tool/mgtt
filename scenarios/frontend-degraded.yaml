@@ -1,0 +1,20 @@
+name: frontend crash-looping, api healthy
+description: >
+  frontend pods are crash-looping. api and rds are healthy.
+  engine should find frontend as root cause.
+inject:
+  frontend:
+    ready_replicas: 0
+    restart_count: 8
+    desired_replicas: 2
+  api:
+    ready_replicas: 3
+    desired_replicas: 3
+    endpoints: 3
+  rds:
+    available: true
+    connection_count: 98
+expect:
+  root_cause: frontend
+  path: [nginx, frontend]
+  eliminated: [api, rds]

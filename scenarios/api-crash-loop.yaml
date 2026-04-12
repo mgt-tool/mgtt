@@ -1,0 +1,16 @@
+name: api crash-loop independent of rds
+description: >
+  api crash-loops due to a code error — not a database problem.
+  rds is healthy. engine should find api as root cause.
+inject:
+  api:
+    ready_replicas: 0
+    restart_count: 24
+    desired_replicas: 3
+  rds:
+    available: true
+    connection_count: 120
+expect:
+  root_cause: api
+  path: [nginx, api]
+  eliminated: [rds, frontend]

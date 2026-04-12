@@ -1,0 +1,20 @@
+name: all components healthy
+description: >
+  verifies that the engine does not surface false positives.
+inject:
+  nginx:
+    upstream_count: 4
+  frontend:
+    ready_replicas: 2
+    desired_replicas: 2
+    endpoints: 2
+  api:
+    ready_replicas: 3
+    desired_replicas: 3
+    endpoints: 3
+  rds:
+    available: true
+    connection_count: 87
+expect:
+  root_cause: none
+  eliminated: [nginx, frontend, api, rds]

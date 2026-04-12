@@ -85,3 +85,12 @@ func TestGolden_StdlibLs(t *testing.T) {
 	actual := runCommand(t, "stdlib", "ls")
 	goldenTest(t, goldenPath("stdlib_ls.txt"), actual)
 }
+
+func TestGolden_SimulateAll(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	modelPath := filepath.Join(repoRoot, "examples", "storefront", "system.model.yaml")
+	scenariosPath := filepath.Join(repoRoot, "scenarios")
+	actual := runCommand(t, "simulate", "--all", "--model", modelPath, "--scenarios-dir", scenariosPath)
+	goldenTest(t, goldenPath("simulate_all.txt"), actual)
+}

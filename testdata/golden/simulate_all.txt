@@ -1,0 +1,6 @@
+  all components healthy                   ✓ passed
+  api crash-loop independent of rds        ✓ passed
+  frontend crash-looping, api healthy      ✓ passed
+  rds unavailable                          ✓ passed
+
+  4/4 scenarios passed

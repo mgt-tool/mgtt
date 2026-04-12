@@ -1,0 +1,17 @@
+name: rds unavailable
+description: >
+  rds stops accepting connections.
+  api starts crash-looping as a result.
+  engine should trace the fault to rds, not api.
+inject:
+  rds:
+    available: false
+    connection_count: 0
+  api:
+    ready_replicas: 0
+    restart_count: 12
+    desired_replicas: 3
+expect:
+  root_cause: rds
+  path: [nginx, api, rds]
+  eliminated: [frontend]

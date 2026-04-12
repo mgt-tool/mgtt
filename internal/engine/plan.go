@@ -1,0 +1,163 @@
+package engine
+
+import (
+	"fmt"
+	"sort"
+
+	"mgtt/internal/facts"
+	"mgtt/internal/model"
+	"mgtt/internal/provider"
+	"mgtt/internal/state"
+)
+
+// Plan runs the 5-stage constraint engine against the model and fact store,
+// returning a PathTree describing all failure paths, eliminated paths, and
+// (if determinable) the root cause.
+//
+// If entry is non-empty it is used as the starting component; otherwise
+// the model's EntryPoint (first component with in-degree 0) is used.
+func Plan(m *model.Model, reg *provider.Registry, store *facts.Store, entry string) *PathTree {
+	// Stage 1 — Entry selection
+	if entry == "" {
+		entry = m.EntryPoint()
+	}
+
+	// Stage 2 — Path enumeration
+	paths := enumeratePaths(m, entry)
+
+	// Stage 3 — State derivation + elimination
+	derivation := state.Derive(m, reg, store)
+
+	var alive []Path
+	var eliminated []Path
+
+	for i, p := range paths {
+		p.ID = fmt.Sprintf("PATH %c", 'A'+i)
+
+		// The deepest (last) component on the path determines path fate.
+		deepest := p.Components[len(p.Components)-1]
+		deepestState := derivation.ComponentStates[deepest]
+
+		// Resolve the default_active_state for this component's type.
+		comp := m.Components[deepest]
+		defaultActive := resolveDefaultActive(comp, m.Meta.Providers, reg)
+
+		// Build hypothesis string.
+		p.Hypothesis = fmt.Sprintf("%s.state == %s", deepest, deepestState)
+
+		if isEliminated(deepest, deepestState, defaultActive, store) {
+			if deepestState == defaultActive {
+				p.Reason = fmt.Sprintf("%s healthy (%s)", deepest, deepestState)
+			} else {
+				p.Reason = fmt.Sprintf("%s has no observations", deepest)
+			}
+			eliminated = append(eliminated, p)
+		} else {
+			alive = append(alive, p)
+		}
+	}
+
+	tree := &PathTree{
+		Entry:      entry,
+		Paths:      alive,
+		Eliminated: eliminated,
+		States:     derivation,
+	}
+
+	// Stage 4 — Root cause identification
+	// Among surviving paths, the one with the deepest unhealthy component
+	// (longest path) is the root cause path.
+	if len(alive) > 0 {
+		// Sort alive paths by length descending — longest path has the
+		// deepest root cause.
+		sort.Slice(alive, func(i, j int) bool {
+			return len(alive[i].Components) > len(alive[j].Components)
+		})
+		bestPath := alive[0]
+		tree.RootCause = bestPath.Components[len(bestPath.Components)-1]
+	}
+
+	// Stage 5 — Probe suggestion (not needed for simulation with full facts,
+	// but included for completeness).
+	// For simulation (all facts injected), Suggested stays nil.
+
+	return tree
+}
+
+// enumeratePaths does a BFS from entry through the dependency graph and
+// returns one Path per reachable component (excluding entry as a trivial
+// single-component path). Each path is the shortest walk from entry to
+// that component.
+func enumeratePaths(m *model.Model, entry string) []Path {
+	type bfsItem struct {
+		name string
+		path []string
+	}
+
+	visited := map[string]bool{entry: true}
+	queue := []bfsItem{{name: entry, path: []string{entry}}}
+	var paths []Path
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		deps := m.DependenciesOf(curr.name)
+		for _, dep := range deps {
+			if visited[dep] {
+				continue
+			}
+			visited[dep] = true
+			newPath := make([]string, len(curr.path)+1)
+			copy(newPath, curr.path)
+			newPath[len(curr.path)] = dep
+
+			paths = append(paths, Path{Components: newPath})
+			queue = append(queue, bfsItem{name: dep, path: newPath})
+		}
+	}
+
+	// Sort paths by terminal component's declaration order for determinism.
+	orderIdx := make(map[string]int, len(m.Order))
+	for i, name := range m.Order {
+		orderIdx[name] = i
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		ti := paths[i].Components[len(paths[i].Components)-1]
+		tj := paths[j].Components[len(paths[j].Components)-1]
+		return orderIdx[ti] < orderIdx[tj]
+	})
+
+	return paths
+}
+
+// resolveDefaultActive looks up the default_active_state for a component's type.
+func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *provider.Registry) string {
+	providers := comp.Providers
+	if len(providers) == 0 {
+		providers = metaProviders
+	}
+	t, _, err := reg.ResolveType(providers, comp.Type)
+	if err != nil {
+		return ""
+	}
+	return t.DefaultActiveState
+}
+
+// isEliminated determines whether a path's deepest component should be eliminated.
+// A component is eliminated if:
+//   - Its state matches the default_active_state (proven healthy), OR
+//   - It has NO facts at all (unchecked — can't be blamed for observed symptoms)
+func isEliminated(component, currentState, defaultActive string, store *facts.Store) bool {
+	// If the component is in the default active state → healthy → eliminate.
+	if currentState == defaultActive && defaultActive != "" {
+		return true
+	}
+
+	// If the component has NO facts at all, it's unchecked → eliminate.
+	if store.FactsFor(component) == nil {
+		return true
+	}
+
+	return false
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"mgtt/internal/providersupport"
 
@@ -36,50 +37,67 @@ func init() {
 	rootCmd.AddCommand(providerCmd)
 }
 
-// installProvider installs a single provider by name.
-// For v0, providers are in-repo only (no URL cloning).
+// installProvider installs a provider by name or path.
+// If the argument contains a path separator or starts with ".", it's treated
+// as a directory path. Otherwise it's looked up by name in $MGTT_HOME/providers/
+// or ./providers/.
+//
 // Steps:
-//  1. Find source provider directory (local providers/<name>/)
+//  1. Find source provider directory
 //  2. Copy it to ~/.mgtt/providers/<name>/
 //  3. Run hooks/install.sh if declared
 //  4. Load and validate provider.yaml
 //  5. Render summary
-func installProvider(w io.Writer, name string) error {
+func installProvider(w io.Writer, nameOrPath string) error {
 	// 1. Determine source directory.
 	srcDir := ""
-	if home := os.Getenv("MGTT_HOME"); home != "" {
-		candidate := filepath.Join(home, "providers", name)
+
+	// Check if argument is a path (contains separator or starts with .)
+	if filepath.IsAbs(nameOrPath) || strings.HasPrefix(nameOrPath, ".") || strings.Contains(nameOrPath, string(filepath.Separator)) {
+		candidate := nameOrPath
 		if _, err := os.Stat(filepath.Join(candidate, "provider.yaml")); err == nil {
 			srcDir = candidate
 		}
-	}
-	if srcDir == "" {
-		// Fall back to local providers directory relative to CWD.
-		candidate := filepath.Join("providers", name)
-		if _, err := os.Stat(filepath.Join(candidate, "provider.yaml")); err == nil {
-			srcDir = candidate
-		}
-	}
-	if srcDir == "" {
-		return fmt.Errorf("provider directory not found")
 	}
 
-	// 2. Determine destination: ~/.mgtt/providers/<name>/
+	if srcDir == "" {
+		// Look up by name
+		name := nameOrPath
+		if home := os.Getenv("MGTT_HOME"); home != "" {
+			candidate := filepath.Join(home, "providers", name)
+			if _, err := os.Stat(filepath.Join(candidate, "provider.yaml")); err == nil {
+				srcDir = candidate
+			}
+		}
+		if srcDir == "" {
+			candidate := filepath.Join("providers", name)
+			if _, err := os.Stat(filepath.Join(candidate, "provider.yaml")); err == nil {
+				srcDir = candidate
+			}
+		}
+	}
+
+	if srcDir == "" {
+		return fmt.Errorf("provider directory not found (tried path and name lookup)")
+	}
+
+	// 2. Load provider.yaml first to get the canonical name.
+	p, err := providersupport.LoadFromFile(filepath.Join(srcDir, "provider.yaml"))
+	if err != nil {
+		return fmt.Errorf("load provider.yaml: %w", err)
+	}
+	providerName := p.Meta.Name
+
+	// 3. Determine destination: ~/.mgtt/providers/<name>/
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
 	}
-	destDir := filepath.Join(homeDir, ".mgtt", "providers", name)
+	destDir := filepath.Join(homeDir, ".mgtt", "providers", providerName)
 	if err := copyDir(srcDir, destDir); err != nil {
 		return fmt.Errorf("copy provider directory: %w", err)
 	}
 	fmt.Fprintf(w, "  copied %s -> %s\n", srcDir, destDir)
-
-	// 3. Load provider.yaml to read hooks.
-	p, err := providersupport.LoadFromFile(filepath.Join(destDir, "provider.yaml"))
-	if err != nil {
-		return fmt.Errorf("load provider.yaml: %w", err)
-	}
 
 	// 4. Run install hook if declared.
 	if p.Hooks.Install != "" {

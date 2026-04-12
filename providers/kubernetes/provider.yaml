@@ -26,7 +26,7 @@ types:
         ttl: 30s
         probe:
           cmd: kubectl -n {namespace} get endpoints {name} -o json
-          parse: "json:.subsets[0].addresses|length"
+          parse: "json:.subsets.0.addresses|length"
           cost: low
           access: kubectl read-only
     healthy: [upstream_count > 0]

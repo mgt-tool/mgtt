@@ -523,7 +523,7 @@ func TestFixture_Kubernetes_NginxUpstreamCount(t *testing.T) {
 		Provider:  "kubernetes",
 		Component: "nginx",
 		Fact:      "upstream_count",
-		Parse:     "int",
+		Parse:     "json:.subsets.0.addresses|length",
 	})
 	if err != nil {
 		t.Fatal(err)

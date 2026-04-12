@@ -119,8 +119,16 @@ func compareFactValue(op CmpOp, factVal any, nodeVal Value, component string, ct
 		return compareBools(op, bv, nb)
 	}
 
-	// String fact.
+	// String fact — try numeric coercion first so that probe results
+	// returned as strings (e.g. from regex parse) can participate in
+	// numeric comparisons like "restart_count > 5".
 	if sv, ok := factVal.(string); ok {
+		if f, err := strconv.ParseFloat(sv, 64); err == nil {
+			nodeFloat, nerr := nodeValToFloat(nodeVal)
+			if nerr == nil {
+				return compareFloats(op, f, nodeFloat), nil
+			}
+		}
 		ns, err := asString(nodeVal)
 		if err != nil {
 			return false, &UnresolvedError{Component: component, Reason: "type mismatch"}

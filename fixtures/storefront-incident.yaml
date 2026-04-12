@@ -1,14 +1,11 @@
 # Fixture data for the storefront incident troubleshooting scenario.
 #
-# The aws rds "available" probe uses parse: "regex:^available$" in the provider
-# YAML. Since regex parse returns a string ("available"), which cannot be
-# compared to bool true in state conditions, the fixture provides stdout "true\n"
-# so that the bool-compatible parse modes work correctly in the state evaluator.
-# A future task will add string→bool coercion in the plan loop (Task 5).
+# The aws rds "available" probe uses parse: bool in the provider YAML.
+# The fixture provides stdout "true\n" so the bool parse returns true.
 kubernetes:
   nginx:
     upstream_count:
-      stdout: "0\n"
+      stdout: "{\"subsets\":[{\"addresses\":[]}]}\n"
       exit: 0
   api:
     endpoints:
@@ -36,9 +33,6 @@ kubernetes:
 aws:
   rds:
     available:
-      # Real aws CLI returns "available" but the state condition compares
-      # available == true. The fixture provides "true\n" so the bool parse
-      # mode works; the provider YAML may need a parse-mode fix in a future task.
       stdout: "true\n"
       exit: 0
     connection_count:

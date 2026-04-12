@@ -26,8 +26,10 @@ type Path struct {
 type Probe struct {
 	Component  string
 	Fact       string
+	Provider   string   // owning provider name
+	ParseMode  string   // from factSpec.Probe.Parse
 	Eliminates []string // path IDs
 	Cost       string
 	Access     string
-	Command    string
+	Command    string   // raw template (pre-substitution)
 }

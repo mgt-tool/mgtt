@@ -86,6 +86,18 @@ func TestGolden_StdlibLs(t *testing.T) {
 	goldenTest(t, goldenPath("stdlib_ls.txt"), actual)
 }
 
+func TestGolden_PlanStorefront(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	modelPath := filepath.Join(repoRoot, "examples", "storefront", "system.model.yaml")
+	fixturePath := filepath.Join(repoRoot, "fixtures", "storefront-incident.yaml")
+
+	t.Setenv("MGTT_FIXTURES", fixturePath)
+
+	actual := runCommand(t, "plan", "--model", modelPath)
+	goldenTest(t, goldenPath("plan_storefront.txt"), actual)
+}
+
 func TestGolden_SimulateAll(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")

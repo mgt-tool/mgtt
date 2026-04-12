@@ -20,7 +20,7 @@ types:
         ttl: 60s
         probe:
           cmd: "aws rds describe-db-instances --db-instance-identifier {name} --query 'DBInstances[0].DBInstanceStatus' --output text"
-          parse: "regex:^available$"
+          parse: bool
           cost: low
           access: AWS API read-only
       connection_count:

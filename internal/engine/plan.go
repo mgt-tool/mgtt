@@ -46,12 +46,33 @@ func Plan(m *model.Model, reg *provider.Registry, store *facts.Store, entry stri
 		p.Hypothesis = fmt.Sprintf("%s.state == %s", deepest, deepestState)
 
 		if isEliminated(deepest, deepestState, defaultActive, store) {
-			if deepestState == defaultActive {
-				p.Reason = fmt.Sprintf("%s healthy (%s)", deepest, deepestState)
-			} else {
-				p.Reason = fmt.Sprintf("%s has no observations", deepest)
+			// The deepest component is eliminable. If it has no facts (unchecked)
+			// and an intermediate component is known-unhealthy, keep the path alive
+			// so the engine continues probing inward. However, if the deepest
+			// component is proven healthy (has facts, state == default_active),
+			// always eliminate — the path is cleared.
+			keptAlive := false
+			if store.FactsFor(deepest) == nil {
+				for _, c := range p.Components[:len(p.Components)-1] {
+					cState := derivation.ComponentStates[c]
+					cComp := m.Components[c]
+					cDefault := resolveDefaultActive(cComp, m.Meta.Providers, reg)
+					if store.FactsFor(c) != nil && (cDefault == "" || cState != cDefault) {
+						keptAlive = true
+						break
+					}
+				}
 			}
-			eliminated = append(eliminated, p)
+			if keptAlive {
+				alive = append(alive, p)
+			} else {
+				if deepestState == defaultActive {
+					p.Reason = fmt.Sprintf("%s healthy (%s)", deepest, deepestState)
+				} else {
+					p.Reason = fmt.Sprintf("%s has no observations", deepest)
+				}
+				eliminated = append(eliminated, p)
+			}
 		} else {
 			alive = append(alive, p)
 		}
@@ -77,9 +98,11 @@ func Plan(m *model.Model, reg *provider.Registry, store *facts.Store, entry stri
 		tree.RootCause = bestPath.Components[len(bestPath.Components)-1]
 	}
 
-	// Stage 5 — Probe suggestion (not needed for simulation with full facts,
-	// but included for completeness).
-	// For simulation (all facts injected), Suggested stays nil.
+	// Stage 5 — Probe suggestion.
+	// Pick the next fact to collect from unchecked components along surviving
+	// paths (or the entry point if it has no facts). Components with complete
+	// fact coverage are skipped.
+	tree.Suggested = suggestProbe(m, reg, store, tree)
 
 	return tree
 }
@@ -142,6 +165,93 @@ func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *pr
 		return ""
 	}
 	return t.DefaultActiveState
+}
+
+// suggestProbe picks the next fact to collect. It walks all components that
+// appear on surviving (non-eliminated) paths — starting from the entry point
+// and proceeding inward — and returns the first uncollected fact it finds.
+//
+// If no surviving paths exist or every reachable component already has all
+// facts collected, nil is returned (nothing left to probe).
+func suggestProbe(m *model.Model, reg *provider.Registry, store *facts.Store, tree *PathTree) *Probe {
+	// Collect unique components from surviving paths in BFS order.
+	// Include entry even if it's not the terminal of any path (it may have uncollected facts).
+	seen := map[string]bool{}
+	var candidates []string
+
+	// Entry first.
+	if store.FactsFor(tree.Entry) == nil {
+		candidates = append(candidates, tree.Entry)
+		seen[tree.Entry] = true
+	}
+
+	// Then components from surviving paths, shallowest first.
+	for _, p := range tree.Paths {
+		for _, c := range p.Components {
+			if !seen[c] {
+				seen[c] = true
+				candidates = append(candidates, c)
+			}
+		}
+	}
+
+	// If no surviving paths and no entry to probe, nothing to suggest.
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	for _, compName := range candidates {
+		comp := m.Components[compName]
+		if comp == nil {
+			continue
+		}
+		providers := comp.Providers
+		if len(providers) == 0 {
+			providers = m.Meta.Providers
+		}
+		t, providerName, err := reg.ResolveType(providers, comp.Type)
+		if err != nil {
+			continue
+		}
+
+		// Sort fact names for deterministic ordering.
+		var factNames []string
+		for fn := range t.Facts {
+			factNames = append(factNames, fn)
+		}
+		sort.Strings(factNames)
+
+		for _, fn := range factNames {
+			if store.Latest(compName, fn) != nil {
+				continue // already collected
+			}
+			fs := t.Facts[fn]
+
+			// Determine which paths this probe would help eliminate.
+			var eliminates []string
+			for _, p := range tree.Paths {
+				for _, c := range p.Components {
+					if c == compName {
+						eliminates = append(eliminates, p.ID)
+						break
+					}
+				}
+			}
+
+			return &Probe{
+				Component:  compName,
+				Fact:       fn,
+				Provider:   providerName,
+				ParseMode:  fs.Probe.Parse,
+				Eliminates: eliminates,
+				Cost:       fs.Probe.Cost,
+				Access:     fs.Probe.Access,
+				Command:    fs.Probe.Cmd,
+			}
+		}
+	}
+
+	return nil
 }
 
 // isEliminated determines whether a path's deepest component should be eliminated.

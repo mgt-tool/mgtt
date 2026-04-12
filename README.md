@@ -1,6 +1,14 @@
 # MGTT — Model Guided Troubleshooting Tool
 
-Encode your system's dependencies once. When something breaks, the engine tells you what to check next — eliminating healthy components, narrowing the search, finding root cause in minutes instead of hours.
+If you build or maintain anything with more than two components — a web app with a frontend, an API, and a database; a set of microservices behind a load balancer; a data pipeline with queues, workers, and storage — you know the drill:
+
+Something stops working. You check the logs. Nothing obvious. You check the database. Looks fine. You check the API. Restarting. Why? You check the config. You check the deploy history. You ask the person who wrote it. They're asleep. You open three terminals and start guessing.
+
+**The core problem:** troubleshooting distributed systems is slow, unstructured, and depends entirely on whoever happens to know the system. There's no map, no systematic narrowing, no way to know what you've already ruled out. Every incident is a fresh battle of wits.
+
+**mgtt fixes this.** You describe your system's dependencies once in a YAML model — what depends on what, what "healthy" means for each component. When something breaks, a constraint engine walks the dependency graph, probes components in order of information value, and eliminates healthy branches. It always knows what to check next and why.
+
+And before the system even exists, you can simulate failures against the model to verify the reasoning is correct — like unit tests for your architecture.
 
 ## See it in action
 

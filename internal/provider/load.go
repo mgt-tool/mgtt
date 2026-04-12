@@ -19,6 +19,7 @@ type rawProvider struct {
 	Meta      rawMeta           `yaml:"meta"`
 	Variables map[string]rawVar `yaml:"variables"`
 	Auth      rawAuth           `yaml:"auth"`
+	Hooks     rawHooks          `yaml:"hooks"`
 	// Types intentionally omitted — parsed manually from yaml.Node tree.
 }
 
@@ -27,7 +28,13 @@ type rawMeta struct {
 	Version     string            `yaml:"version"`
 	Description string            `yaml:"description"`
 	Requires    map[string]string `yaml:"requires"`
-	Runner      string            `yaml:"runner"`
+	Command     string            `yaml:"command"`
+	Runner      string            `yaml:"runner"` // DEPRECATED — use command
+}
+
+type rawHooks struct {
+	Install string `yaml:"install"`
+	Update  string `yaml:"update"`
 }
 
 type rawVar struct {
@@ -104,7 +111,12 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 			Version:     raw.Meta.Version,
 			Description: raw.Meta.Description,
 			Requires:    raw.Meta.Requires,
+			Command:     raw.Meta.Command,
 			Runner:      raw.Meta.Runner,
+		},
+		Hooks: ProviderHooks{
+			Install: raw.Hooks.Install,
+			Update:  raw.Hooks.Update,
 		},
 		DataTypes: make(map[string]DataType),
 		Types:     make(map[string]*Type),

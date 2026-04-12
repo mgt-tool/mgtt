@@ -4,6 +4,10 @@ meta:
   description: AWS resources (v0 — rds_instance only)
   requires:
     mgtt: ">=1.0"
+  command: ""
+
+hooks:
+  install: ""
 
 auth:
   strategy: environment

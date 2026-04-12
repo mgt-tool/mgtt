@@ -9,6 +9,7 @@ import (
 // Provider is the in-memory representation of a loaded provider definition.
 type Provider struct {
 	Meta      ProviderMeta
+	Hooks     ProviderHooks
 	DataTypes map[string]DataType
 	Types     map[string]*Type
 	Variables map[string]Variable
@@ -21,7 +22,14 @@ type ProviderMeta struct {
 	Version     string
 	Description string
 	Requires    map[string]string
-	Runner      string // binary name, e.g. "mgtt-runner-kubernetes"
+	Command     string // path to provider binary; may contain $MGTT_PROVIDER_DIR
+	Runner      string // DEPRECATED — use Command
+}
+
+// ProviderHooks holds lifecycle hook paths declared by a provider.
+type ProviderHooks struct {
+	Install string
+	Update  string
 }
 
 // DataType describes a named data type with an optional unit system and range.

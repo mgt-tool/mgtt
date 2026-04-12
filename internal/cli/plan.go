@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -86,8 +87,9 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	} else {
 		executor = probeexec.Default()
 		for _, p := range reg.All() {
-			if p.Meta.Runner != "" {
-				runners[p.Meta.Name] = probe.NewExternalRunner(p.Meta.Runner)
+			if p.Meta.Command != "" {
+				cmd := resolveCommand(p.Meta.Command, p.Meta.Name)
+				runners[p.Meta.Name] = probe.NewExternalRunner(cmd)
 			}
 		}
 	}
@@ -193,6 +195,19 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resolveCommand substitutes $MGTT_PROVIDER_DIR in a command string with the
+// actual provider directory path.
+func resolveCommand(command, providerName string) string {
+	providerDir := ""
+	if home := os.Getenv("MGTT_HOME"); home != "" {
+		providerDir = filepath.Join(home, "providers", providerName)
+	}
+	if providerDir == "" {
+		providerDir = filepath.Join("providers", providerName)
+	}
+	return strings.ReplaceAll(command, "$MGTT_PROVIDER_DIR", providerDir)
 }
 
 // resolveDefaultActiveForCLI looks up the default_active_state for a component.

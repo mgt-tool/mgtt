@@ -33,3 +33,6 @@ Thumbs.db
 *.state.yaml
 !fixtures/*.yaml
 !scenarios/*.yaml
+
+# Provider compiled binaries
+providers/*/bin/

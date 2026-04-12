@@ -1,0 +1,37 @@
+services:
+  mgtt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./examples/storefront:/workspace
+      - ./scenarios:/workspace/scenarios
+      - ./fixtures:/workspace/fixtures
+      - ~/.kube:/root/.kube:ro
+      - ~/.aws:/root/.aws:ro
+    environment:
+      - KUBECONFIG=/root/.kube/config
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+      - MGTT_FIXTURES=${MGTT_FIXTURES:-}
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/workspace
+      - ~/.kube:/root/.kube:ro
+      - ~/.aws:/root/.aws:ro
+    environment:
+      - KUBECONFIG=/root/.kube/config
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+      - MGTT_FIXTURES=${MGTT_FIXTURES:-}
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    entrypoint: ["sh", "-c"]
+    command: ["go vet ./... && go test ./..."]
+    volumes:
+      - .:/workspace

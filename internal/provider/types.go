@@ -21,6 +21,7 @@ type ProviderMeta struct {
 	Version     string
 	Description string
 	Requires    map[string]string
+	Runner      string // binary name, e.g. "mgtt-runner-kubernetes"
 }
 
 // DataType describes a named data type with an optional unit system and range.

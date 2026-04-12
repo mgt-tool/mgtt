@@ -1,67 +1,74 @@
-// Package kubernetes provides a probe.Runner that extracts facts from
-// Kubernetes resources by running kubectl and parsing the full JSON output
-// in Go. This replaces fragile jsonpath/shell-based probes with proper
-// type handling (e.g. 0 for missing readyReplicas, max across pods for
-// restartCount).
-package kubernetes
+package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
-
-	"mgtt/internal/probe"
 )
 
-// Runner implements probe.Runner for Kubernetes resources.
-type Runner struct{}
-
-// New returns a new Kubernetes Runner.
-func New() *Runner { return &Runner{} }
-
-// CanProbe reports whether this runner supports the given component type and
-// fact combination.
-func (r *Runner) CanProbe(componentType, fact string) bool {
-	switch componentType {
-	case "deployment":
-		switch fact {
-		case "ready_replicas", "desired_replicas", "restart_count", "endpoints":
-			return true
-		}
-	case "ingress":
-		switch fact {
-		case "upstream_count":
-			return true
-		}
-	}
-	return false
+// ProbeResult is the JSON structure written to stdout on success.
+type ProbeResult struct {
+	Value any    `json:"value"`
+	Raw   string `json:"raw"`
 }
 
-// Probe extracts a single fact for the named component by running kubectl
-// and parsing the JSON response.
-func (r *Runner) Probe(ctx context.Context, component, fact string, vars map[string]string) (probe.Result, error) {
-	namespace := vars["namespace"]
-	if namespace == "" {
-		namespace = "default"
+func main() {
+	if len(os.Args) < 4 {
+		fmt.Fprintf(os.Stderr, "usage: mgtt-runner-kubernetes probe <component> <fact> [--namespace NS] [--type TYPE]\n")
+		os.Exit(1)
 	}
-	componentType := vars["type"]
 
-	switch componentType {
-	case "deployment":
-		return r.probeDeployment(ctx, namespace, component, fact)
-	case "ingress":
-		return r.probeIngress(ctx, namespace, component, fact)
+	if os.Args[1] != "probe" {
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
+		os.Exit(1)
 	}
-	return probe.Result{}, fmt.Errorf("kubernetes runner: unknown type %q", componentType)
+
+	component := os.Args[2]
+	fact := os.Args[3]
+
+	// Parse flags.
+	namespace := "default"
+	componentType := "deployment"
+	for i := 4; i < len(os.Args)-1; i++ {
+		switch os.Args[i] {
+		case "--namespace":
+			namespace = os.Args[i+1]
+		case "--type":
+			componentType = os.Args[i+1]
+		}
+	}
+
+	result, err := probe(context.Background(), namespace, componentType, component, fact)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "probe error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+		fmt.Fprintf(os.Stderr, "encode result: %v\n", err)
+		os.Exit(1)
+	}
 }
 
-func (r *Runner) probeDeployment(ctx context.Context, namespace, name, fact string) (probe.Result, error) {
+// probe dispatches to the appropriate probe function based on componentType.
+func probe(ctx context.Context, namespace, componentType, component, fact string) (ProbeResult, error) {
+	switch componentType {
+	case "deployment":
+		return probeDeployment(ctx, namespace, component, fact)
+	case "ingress":
+		return probeIngress(ctx, namespace, component, fact)
+	}
+	return ProbeResult{}, fmt.Errorf("kubernetes runner: unknown type %q", componentType)
+}
+
+func probeDeployment(ctx context.Context, namespace, name, fact string) (ProbeResult, error) {
 	switch fact {
 	case "ready_replicas":
 		data, err := kubectlJSON(ctx, "get", "deploy", name, "-n", namespace)
 		if err != nil {
-			return probe.Result{}, err
+			return ProbeResult{}, err
 		}
 		val := jsonInt(data, "status", "readyReplicas")
 		return intResult(val), nil
@@ -69,7 +76,7 @@ func (r *Runner) probeDeployment(ctx context.Context, namespace, name, fact stri
 	case "desired_replicas":
 		data, err := kubectlJSON(ctx, "get", "deploy", name, "-n", namespace)
 		if err != nil {
-			return probe.Result{}, err
+			return ProbeResult{}, err
 		}
 		val := jsonInt(data, "spec", "replicas")
 		return intResult(val), nil
@@ -77,7 +84,7 @@ func (r *Runner) probeDeployment(ctx context.Context, namespace, name, fact stri
 	case "restart_count":
 		data, err := kubectlJSON(ctx, "get", "pods", "-l", "app="+name, "-n", namespace)
 		if err != nil {
-			return probe.Result{}, err
+			return ProbeResult{}, err
 		}
 		val := maxRestartCount(data)
 		return intResult(val), nil
@@ -85,29 +92,29 @@ func (r *Runner) probeDeployment(ctx context.Context, namespace, name, fact stri
 	case "endpoints":
 		data, err := kubectlJSON(ctx, "get", "endpoints", name, "-n", namespace)
 		if err != nil {
-			return probe.Result{}, err
+			return ProbeResult{}, err
 		}
 		val := countEndpointAddresses(data)
 		return intResult(val), nil
 	}
-	return probe.Result{}, fmt.Errorf("unknown deployment fact: %s", fact)
+	return ProbeResult{}, fmt.Errorf("unknown deployment fact: %s", fact)
 }
 
-func (r *Runner) probeIngress(ctx context.Context, namespace, name, fact string) (probe.Result, error) {
+func probeIngress(ctx context.Context, namespace, name, fact string) (ProbeResult, error) {
 	if fact == "upstream_count" {
 		data, err := kubectlJSON(ctx, "get", "endpoints", name, "-n", namespace)
 		if err != nil {
-			return probe.Result{}, err
+			return ProbeResult{}, err
 		}
 		val := countEndpointAddresses(data)
 		return intResult(val), nil
 	}
-	return probe.Result{}, fmt.Errorf("unknown ingress fact: %s", fact)
+	return ProbeResult{}, fmt.Errorf("unknown ingress fact: %s", fact)
 }
 
-// intResult builds a probe.Result for an integer value.
-func intResult(val int) probe.Result {
-	return probe.Result{Raw: fmt.Sprintf("%d", val), Parsed: val}
+// intResult builds a ProbeResult for an integer value.
+func intResult(val int) ProbeResult {
+	return ProbeResult{Value: val, Raw: fmt.Sprintf("%d", val)}
 }
 
 // kubectlJSON runs kubectl with -o json and returns the parsed response.

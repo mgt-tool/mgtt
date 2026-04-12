@@ -27,6 +27,7 @@ type rawMeta struct {
 	Version     string            `yaml:"version"`
 	Description string            `yaml:"description"`
 	Requires    map[string]string `yaml:"requires"`
+	Runner      string            `yaml:"runner"`
 }
 
 type rawVar struct {
@@ -103,6 +104,7 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 			Version:     raw.Meta.Version,
 			Description: raw.Meta.Description,
 			Requires:    raw.Meta.Requires,
+			Runner:      raw.Meta.Runner,
 		},
 		DataTypes: make(map[string]DataType),
 		Types:     make(map[string]*Type),

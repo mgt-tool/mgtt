@@ -1,4 +1,4 @@
-package kubernetes
+package main
 
 import "testing"
 
@@ -188,42 +188,6 @@ func TestCountEndpointAddresses_SubsetWithNoAddresses(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CanProbe
-// ---------------------------------------------------------------------------
-
-func TestCanProbe_Deployment(t *testing.T) {
-	r := New()
-	for _, fact := range []string{"ready_replicas", "desired_replicas", "restart_count", "endpoints"} {
-		if !r.CanProbe("deployment", fact) {
-			t.Fatalf("should support deployment/%s", fact)
-		}
-	}
-}
-
-func TestCanProbe_Ingress(t *testing.T) {
-	r := New()
-	if !r.CanProbe("ingress", "upstream_count") {
-		t.Fatal("should support ingress/upstream_count")
-	}
-}
-
-func TestCanProbe_Unsupported(t *testing.T) {
-	r := New()
-	if r.CanProbe("rds_instance", "available") {
-		t.Fatal("should not support rds_instance")
-	}
-	if r.CanProbe("deployment", "nonexistent") {
-		t.Fatal("should not support deployment/nonexistent")
-	}
-	if r.CanProbe("ingress", "nonexistent") {
-		t.Fatal("should not support ingress/nonexistent")
-	}
-	if r.CanProbe("", "") {
-		t.Fatal("should not support empty type/fact")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // intResult
 // ---------------------------------------------------------------------------
 
@@ -232,8 +196,8 @@ func TestIntResult(t *testing.T) {
 	if r.Raw != "42" {
 		t.Fatalf("expected raw \"42\", got %q", r.Raw)
 	}
-	if r.Parsed != 42 {
-		t.Fatalf("expected parsed 42, got %v", r.Parsed)
+	if r.Value != 42 {
+		t.Fatalf("expected value 42, got %v", r.Value)
 	}
 }
 
@@ -242,7 +206,7 @@ func TestIntResult_Zero(t *testing.T) {
 	if r.Raw != "0" {
 		t.Fatalf("expected raw \"0\", got %q", r.Raw)
 	}
-	if r.Parsed != 0 {
-		t.Fatalf("expected parsed 0, got %v", r.Parsed)
+	if r.Value != 0 {
+		t.Fatalf("expected value 0, got %v", r.Value)
 	}
 }

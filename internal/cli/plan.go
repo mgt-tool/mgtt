@@ -16,7 +16,6 @@ import (
 	"mgtt/internal/probe"
 	probeexec "mgtt/internal/probe/exec"
 	"mgtt/internal/probe/fixture"
-	k8srunner "mgtt/internal/probe/kubernetes"
 	"mgtt/internal/provider"
 	"mgtt/internal/render"
 	"mgtt/internal/state"
@@ -75,11 +74,9 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	// 3. Create executor (fixture or exec based on MGTT_FIXTURES).
-	//    When not using fixtures, also create a kubernetes runner that
-	//    handles supported component types with proper JSON parsing
-	//    instead of fragile shell-command probes.
+	//    Build runner map from provider declarations unless in fixture mode.
 	var executor probe.Executor
-	var runner probe.Runner
+	runners := make(map[string]*probe.ExternalRunner)
 	if fixturePath := os.Getenv("MGTT_FIXTURES"); fixturePath != "" {
 		ex, err := fixture.Load(fixturePath)
 		if err != nil {
@@ -88,7 +85,11 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		executor = ex
 	} else {
 		executor = probeexec.Default()
-		runner = k8srunner.New()
+		for _, p := range reg.All() {
+			if p.Meta.Runner != "" {
+				runners[p.Meta.Name] = probe.NewExternalRunner(p.Meta.Runner)
+			}
+		}
 	}
 
 	// 4. Create fact store (in-memory for now; incident integration is separate).
@@ -139,14 +140,24 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		var result probe.Result
 		comp := m.Components[s.Component]
 
-		// Use the runner for supported component type + fact pairs (real
-		// probing only — fixture mode always falls through to the executor).
-		if runner != nil && comp != nil && runner.CanProbe(comp.Type, s.Fact) {
-			vars := map[string]string{
-				"namespace": m.Meta.Vars["namespace"],
-				"type":      comp.Type,
+		// Use the external runner if this component's provider declares one.
+		if comp != nil {
+			if runner, ok := runners[s.Provider]; ok {
+				vars := map[string]string{
+					"namespace": m.Meta.Vars["namespace"],
+					"type":      comp.Type,
+				}
+				result, err = runner.Probe(context.Background(), s.Component, s.Fact, vars)
+			} else {
+				rendered := probe.Substitute(s.Command, s.Component, m.Meta.Vars, nil)
+				result, err = executor.Run(context.Background(), probe.Command{
+					Raw:       rendered,
+					Parse:     s.ParseMode,
+					Provider:  s.Provider,
+					Component: s.Component,
+					Fact:      s.Fact,
+				})
 			}
-			result, err = runner.Probe(context.Background(), s.Component, s.Fact, vars)
 		} else {
 			rendered := probe.Substitute(s.Command, s.Component, m.Meta.Vars, nil)
 			result, err = executor.Run(context.Background(), probe.Command{

@@ -4,6 +4,7 @@ meta:
   description: Kubernetes workload and networking components
   requires:
     mgtt: ">=1.0"
+  runner: mgtt-runner-kubernetes
 
 variables:
   namespace:

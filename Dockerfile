@@ -8,12 +8,14 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /mgtt ./cmd/mgtt
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /mgtt-runner-kubernetes ./runners/kubernetes
 
 FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates kubectl aws-cli bash
 
 COPY --from=builder /mgtt /usr/local/bin/mgtt
+COPY --from=builder /mgtt-runner-kubernetes /usr/local/bin/mgtt-runner-kubernetes
 
 WORKDIR /workspace
 ENTRYPOINT ["mgtt"]

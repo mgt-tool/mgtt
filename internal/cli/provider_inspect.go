@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/providersupport"
 
 	"github.com/spf13/cobra"
 )

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"mgtt/internal/cli"
+	"github.com/sajonaro/mgtt/internal/cli"
 )
 
 func main() {

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	factspkg "mgtt/internal/facts"
-	"mgtt/internal/model"
-	"mgtt/internal/providersupport"
+	factspkg "github.com/sajonaro/mgtt/internal/facts"
+	"github.com/sajonaro/mgtt/internal/model"
+	"github.com/sajonaro/mgtt/internal/providersupport"
 )
 
 // ---------------------------------------------------------------------------

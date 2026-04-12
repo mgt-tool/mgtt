@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"mgtt/internal/model"
-	"mgtt/internal/providersupport"
-	"mgtt/internal/simulate"
+	"github.com/sajonaro/mgtt/internal/model"
+	"github.com/sajonaro/mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/simulate"
 
 	"github.com/spf13/cobra"
 )

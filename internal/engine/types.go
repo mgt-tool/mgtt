@@ -1,6 +1,6 @@
 package engine
 
-import "mgtt/internal/state"
+import "github.com/sajonaro/mgtt/internal/state"
 
 // PathTree is the output of the Plan function — the complete analysis of
 // failure paths from an entry point through the dependency graph.

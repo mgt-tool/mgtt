@@ -1,4 +1,4 @@
-module mgtt
+module github.com/sajonaro/mgtt
 
 go 1.25.7
 

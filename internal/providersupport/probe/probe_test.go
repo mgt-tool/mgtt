@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"mgtt/internal/providersupport/probe"
-	"mgtt/internal/providersupport/probe/fixture"
+	"github.com/sajonaro/mgtt/internal/providersupport/probe"
+	"github.com/sajonaro/mgtt/internal/providersupport/probe/fixture"
 )
 
 // ---------------------------------------------------------------------------

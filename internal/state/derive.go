@@ -3,10 +3,10 @@ package state
 import (
 	"errors"
 
-	"mgtt/internal/expr"
-	factspkg "mgtt/internal/facts"
-	"mgtt/internal/model"
-	"mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/expr"
+	factspkg "github.com/sajonaro/mgtt/internal/facts"
+	"github.com/sajonaro/mgtt/internal/model"
+	"github.com/sajonaro/mgtt/internal/providersupport"
 )
 
 // Derivation holds the results of a state derivation pass over all components.

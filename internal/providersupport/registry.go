@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mgtt/internal/expr"
+	"github.com/sajonaro/mgtt/internal/expr"
 )
 
 // Registry holds all loaded providers and supports type resolution with

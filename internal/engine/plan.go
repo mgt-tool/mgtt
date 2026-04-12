@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"sort"
 
-	"mgtt/internal/expr"
-	"mgtt/internal/facts"
-	"mgtt/internal/model"
-	"mgtt/internal/providersupport"
-	"mgtt/internal/state"
+	"github.com/sajonaro/mgtt/internal/expr"
+	"github.com/sajonaro/mgtt/internal/facts"
+	"github.com/sajonaro/mgtt/internal/model"
+	"github.com/sajonaro/mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/state"
 )
 
 // Plan runs the 5-stage constraint engine against the model and fact store,

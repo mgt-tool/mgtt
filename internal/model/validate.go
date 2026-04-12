@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/providersupport"
 )
 
 // Validate runs all validation passes against the loaded model and returns a

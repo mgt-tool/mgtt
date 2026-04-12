@@ -1,6 +1,6 @@
 package expr
 
-import "mgtt/internal/facts"
+import "github.com/sajonaro/mgtt/internal/facts"
 
 // CmpOp is a comparison operator.
 type CmpOp int

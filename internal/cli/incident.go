@@ -5,9 +5,9 @@ import (
 	"io"
 	"sort"
 
-	"mgtt/internal/facts"
-	"mgtt/internal/incident"
-	"mgtt/internal/model"
+	"github.com/sajonaro/mgtt/internal/facts"
+	"github.com/sajonaro/mgtt/internal/incident"
+	"github.com/sajonaro/mgtt/internal/model"
 
 	"github.com/spf13/cobra"
 )

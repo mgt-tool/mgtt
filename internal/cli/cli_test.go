@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"mgtt/internal/cli"
+	"github.com/sajonaro/mgtt/internal/cli"
 )
 
 var update = false

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"mgtt/internal/providersupport"
+	"github.com/sajonaro/mgtt/internal/providersupport"
 
 	"github.com/spf13/cobra"
 )

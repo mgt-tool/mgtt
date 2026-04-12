@@ -2,12 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"sort"
 
 	"mgtt/internal/facts"
 	"mgtt/internal/incident"
 	"mgtt/internal/model"
 	"mgtt/internal/providersupport"
-	"mgtt/internal/render"
 	"mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -66,7 +67,7 @@ func lsComponents(cmd *cobra.Command) error {
 		derivation = state.Derive(m, reg, facts.NewInMemory())
 	}
 
-	render.ComponentsList(cmd.OutOrStdout(), m, derivation)
+	renderComponentsList(cmd.OutOrStdout(), m, derivation)
 	return nil
 }
 
@@ -76,6 +77,54 @@ func lsFacts(cmd *cobra.Command, component string) error {
 		return fmt.Errorf("no active incident: %w", err)
 	}
 
-	render.FactsList(cmd.OutOrStdout(), inc.Store, component)
+	renderFactsList(cmd.OutOrStdout(), inc.Store, component)
 	return nil
+}
+
+// renderComponentsList renders a table of components with their current state.
+func renderComponentsList(w io.Writer, m *model.Model, states *state.Derivation) {
+	// Determine the longest component name for alignment.
+	maxLen := 0
+	for _, name := range m.Order {
+		if len(name) > maxLen {
+			maxLen = len(name)
+		}
+	}
+
+	for _, name := range m.Order {
+		st := "unknown"
+		if states != nil {
+			if s, ok := states.ComponentStates[name]; ok {
+				st = s
+			}
+		}
+		comp := m.Components[name]
+		fmt.Fprintf(w, "  %-*s  type=%-12s state=%s\n", maxLen, name, comp.Type, st)
+	}
+}
+
+// renderFactsList renders facts for a component (or all components if component is empty).
+func renderFactsList(w io.Writer, store *facts.Store, component string) {
+	components := store.AllComponents()
+	sort.Strings(components)
+
+	if component != "" {
+		components = []string{component}
+	}
+
+	if len(components) == 0 {
+		fmt.Fprintln(w, "  no facts recorded")
+		return
+	}
+
+	for _, c := range components {
+		ff := store.FactsFor(c)
+		if len(ff) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s:\n", c)
+		for _, f := range ff {
+			fmt.Fprintf(w, "    %s = %v\n", f.Key, f.Value)
+		}
+	}
 }

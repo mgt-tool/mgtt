@@ -2,11 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"mgtt/internal/model"
 	"mgtt/internal/providersupport"
-	"mgtt/internal/render"
 	"mgtt/internal/simulate"
 
 	"github.com/spf13/cobra"
@@ -66,7 +67,7 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 			results = append(results, simulate.Run(m, reg, sc))
 		}
 
-		render.SimulateAll(w, results)
+		renderSimulateAll(w, results)
 
 		// Exit with error if any scenario failed.
 		for _, r := range results {
@@ -84,10 +85,43 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 	}
 
 	result := simulate.Run(m, reg, sc)
-	render.SimulateResult(w, result)
+	renderSimulateResult(w, result)
 
 	if !result.Pass {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// renderSimulateResult writes the result of a single simulation scenario.
+func renderSimulateResult(w io.Writer, result *simulate.Result) {
+	if result.Pass {
+		fmt.Fprintf(w, "  %-40s %s passed\n", result.Scenario.Name, checkmark(true))
+	} else {
+		fmt.Fprintf(w, "  %-40s %s FAILED\n", result.Scenario.Name, checkmark(false))
+		fmt.Fprintf(w, "    expected: root_cause=%s path=[%s] eliminated=[%s]\n",
+			result.Scenario.Expect.RootCause,
+			strings.Join(result.Scenario.Expect.Path, ", "),
+			strings.Join(result.Scenario.Expect.Eliminated, ", "),
+		)
+		fmt.Fprintf(w, "    actual:   root_cause=%s path=[%s] eliminated=[%s]\n",
+			result.Actual.RootCause,
+			strings.Join(result.Actual.Path, ", "),
+			strings.Join(result.Actual.Eliminated, ", "),
+		)
+	}
+}
+
+// renderSimulateAll writes a summary of all simulation results.
+func renderSimulateAll(w io.Writer, results []*simulate.Result) {
+	passed := 0
+	for _, r := range results {
+		renderSimulateResult(w, r)
+		if r.Pass {
+			passed++
+		}
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %d/%d scenarios passed\n", passed, len(results))
 }

@@ -2,12 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"io"
 
 	"mgtt/internal/facts"
 	"mgtt/internal/incident"
 	"mgtt/internal/model"
 	"mgtt/internal/providersupport"
-	"mgtt/internal/render"
 	"mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -40,7 +40,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		derivation := state.Derive(m, reg, store)
-		render.Status(cmd.OutOrStdout(), store, derivation)
+		renderStatus(cmd.OutOrStdout(), store, derivation)
 		return nil
 	},
 }
@@ -48,4 +48,40 @@ var statusCmd = &cobra.Command{
 func init() {
 	statusCmd.Flags().StringVar(&statusModelPath, "model", "system.model.yaml", "path to system.model.yaml")
 	rootCmd.AddCommand(statusCmd)
+}
+
+// renderStatus renders a one-line health summary.
+func renderStatus(w io.Writer, store *facts.Store, states *state.Derivation) {
+	if states == nil {
+		fmt.Fprintln(w, "  no state derived")
+		return
+	}
+
+	total := len(states.ComponentStates)
+	healthy := 0
+	unhealthy := 0
+	unknown := 0
+
+	for _, st := range states.ComponentStates {
+		switch st {
+		case "unknown":
+			unknown++
+		case "live":
+			healthy++
+		default:
+			unhealthy++
+		}
+	}
+
+	components := store.AllComponents()
+	factCount := 0
+	for _, c := range components {
+		factCount += len(store.FactsFor(c))
+	}
+
+	fmt.Fprintf(w, "  %s: %d healthy, %d unhealthy, %d unknown | %s\n",
+		pluralize(total, "component", "components"),
+		healthy, unhealthy, unknown,
+		pluralize(factCount, "fact", "facts"),
+	)
 }

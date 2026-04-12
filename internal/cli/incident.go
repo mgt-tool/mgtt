@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"sort"
 
+	"mgtt/internal/facts"
 	"mgtt/internal/incident"
 	"mgtt/internal/model"
-	"mgtt/internal/render"
 
 	"github.com/spf13/cobra"
 )
@@ -32,7 +34,7 @@ var incidentStartCmd = &cobra.Command{
 			return err
 		}
 
-		render.IncidentStart(cmd.OutOrStdout(), inc)
+		renderIncidentStart(cmd.OutOrStdout(), inc)
 		return nil
 	},
 }
@@ -46,7 +48,7 @@ var incidentEndCmd = &cobra.Command{
 			return err
 		}
 
-		render.IncidentEnd(cmd.OutOrStdout(), inc, inc.Store)
+		renderIncidentEnd(cmd.OutOrStdout(), inc, inc.Store)
 		return nil
 	},
 }
@@ -58,4 +60,30 @@ func init() {
 	incidentCmd.AddCommand(incidentStartCmd)
 	incidentCmd.AddCommand(incidentEndCmd)
 	rootCmd.AddCommand(incidentCmd)
+}
+
+// renderIncidentStart renders a confirmation that an incident has been started.
+func renderIncidentStart(w io.Writer, inc *incident.Incident) {
+	fmt.Fprintf(w, "  %s %s started\n", checkmark(true), inc.ID)
+	fmt.Fprintf(w, "    model: %s v%s\n", inc.Model, inc.Version)
+	fmt.Fprintf(w, "    state: %s\n", inc.StateFile)
+}
+
+// renderIncidentEnd renders an incident closure summary.
+func renderIncidentEnd(w io.Writer, inc *incident.Incident, store *facts.Store) {
+	duration := inc.Ended.Sub(inc.Started)
+	fmt.Fprintf(w, "  %s %s ended\n", checkmark(true), inc.ID)
+	fmt.Fprintf(w, "    duration: %s\n", duration.Round(1e9)) // round to seconds
+
+	// Count facts.
+	components := store.AllComponents()
+	sort.Strings(components)
+	total := 0
+	for _, c := range components {
+		total += len(store.FactsFor(c))
+	}
+	fmt.Fprintf(w, "    facts:    %s across %s\n",
+		pluralize(total, "fact", "facts"),
+		pluralize(len(components), "component", "components"),
+	)
 }

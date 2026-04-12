@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"mgtt/internal/providersupport"
-	"mgtt/internal/render"
 
 	"github.com/spf13/cobra"
 )
@@ -96,7 +95,13 @@ func installProvider(w io.Writer, name string) error {
 	}
 
 	// 5. Render summary.
-	render.ProviderInstall(w, p)
+	fmt.Fprintf(w, "  %s %-12s  v%s  auth: %s  access: %s\n",
+		checkmark(true),
+		p.Meta.Name,
+		p.Meta.Version,
+		p.Auth.Strategy,
+		p.Auth.Access.Probes,
+	)
 	return nil
 }
 

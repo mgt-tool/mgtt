@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,11 +15,10 @@ import (
 	"mgtt/internal/engine"
 	"mgtt/internal/facts"
 	"mgtt/internal/model"
+	"mgtt/internal/providersupport"
 	"mgtt/internal/providersupport/probe"
 	probeexec "mgtt/internal/providersupport/probe/exec"
 	"mgtt/internal/providersupport/probe/fixture"
-	"mgtt/internal/providersupport"
-	"mgtt/internal/render"
 	"mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -104,18 +104,18 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	if planComponent != "" {
 		entry = planComponent
 	}
-	render.PlanHeader(w, entry)
+	renderPlanHeader(w, entry)
 
 	for iteration := 0; iteration < 50; iteration++ { // safety limit
 		tree := engine.Plan(m, reg, store, entry)
 
-		render.PlanSuggestion(w, tree)
+		renderPlanSuggestion(w, tree)
 
 		// Check termination conditions.
 		if tree.Suggested == nil {
 			// No more probes. If we have a root cause, show it.
 			if tree.RootCause != "" {
-				render.RootCauseSummary(w, tree)
+				renderRootCauseSummary(w, tree)
 			} else {
 				// All paths eliminated or no probes left.
 				fmt.Fprintln(w)
@@ -191,7 +191,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		defaultActive := resolveDefaultActiveForCLI(comp, m.Meta.Providers, reg)
 		healthy := compState == defaultActive && defaultActive != ""
 
-		render.ProbeResult(w, s.Component, s.Fact, result.Parsed, healthy)
+		renderProbeResult(w, s.Component, s.Fact, result.Parsed, healthy)
 	}
 
 	return nil
@@ -221,4 +221,109 @@ func resolveDefaultActiveForCLI(comp *model.Component, metaProviders []string, r
 		return ""
 	}
 	return t.DefaultActiveState
+}
+
+// renderPlanHeader renders the initial entry point message.
+func renderPlanHeader(w io.Writer, entry string) {
+	fmt.Fprintf(w, "\n  starting from outermost component: %s\n", entry)
+}
+
+// renderPlanSuggestion renders the current state of the path tree and the
+// suggested next probe to w.
+func renderPlanSuggestion(w io.Writer, tree *engine.PathTree) {
+	// Show surviving paths.
+	if len(tree.Paths) > 0 {
+		fmt.Fprintf(w, "\n  %s to investigate:\n", pluralize(len(tree.Paths), "path", "paths"))
+		for _, p := range tree.Paths {
+			fmt.Fprintf(w, "  %-8s %s\n", p.ID, strings.Join(p.Components, " <- "))
+		}
+	}
+
+	// Show eliminated paths.
+	if len(tree.Eliminated) > 0 {
+		fmt.Fprintln(w)
+		for _, p := range tree.Eliminated {
+			fmt.Fprintf(w, "  %-8s %s  (eliminated: %s)\n", p.ID, strings.Join(p.Components, " <- "), p.Reason)
+		}
+	}
+
+	// Show suggested probe.
+	if tree.Suggested != nil {
+		s := tree.Suggested
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "  -> probe %s %s\n", s.Component, s.Fact)
+		var meta []string
+		if s.Cost != "" {
+			meta = append(meta, "cost: "+s.Cost)
+		}
+		if s.Access != "" {
+			meta = append(meta, s.Access)
+		}
+		if len(s.Eliminates) > 0 {
+			meta = append(meta, "eliminates "+strings.Join(s.Eliminates, ", ")+" if healthy")
+		}
+		if len(meta) > 0 {
+			fmt.Fprintf(w, "     %s\n", strings.Join(meta, " | "))
+		}
+	}
+}
+
+// renderProbeResult renders the result of a single probe execution.
+func renderProbeResult(w io.Writer, component, fact string, value any, healthy bool) {
+	mark := checkmark(healthy)
+	label := "healthy"
+	if !healthy {
+		label = "unhealthy"
+	}
+	fmt.Fprintf(w, "\n  %s %s.%s = %v   %s %s\n", checkmark(true), component, fact, value, mark, label)
+}
+
+// renderRootCauseSummary renders the final root cause determination.
+func renderRootCauseSummary(w io.Writer, tree *engine.PathTree) {
+	if tree.RootCause == "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "  All components healthy -- no root cause found.")
+		return
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Root cause: %s\n", tree.RootCause)
+
+	// Show the root cause path.
+	for _, p := range tree.Paths {
+		last := p.Components[len(p.Components)-1]
+		if last == tree.RootCause {
+			fmt.Fprintf(w, "  Path:       %s\n", strings.Join(p.Components, " <- "))
+			break
+		}
+	}
+
+	// Show state.
+	if tree.States != nil {
+		if st, ok := tree.States.ComponentStates[tree.RootCause]; ok {
+			fmt.Fprintf(w, "  State:      %s\n", st)
+		}
+	}
+
+	// Show eliminated components (only those NOT on surviving paths).
+	if len(tree.Eliminated) > 0 {
+		surviving := map[string]bool{}
+		for _, p := range tree.Paths {
+			for _, c := range p.Components {
+				surviving[c] = true
+			}
+		}
+		var names []string
+		seen := map[string]bool{}
+		for _, p := range tree.Eliminated {
+			last := p.Components[len(p.Components)-1]
+			if !seen[last] && !surviving[last] {
+				seen[last] = true
+				names = append(names, last)
+			}
+		}
+		if len(names) > 0 {
+			fmt.Fprintf(w, "  Eliminated: %s\n", strings.Join(names, ", "))
+		}
+	}
 }

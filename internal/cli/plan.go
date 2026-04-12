@@ -16,6 +16,7 @@ import (
 	"mgtt/internal/probe"
 	probeexec "mgtt/internal/probe/exec"
 	"mgtt/internal/probe/fixture"
+	k8srunner "mgtt/internal/probe/kubernetes"
 	"mgtt/internal/provider"
 	"mgtt/internal/render"
 	"mgtt/internal/state"
@@ -74,7 +75,11 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	// 3. Create executor (fixture or exec based on MGTT_FIXTURES).
+	//    When not using fixtures, also create a kubernetes runner that
+	//    handles supported component types with proper JSON parsing
+	//    instead of fragile shell-command probes.
 	var executor probe.Executor
+	var runner probe.Runner
 	if fixturePath := os.Getenv("MGTT_FIXTURES"); fixturePath != "" {
 		ex, err := fixture.Load(fixturePath)
 		if err != nil {
@@ -83,6 +88,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		executor = ex
 	} else {
 		executor = probeexec.Default()
+		runner = k8srunner.New()
 	}
 
 	// 4. Create fact store (in-memory for now; incident integration is separate).
@@ -129,15 +135,28 @@ func runPlan(cmd *cobra.Command, args []string) error {
 
 		// Build and run probe.
 		s := tree.Suggested
-		rendered := probe.Substitute(s.Command, s.Component, m.Meta.Vars, nil)
 
-		result, err := executor.Run(context.Background(), probe.Command{
-			Raw:       rendered,
-			Parse:     s.ParseMode,
-			Provider:  s.Provider,
-			Component: s.Component,
-			Fact:      s.Fact,
-		})
+		var result probe.Result
+		comp := m.Components[s.Component]
+
+		// Use the runner for supported component type + fact pairs (real
+		// probing only — fixture mode always falls through to the executor).
+		if runner != nil && comp != nil && runner.CanProbe(comp.Type, s.Fact) {
+			vars := map[string]string{
+				"namespace": m.Meta.Vars["namespace"],
+				"type":      comp.Type,
+			}
+			result, err = runner.Probe(context.Background(), s.Component, s.Fact, vars)
+		} else {
+			rendered := probe.Substitute(s.Command, s.Component, m.Meta.Vars, nil)
+			result, err = executor.Run(context.Background(), probe.Command{
+				Raw:       rendered,
+				Parse:     s.ParseMode,
+				Provider:  s.Provider,
+				Component: s.Component,
+				Fact:      s.Fact,
+			})
+		}
 		if err != nil {
 			fmt.Fprintf(w, "\n  probe error: %v\n", err)
 			break
@@ -155,7 +174,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		// Determine health for display: re-derive state after adding fact.
 		derivation := state.Derive(m, reg, store)
 		compState := derivation.ComponentStates[s.Component]
-		comp := m.Components[s.Component]
+		comp = m.Components[s.Component]
 		defaultActive := resolveDefaultActiveForCLI(comp, m.Meta.Providers, reg)
 		healthy := compState == defaultActive && defaultActive != ""
 

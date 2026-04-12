@@ -1,11 +1,11 @@
-# MGTT — Model Guided Troubleshooting Tool
+# `mgtt` — **m**odel **g**uided **t**roubleshooting **t**ool
 ## Specification v1.0
 
 ---
 
-## 1. What MGTT Is
+## 1. What `mgtt` Is
 
-MGTT is a tool that lets you encode a system model once, accumulate timestamped
+`mgtt` is a tool that lets you encode a system model once, accumulate timestamped
 observations into a fact store, and use constraint propagation over the model
 and facts to guide — not replace — the troubleshooting process.
 
@@ -15,7 +15,7 @@ It is not AI-dependent. AI is one possible consumer of the model, not a requirem
 It is not system-specific. The model language works for any distributed system.
 
 The closest analogy is Terraform: separate desired state (model) from observed
-state (facts), and reason over the diff. MGTT does this for understanding, not
+state (facts), and reason over the diff. `mgtt` does this for understanding, not
 provisioning.
 
 **The core design principle for users:**
@@ -41,7 +41,7 @@ version-controlled alongside infrastructure code.
 
 ### 2.2 Fact Store
 A YAML file of timestamped observations keyed by component. Append-only.
-Written by MGTT during guided probing or manually via CLI. Scoped to an
+Written by `mgtt` during guided probing or manually via CLI. Scoped to an
 incident session. Current system state is a fact like any other.
 
 ### 2.3 Provider
@@ -55,7 +55,7 @@ primitive data types only — the lowest-level building blocks every provider
 can use without declaring dependencies on each other.
 
 ### 2.5 Constraint Engine
-MGTT's core. Takes four inputs — components, failure modes, propagation rules,
+`mgtt`'s core. Takes four inputs — components, failure modes, propagation rules,
 and current facts — and produces a ranked failure path tree. Starts from the
 outermost component and works inward. Guides the engineer toward the next most
 discriminating probe. Reruns after every new fact until one path remains.
@@ -66,13 +66,13 @@ paths, eliminated paths, and the suggested next probe with reasoning.
 
 ### 2.7 State Machine
 Derived automatically from the model and observed facts — never authored,
-never persisted, never manually advanced. MGTT computes component states
+never persisted, never manually advanced. `mgtt` computes component states
 from facts as they are collected. State transitions are observed, not declared.
 Only the current position is stored as a fact.
 
 ### 2.8 MCP Service
-MGTT exposes its constraint engine as an MCP (Model Context Protocol) service.
-LLMs and AI agents can call MGTT tools directly, driving the same guided loop
+`mgtt` exposes its constraint engine as an MCP (Model Context Protocol) service.
+LLMs and AI agents can call `mgtt` tools directly, driving the same guided loop
 a human would drive via CLI. CLI and MCP are equal consumers of the same engine.
 
 ---
@@ -172,7 +172,7 @@ Deferred to post-v1.0. In v1.0, providers reference only mgtt stdlib types.
 
 ## 5. The Constraint Engine
 
-This is the core of MGTT. Everything else serves it.
+This is the core of `mgtt`. Everything else serves it.
 
 ### 5.1 Four Inputs
 
@@ -530,7 +530,7 @@ facts:
 - Each fact carries collector and observation timestamp.
 - Facts reference the model version they were collected against.
 - Each incident gets its own state file.
-- `_system` is reserved for MGTT internal facts.
+- `_system` is reserved for `mgtt` internal facts.
 - Multiple collectors may contribute facts for the same component.
 
 ### 7.2 State as a Fact
@@ -557,7 +557,7 @@ Derived automatically. Never set manually.
 ✗   unhealthy     fresh, one or more conditions violated
 ```
 
-Stale facts are not used for elimination. MGTT suggests re-probing before
+Stale facts are not used for elimination. `mgtt` suggests re-probing before
 relying on them.
 
 ### 7.4 Incident Handoff
@@ -573,7 +573,7 @@ $ mgtt incident load inc-20240205-0814-001.state.yaml
 ```
 
 If the model version in the state file does not match the local model,
-MGTT warns loudly before proceeding.
+`mgtt` warns loudly before proceeding.
 
 ---
 
@@ -783,7 +783,7 @@ meta:
 | timeout           | ?          | no       |
 | non-zero exit     | ?          | no       |
 
-On failure, MGTT reports the error and offers a manual fact entry fallback.
+On failure, `mgtt` reports the error and offers a manual fact entry fallback.
 
 ### 8.6 The `healthy` Block
 
@@ -823,7 +823,7 @@ States are evaluated in declaration order. First match wins. If none match,
 state is `unknown`. States use only same-component facts in `when` —
 no cross-component references.
 
-MGTT evaluates states continuously as facts arrive. Engineers never set
+`mgtt` evaluates states continuously as facts arrive. Engineers never set
 state manually.
 
 ### 8.8 The `failure_modes` Block
@@ -1048,7 +1048,7 @@ their technology.
 
 ## 11. Authentication and Probe Execution
 
-MGTT borrows Terraform's security model: the core knows nothing about
+`mgtt` borrows Terraform's security model: the core knows nothing about
 credentials. Providers declare their auth requirements. The environment
 owns the credentials.
 
@@ -1126,7 +1126,7 @@ fixture mode        →   deterministic testing, golden files
 simulation          →   design-time model validation, CI
 ```
 
-### 11.4 What MGTT Never Does
+### 11.4 What `mgtt` Never Does
 
 - Stores, manages, or rotates credentials
 - Requests credentials from the engineer
@@ -1139,7 +1139,7 @@ simulation          →   design-time model validation, CI
 
 ### 12.1 Derivation
 
-MGTT generates the state machine from:
+`mgtt` generates the state machine from:
 
 ```
 provider state definitions   →   per-component observable states
@@ -1172,7 +1172,7 @@ Overrides are additive. Base machine still derived first.
 
 ## 13. MCP Service
 
-MGTT exposes its constraint engine as an MCP service, callable by LLMs
+`mgtt` exposes its constraint engine as an MCP service, callable by LLMs
 and AI agents. CLI and MCP are equal consumers.
 
 ### 13.1 Tools
@@ -1271,19 +1271,19 @@ autonomous    AI drives the full loop, human gets report at end
 
 ```
 AI calls:     plan {}
-MGTT returns: entry nginx · 3 paths · suggested: nginx.upstream_count · low
+`mgtt` returns: entry nginx · 3 paths · suggested: nginx.upstream_count · low
 
 AI:           assist + low + read-only → run
 AI calls:     probe { component: "nginx", fact: "upstream_count" }
-MGTT returns: upstream_count=0 · following inward · new suggestion
+`mgtt` returns: upstream_count=0 · following inward · new suggestion
 
 AI:           assist + low + read-only → run
 AI calls:     probe { component: "api", fact: "endpoints" }
-MGTT returns: endpoints=0 · PATH A confirmed · PATH C eliminated
+`mgtt` returns: endpoints=0 · PATH A confirmed · PATH C eliminated
 
 AI:           assist + low + read-only → run
 AI calls:     probe { component: "api", fact: "restart_count" }
-MGTT returns: restart_count=47 · api.state: degraded · root cause identified
+`mgtt` returns: restart_count=47 · api.state: degraded · root cause identified
 
 AI reports:   "api is crash-looping (47 restarts, 0/3 replicas).
                rds is healthy and eliminated.
@@ -1390,7 +1390,7 @@ mgtt stdlib inspect <type>            # full stdlib type definition
 
 ## 15. Design-Time Workflow — Simulation
 
-MGTT provides value before a system is deployed. Writing `system.model.yaml`
+`mgtt` provides value before a system is deployed. Writing `system.model.yaml`
 forces explicit decisions about components, dependencies, and failure modes.
 Simulation validates that the constraint engine reasons correctly over those
 decisions — before any real system exists.
@@ -1556,11 +1556,11 @@ system. A passing simulation is not a guarantee of detection.
   automatically. Engineers never set or advance state.
 - **Stdlib is primitives only.** Higher-level types belong in providers.
   Prevents semantic collision across the ecosystem.
-- **Credentials belong to the environment.** MGTT never stores, manages,
+- **Credentials belong to the environment.** `mgtt` never stores, manages,
   or transmits credentials. Same model as Terraform.
 - **Providers are self-contained.** In v1.0, providers depend only on
   the mgtt stdlib. No provider-to-provider dependencies.
-- **AI friendly, not AI dependent.** MCP makes MGTT callable by any LLM.
+- **AI friendly, not AI dependent.** MCP makes `mgtt` callable by any LLM.
   The constraint engine reasons — the AI drives the loop.
 - **Append only.** The fact store is a record, not a scratchpad.
 - **Derive, don't persist.** State machine and failure path tree computed
@@ -1570,7 +1570,7 @@ system. A passing simulation is not a guarantee of detection.
   and facts as input and returns a failure path tree. This is what makes the
   same engine callable from the CLI, simulation runner, and MCP service
   without branching — only the source of facts differs.
-- **Guided, not automated.** MGTT tells you what to check next and why.
+- **Guided, not automated.** `mgtt` tells you what to check next and why.
   Human or AI decides whether to check it.
 
 ---
@@ -1593,7 +1593,7 @@ system. A passing simulation is not a guarantee of detection.
    is a known approximation. Bayesian layer deferred to post-v1.0.
 
 5. **MCP service authentication** — how an AI agent is authorised to call
-   MGTT tools over MCP is separate from provider authentication. Unspecified.
+   `mgtt` tools over MCP is separate from provider authentication. Unspecified.
 
 6. **Cross-provider type references** — deferred to post-v1.0. Requires
    provider dependency graph and version conflict resolution.
@@ -1606,6 +1606,6 @@ system. A passing simulation is not a guarantee of detection.
 
 ---
 
-*MGTT is open to the world. Providers, incident corpora, and tooling
+*`mgtt` is open to the world. Providers, incident corpora, and tooling
 contributions are welcome. The spec and core are the only things under
 tight governance. Everything else belongs to the community.*

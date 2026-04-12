@@ -1,4 +1,4 @@
-# Writing an MGTT Provider
+# Writing an `mgtt` Provider
 
 A provider teaches mgtt about a technology. You provide three things:
 

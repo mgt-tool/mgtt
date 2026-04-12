@@ -78,8 +78,9 @@ func (m *Model) EntryPoint() string {
 	return m.graph.EntryPoint()
 }
 
-// DependenciesOf returns the names of all components that name directly
-// depends on.
+// DependenciesOf returns the unfiltered list of dependency target names
+// (ignores while-guard conditions). The engine's enumeratePaths iterates
+// Component.Depends directly to evaluate while guards per edge.
 func (m *Model) DependenciesOf(name string) []string {
 	if m.graph == nil {
 		m.BuildGraph()

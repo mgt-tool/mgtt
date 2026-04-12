@@ -135,6 +135,10 @@ func copyDir(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)
 		}

@@ -77,7 +77,7 @@ func replacePlaceholders(s, component string, modelVars, providerVars map[string
 // metacharacters that were not already present in the original template.
 // This guards against command injection through variable substitution.
 func ValidateCommand(rendered, template string) error {
-	metacharacters := []string{";", "&&", "||", "|", "$(", "`"}
+	metacharacters := []string{";", "&&", "||", "|", "$(", "`", ">>", "<<", ">", "<", "\n"}
 
 	for _, meta := range metacharacters {
 		// Count occurrences in template vs rendered.

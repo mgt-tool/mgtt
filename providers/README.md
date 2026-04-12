@@ -109,6 +109,27 @@ types:
 - `default_active_state`: the "normal" state. Components in this state are considered healthy by the engine
 - `failure_modes`: for each non-healthy state, what downstream effects it can cause. Values from the standard vocabulary: `upstream_failure`, `connection_refused`, `timeout`, `5xx_errors`, `query_timeout`, `dns_failure`, `auth_failure`, `resource_exhaustion`
 
+**`facts.probe`** — optional inline probe definition for providers without a binary
+(the shell-fallback path). When a provider has a binary (`meta.command`), the binary
+handles probing and the `probe` block is metadata only. When no binary exists, mgtt
+executes `probe.cmd` as a shell command.
+
+```yaml
+facts:
+  ready_replicas:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get deploy {name} -o jsonpath={.status.readyReplicas}"
+      parse: int       # int | float | bool | string | exit_code | json:<path> | lines:<N> | regex:<pat>
+      cost: low        # low | medium | high
+      access: kubectl read-only
+```
+
+A provider can be **vocabulary-only** (no binary, no install hook) if all facts
+have inline `probe.cmd` definitions. This is the quick-start path — useful for
+prototyping before investing in a compiled binary.
+
 **`variables`** — parameters the model author can set in `meta.vars`. Substituted into probe commands as `{variable_name}`.
 
 **`auth`** — documents what credentials the provider needs. mgtt never touches credentials; this is for the human reading the provider definition.
@@ -205,8 +226,6 @@ import (
     "encoding/json"
     "fmt"
     "os"
-    "os/exec"
-    "context"
 )
 
 type Result struct {
@@ -256,18 +275,15 @@ func main() {
 }
 
 func probe(component, fact, namespace, componentType string) (*Result, error) {
-    // Your probing logic here.
-    // Call your technology's CLI, API, or SDK.
-    // Return a typed value.
-
     switch fact {
     case "connected":
-        // Example: check if a service is reachable
-        ok := checkConnectivity(component, namespace)
+        // Replace with your actual connectivity check
+        ok := true // e.g. ping, TCP connect, API health endpoint
         return &Result{Value: ok, Raw: fmt.Sprintf("%v", ok)}, nil
 
     case "response_time":
-        ms := measureResponseTime(component, namespace)
+        // Replace with your actual latency measurement
+        ms := 42.5 // e.g. time an HTTP request
         return &Result{Value: ms, Raw: fmt.Sprintf("%.1f", ms)}, nil
 
     default:

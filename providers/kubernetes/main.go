@@ -16,7 +16,7 @@ type ProbeResult struct {
 
 func main() {
 	if len(os.Args) < 4 {
-		fmt.Fprintf(os.Stderr, "usage: mgtt-runner-kubernetes probe <component> <fact> [--namespace NS] [--type TYPE]\n")
+		fmt.Fprintf(os.Stderr, "usage: mgtt-provider-kubernetes probe <component> <fact> [--namespace NS] [--type TYPE]\n")
 		os.Exit(1)
 	}
 

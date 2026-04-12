@@ -36,4 +36,4 @@ Thumbs.db
 
 # Provider compiled binaries
 providers/*/bin/
-mgtt-runner-kubernetes
+mgtt-provider-kubernetes

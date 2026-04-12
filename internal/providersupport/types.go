@@ -23,7 +23,6 @@ type ProviderMeta struct {
 	Description string
 	Requires    map[string]string
 	Command     string // path to provider binary; may contain $MGTT_PROVIDER_DIR
-	Runner      string // DEPRECATED — use Command
 }
 
 // ProviderHooks holds lifecycle hook paths declared by a provider.

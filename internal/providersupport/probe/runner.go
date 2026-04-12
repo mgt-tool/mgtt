@@ -15,7 +15,7 @@ type RunnerResult struct {
 
 // ExternalRunner shells out to a runner binary and parses the JSON result.
 type ExternalRunner struct {
-	Binary string // e.g. "mgtt-runner-kubernetes"
+	Binary string // e.g. "mgtt-provider-kubernetes"
 }
 
 // NewExternalRunner returns an ExternalRunner that calls the named binary.

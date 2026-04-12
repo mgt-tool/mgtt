@@ -112,7 +112,6 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 			Description: raw.Meta.Description,
 			Requires:    raw.Meta.Requires,
 			Command:     raw.Meta.Command,
-			Runner:      raw.Meta.Runner,
 		},
 		Hooks: ProviderHooks{
 			Install: raw.Hooks.Install,

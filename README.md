@@ -1,27 +1,115 @@
 # MGTT — Model Guided Troubleshooting Tool
 
-Troubleshooting distributed systems is usually a battle of wits — a senior engineer running kubectl commands from muscle memory, an AI listing ten things that could be wrong, a team Slack thread filling up with "did you check X?".
+Encode your system's dependencies once. When something breaks, the engine tells you what to check next — eliminating healthy components, narrowing the search, finding root cause in minutes instead of hours.
 
-`mgtt` replaces that with a structured loop: describe your system once, observe facts as you go, let the constraint engine tell you what to check next. Every confirmed-healthy component gets eliminated. Every new fact narrows the search space. You always know exactly where you are in the investigation.
+## See it in action
 
-The result: faster root cause, no duplicated effort, and a complete incident record you didn't have to write.
+### Simulation: catch model gaps in CI
+
+Write a scenario: "if rds goes down and api crash-loops, the engine should blame rds, not api."
+
+```
+$ mgtt simulate --all
+
+  rds unavailable                          ✓ passed
+  api crash-loop independent of rds        ✓ passed
+  frontend crash-looping, api healthy      ✓ passed
+  all components healthy                   ✓ passed
+
+  4/4 scenarios passed
+```
+
+No running system. No credentials. Runs on every PR. If someone removes a dependency from the model, the scenario fails and the PR is blocked.
+
+[Full simulation walkthrough](./docs/simulation-scenario.md)
+
+### Troubleshooting: root cause in 6 probes
+
+Monday 3am. Alert fires. You run `mgtt plan` and press Y:
+
+```
+$ mgtt plan
+
+  -> probe nginx upstream_count
+     cost: low | kubectl read-only
+
+  ✓ nginx.upstream_count = 0   ✗ unhealthy
+
+  -> probe api restart_count
+     cost: low
+
+  ✓ api.restart_count = 47   ✗ unhealthy
+
+  -> probe rds available
+     cost: low | AWS API read-only | eliminates PATH C if healthy
+
+  ✓ rds.available = true   ✓ healthy       ← eliminated
+
+  -> probe frontend ready_replicas
+     cost: low | kubectl read-only | eliminates PATH A if healthy
+
+  ✓ frontend.ready_replicas = 2   ✓ healthy  ← eliminated
+
+  Root cause: api
+  Path:       nginx <- api
+  State:      degraded
+  Eliminated: frontend, rds
+```
+
+The engine probed 4 components, eliminated 2 (rds healthy, frontend healthy), and found the root cause: api is crash-looping. You didn't need to know the system — the model knew it for you.
+
+[Full troubleshooting walkthrough](./docs/troubleshooting-scenario.md)
+
+---
+
+## TL;DR
+
+**The problem:** troubleshooting distributed systems is slow, unstructured, and depends on whoever happens to know the system.
+
+**What mgtt does:**
+
+1. You describe your system once in a YAML model (components, dependencies, what "healthy" means)
+2. A constraint engine walks the dependency graph, probing components and eliminating healthy branches
+3. Each probe is ranked by how much it narrows the search — the engine always picks the most informative, cheapest check next
+
+**Two modes, same model:**
+
+| | Design time | At 3am |
+|---|---|---|
+| Command | `mgtt simulate` | `mgtt plan` |
+| Facts from | Scenario YAML | Real probes (kubectl, aws) |
+| Needs | Nothing | Environment credentials |
+| Output | Pass/fail assertions | Guided root cause |
+
+---
 
 ## Install
 
 ```bash
-# One-liner (downloads binary or builds from source)
+# One-liner
 curl -sSL https://raw.githubusercontent.com/sajonaro/mgtt/main/install.sh | sh
 
 # Or via Go
 go install github.com/sajonaro/mgtt/cmd/mgtt@latest
 
-# Or via Docker (no install needed)
+# Or via Docker
 docker compose run --rm mgtt version
 ```
 
-## Quick Start
+## Quick start
 
-### 1. Write your model
+```bash
+mgtt init                          # scaffold system.model.yaml
+# edit it with your components and dependencies
+mgtt model validate                # check the model
+mgtt provider install kubernetes   # install providers
+mgtt simulate --all                # run failure scenarios
+mgtt plan                          # troubleshoot a live system
+```
+
+---
+
+## The model
 
 ```yaml
 # system.model.yaml
@@ -58,106 +146,28 @@ components:
       - connection_count < 500
 ```
 
-### 2. Validate it
+The model is the single source of truth. It's version-controlled alongside your infrastructure code.
+
+## Providers
+
+Providers teach mgtt about technologies. Each provider defines component types, observable facts, states, and failure modes — all in mgtt's vocabulary.
 
 ```
-$ mgtt model validate
+$ mgtt provider ls
 
-  ✓ nginx     2 dependencies valid
-  ✓ frontend  1 dependency valid
-  ✓ api       1 dependency valid
-  ✓ rds       healthy override valid
-
-  4 components · 0 errors · 0 warnings
+  ✓ aws         v0.1.0  AWS resources
+  ✓ kubernetes  v1.0.0  Kubernetes workloads
 ```
 
-### 3. Simulate failures before they happen
+Install from GitHub:
 
-Write scenarios that inject facts and assert what the engine should conclude:
-
-```yaml
-# scenarios/rds-unavailable.yaml
-name: rds unavailable
-description: >
-  rds stops accepting connections.
-  api starts crash-looping as a result.
-  engine should trace the fault to rds, not api.
-
-inject:
-  rds:
-    available: false
-    connection_count: 0
-  api:
-    ready_replicas: 0
-    restart_count: 12
-    desired_replicas: 3
-
-expect:
-  root_cause: rds
-  path: [nginx, api, rds]
-  eliminated: [frontend]
+```bash
+mgtt provider install https://github.com/sajonaro/mgtt-provider-docker
 ```
 
-Run them:
+[Write your own provider](./providers/README.md) — three things: a YAML vocabulary, a binary that probes, an install hook.
 
-```
-$ mgtt simulate --all
-
-  all components healthy                   ✓ passed
-  api crash-loop independent of rds        ✓ passed
-  frontend crash-looping, api healthy      ✓ passed
-  rds unavailable                          ✓ passed
-
-  4/4 scenarios passed
-```
-
-No running system. No credentials. Runs in CI on every PR.
-
-### 4. Troubleshoot a real incident
-
-When something breaks, `mgtt plan` walks you to the root cause:
-
-```
-$ mgtt plan
-
-  starting from outermost component: nginx
-
-  -> probe nginx upstream_count
-     cost: low | kubectl read-only
-
-  ✓ nginx.upstream_count = 0   ✗ unhealthy
-
-  3 paths to investigate:
-  PATH C   nginx <- api <- rds
-  PATH A   nginx <- frontend
-  PATH B   nginx <- api
-
-  -> probe api ready_replicas
-     cost: low | kubectl read-only | eliminates PATH C, PATH B if healthy
-
-  ✓ api.ready_replicas = 0   ✗ unhealthy
-
-  ...
-
-  -> probe rds available
-     cost: low | AWS API read-only | eliminates PATH C if healthy
-
-  ✓ rds.available = true   ✓ healthy
-
-  -> probe frontend ready_replicas
-     cost: low | kubectl read-only | eliminates PATH A if healthy
-
-  ✓ frontend.ready_replicas = 2   ✓ healthy
-
-  Root cause: api
-  Path:       nginx <- api
-  State:      degraded
-  Eliminated: frontend, rds
-```
-
-The engine probed 4 components, eliminated rds (healthy) and frontend (healthy), and traced the fault to api in a degraded state. You press Y at each step — or let an AI agent drive the loop.
-
-## How It Works
+## How it works
 
 ```mermaid
 graph LR
@@ -165,7 +175,7 @@ graph LR
   nginx[nginx\nreverse proxy] --> frontend
   nginx --> api
   frontend[frontend\nReact SPA] --> api
-  api[api\nNode.js] --> rds[(rds\nAWS RDS PostgreSQL)]
+  api[api\nNode.js] --> rds[(rds\nAWS RDS)]
 
   style nginx     fill:#E1F5EE,stroke:#0F6E56,color:#085041
   style frontend  fill:#E1F5EE,stroke:#0F6E56,color:#085041
@@ -174,85 +184,59 @@ graph LR
   style internet  fill:#F1EFE8,stroke:#5F5E5A,color:#444441
 ```
 
-`mgtt` encodes your system's dependency graph in a YAML model. A constraint engine walks the graph from the outermost component inward, probing each component and eliminating healthy branches. Each probe is ranked by information gain (how many failure paths it eliminates) divided by cost.
+The constraint engine starts from the outermost component and works inward. At each step it picks the probe that eliminates the most failure paths for the lowest cost. Healthy components are eliminated. The tree shrinks until one path remains — that's your root cause.
 
-The same model serves two phases:
+The engine is pure: no I/O, no credentials, no side effects. The same engine powers `mgtt simulate` (injected facts) and `mgtt plan` (real probes). Providers handle the actual probing.
 
-| | Design time | Runtime |
-|---|---|---|
-| **Input** | Scenario YAML (injected facts) | Real probes (kubectl, aws, etc.) |
-| **Command** | `mgtt simulate` | `mgtt plan` |
-| **Output** | Pass/fail assertions | Guided root cause |
-| **Needs** | No credentials, no cluster | Environment credentials |
-| **Runs in** | CI pipeline | On-call engineer's laptop |
-
-![High-level architecture](./docs/images/mgtt_hl.png)
-
-## Two Modus Operandi
-
-### Simulation (design time)
-
-Write the model before the system is deployed. Simulate failure scenarios to validate that the constraint engine reasons correctly. Catch model gaps in CI before they become incident blind spots.
-
-Full walkthrough: [Simulation Scenario](./simulation-scenario.md)
+![Troubleshooting mode](./docs/images/mgtt_trouble.png)
 
 ![Simulation mode](./docs/images/mgtt_sim.png)
 
-### Troubleshooting (runtime)
+---
 
-When an incident fires, `mgtt plan` walks you through the dependency graph. Press Y at each step. The engine picks the cheapest, most informative probe at every turn. Root cause in minutes, not hours.
+## More
 
-Full walkthrough: [Troubleshooting Scenario](./troubleshooting-scenario.md)
+- [Simulation walkthrough](./docs/simulation-scenario.md) — design-time model validation
+- [Troubleshooting walkthrough](./docs/troubleshooting-scenario.md) — runtime incident response
+- [Writing providers](./providers/README.md) — teach mgtt about your technology
+- [CLI reference](#cli-reference) — every command
+- [Full specification](./docs/specs.md) — the v1.0 spec
+- [Documentation site](https://sajonaro.github.io/mgtt) — browsable docs
 
-## Providers
-
-Providers are plugins that define component types, facts, probes, states, and failure modes. Two ship with v0:
-
-```
-$ mgtt provider ls
-
-  ✓ aws         v0.1.0  AWS resources (v0 — rds_instance only)
-  ✓ kubernetes  v1.0.0  Kubernetes workload and networking components
-```
-
-The kubernetes provider knows what a `deployment` is, how to probe it (`kubectl get deploy`), what states it can be in (`live`, `starting`, `degraded`, `draining`), and what failures each state can cause downstream.
-
-## CLI Reference
+## CLI reference
 
 ```
-mgtt init                              Scaffold a blank system.model.yaml
-mgtt model validate [path]             Validate model against providers
+mgtt init                              Scaffold system.model.yaml
+mgtt model validate [path]             Validate model
 
-mgtt provider install <name>...        Install providers
-mgtt provider ls                       List installed providers
-mgtt provider inspect <name> [type]    Inspect provider types
+mgtt provider install <name|path|url>  Install a provider
+mgtt provider ls                       List providers
+mgtt provider inspect <name> [type]    Inspect types
 
-mgtt simulate --all                    Run all scenarios in scenarios/
+mgtt simulate --all                    Run all scenarios
 mgtt simulate --scenario <file>        Run one scenario
 
-mgtt incident start [--id ID]          Start an incident session
-mgtt incident end                      Close the incident
+mgtt incident start [--id ID]          Start incident
+mgtt incident end                      Close incident
 
-mgtt plan [--component NAME]           Interactive guided troubleshooting
-mgtt fact add <c> <k> <v> [--note ..]  Add a manual observation
+mgtt plan [--component NAME]           Guided troubleshooting
+mgtt fact add <c> <k> <v> [--note ..]  Add observation
 
-mgtt ls                                List components and status
-mgtt ls facts [component]              List collected facts
-mgtt status                            One-line health summary
+mgtt ls                                Components and status
+mgtt ls facts [component]              Collected facts
+mgtt status                            Health summary
 
-mgtt stdlib ls                         List primitive types
-mgtt stdlib inspect <type>             Inspect a type definition
+mgtt stdlib ls                         Primitive types
+mgtt stdlib inspect <type>             Type definition
 ```
 
-## Specification
-
-The full v1.0 spec is at [specs.md](./specs.md). Key design principles:
+## Design principles
 
 - **Zero cognitive load at incident time.** The on-call engineer presses Y.
-- **Engine is pure.** No I/O, no credentials, no side effects. Same engine for CLI, simulation, and AI.
+- **Engine is pure.** No I/O, no credentials. Same engine for CLI, simulation, and AI.
 - **Credentials belong to the environment.** Same model as Terraform.
 - **State is observed, not declared.** Component states derive from facts automatically.
-- **Guided, not automated.** MGTT tells you what to check next. You decide whether to check it.
+- **Guided, not automated.** mgtt tells you what to check next. You decide whether to check it.
 
 ## License
 

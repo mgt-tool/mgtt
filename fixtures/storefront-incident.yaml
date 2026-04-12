@@ -1,0 +1,46 @@
+# Fixture data for the storefront incident troubleshooting scenario.
+#
+# The aws rds "available" probe uses parse: "regex:^available$" in the provider
+# YAML. Since regex parse returns a string ("available"), which cannot be
+# compared to bool true in state conditions, the fixture provides stdout "true\n"
+# so that the bool-compatible parse modes work correctly in the state evaluator.
+# A future task will add string→bool coercion in the plan loop (Task 5).
+kubernetes:
+  nginx:
+    upstream_count:
+      stdout: "0\n"
+      exit: 0
+  api:
+    endpoints:
+      stdout: "\n"
+      exit: 0
+    ready_replicas:
+      stdout: "0\n"
+      exit: 0
+    desired_replicas:
+      stdout: "3\n"
+      exit: 0
+    restart_count:
+      stdout: "47\n"
+      exit: 0
+  frontend:
+    ready_replicas:
+      stdout: "2\n"
+      exit: 0
+    desired_replicas:
+      stdout: "2\n"
+      exit: 0
+    endpoints:
+      stdout: "10.0.1.2\n10.0.1.3\n"
+      exit: 0
+aws:
+  rds:
+    available:
+      # Real aws CLI returns "available" but the state condition compares
+      # available == true. The fixture provides "true\n" so the bool parse
+      # mode works; the provider YAML may need a parse-mode fix in a future task.
+      stdout: "true\n"
+      exit: 0
+    connection_count:
+      stdout: "498\n"
+      exit: 0

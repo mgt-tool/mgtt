@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"mgtt/internal/expr"
 	"mgtt/internal/facts"
 	"mgtt/internal/model"
 	"mgtt/internal/providersupport"
@@ -225,4 +226,244 @@ func sliceEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// ---------------------------------------------------------------------------
+// While-guard tests
+// ---------------------------------------------------------------------------
+
+// buildWhileGuardModel constructs a model:
+//
+//	nginx → api → rds              (always active)
+//	              api → vault       (while: vault.state == starting)
+//
+// The "test" provider defines a minimal "service" type with fact-based states:
+//   - "live"     when available == true
+//   - "starting" when available == false
+func buildWhileGuardModel() (*model.Model, *providersupport.Registry) {
+	// Build a minimal provider with a "service" type.
+	reg := providersupport.NewRegistry()
+
+	liveCond, _ := expr.Parse("available == true")
+	startingCond, _ := expr.Parse("available == false")
+
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "test"},
+		Types: map[string]*providersupport.Type{
+			"service": {
+				Name:               "service",
+				DefaultActiveState: "live",
+				Facts:              map[string]*providersupport.FactSpec{},
+				States: []providersupport.StateDef{
+					{Name: "live", When: liveCond},
+					{Name: "starting", When: startingCond},
+				},
+			},
+		},
+	})
+
+	// Parse the while guard expression: vault.state == starting
+	// This checks the DERIVED state of vault (populated by state.Derive).
+	whileExpr, _ := expr.Parse("vault.state == starting")
+
+	m := &model.Model{
+		Meta: model.Meta{
+			Name:      "while-guard-test",
+			Version:   "1",
+			Providers: []string{"test"},
+		},
+		Components: map[string]*model.Component{
+			"nginx": {
+				Name: "nginx",
+				Type: "service",
+				Depends: []model.Dependency{
+					{On: []string{"api"}},
+				},
+			},
+			"api": {
+				Name: "api",
+				Type: "service",
+				Depends: []model.Dependency{
+					{On: []string{"rds"}},
+					{On: []string{"vault"}, While: whileExpr},
+				},
+			},
+			"rds": {
+				Name: "rds",
+				Type: "service",
+			},
+			"vault": {
+				Name: "vault",
+				Type: "service",
+			},
+		},
+		Order: []string{"nginx", "api", "rds", "vault"},
+	}
+	m.BuildGraph()
+
+	return m, reg
+}
+
+// pathTerminals returns the terminal component of each path, sorted.
+func pathTerminals(paths []Path) []string {
+	var terminals []string
+	for _, p := range paths {
+		terminals = append(terminals, p.Components[len(p.Components)-1])
+	}
+	sort.Strings(terminals)
+	return terminals
+}
+
+// TestPlan_WhileGuard_Inactive verifies that when vault is "live",
+// the api→vault edge (guarded by "vault.state == starting") is inactive
+// and vault does not appear in the enumerated paths.
+func TestPlan_WhileGuard_Inactive(t *testing.T) {
+	m, reg := buildWhileGuardModel()
+
+	// Vault available=true → state derives to "live" → while guard
+	// "vault.state == starting" evaluates to false → edge skipped.
+	store := facts.NewInMemory()
+	store.Append("vault", facts.Fact{Key: "available", Value: true, At: time.Now()})
+
+	tree := Plan(m, reg, store, "")
+
+	// Collect all components that appear in any path (alive + eliminated).
+	allPaths := append(append([]Path{}, tree.Paths...), tree.Eliminated...)
+	found := map[string]bool{}
+	for _, p := range allPaths {
+		for _, c := range p.Components {
+			found[c] = true
+		}
+	}
+
+	if found["vault"] {
+		t.Errorf("vault should NOT appear in paths when while guard is inactive (vault is live), but it was found")
+		t.Logf("alive paths:")
+		for _, p := range tree.Paths {
+			t.Logf("  %v", p.Components)
+		}
+		t.Logf("eliminated paths:")
+		for _, p := range tree.Eliminated {
+			t.Logf("  %v", p.Components)
+		}
+	}
+
+	// rds should still be reachable (always-active edge).
+	if !found["rds"] {
+		t.Errorf("rds should appear in paths (always-active dependency), but was not found")
+	}
+}
+
+// TestPlan_WhileGuard_Active verifies that when vault is "starting",
+// the api→vault edge (guarded by "vault.state == starting") is active
+// and vault appears in the enumerated paths.
+func TestPlan_WhileGuard_Active(t *testing.T) {
+	m, reg := buildWhileGuardModel()
+
+	// Vault available=false → state derives to "starting" → while guard
+	// "vault.state == starting" evaluates to true → edge walked.
+	store := facts.NewInMemory()
+	store.Append("vault", facts.Fact{Key: "available", Value: false, At: time.Now()})
+
+	tree := Plan(m, reg, store, "")
+
+	allPaths := append(append([]Path{}, tree.Paths...), tree.Eliminated...)
+	found := map[string]bool{}
+	for _, p := range allPaths {
+		for _, c := range p.Components {
+			found[c] = true
+		}
+	}
+
+	if !found["vault"] {
+		t.Errorf("vault should appear in paths when while guard is active (vault is starting), but was not found")
+		t.Logf("alive paths:")
+		for _, p := range tree.Paths {
+			t.Logf("  %v", p.Components)
+		}
+		t.Logf("eliminated paths:")
+		for _, p := range tree.Eliminated {
+			t.Logf("  %v", p.Components)
+		}
+	}
+
+	if !found["rds"] {
+		t.Errorf("rds should appear in paths (always-active dependency), but was not found")
+	}
+}
+
+// TestPlan_WhileGuard_Unresolved verifies that when the while guard
+// references a fact that hasn't been collected, the edge is conservatively
+// walked (UnresolvedError → treat as active).
+func TestPlan_WhileGuard_Unresolved(t *testing.T) {
+	// Build a variant model where the while guard references a fact, not state:
+	//   api → vault  (while: vault.ready == true)
+	// When vault.ready is missing → (false, *UnresolvedError) → walk edge.
+	whileFactExpr, _ := expr.Parse("vault.ready == true")
+
+	liveCond, _ := expr.Parse("state == live")
+	startingCond, _ := expr.Parse("state == starting")
+
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "test"},
+		Types: map[string]*providersupport.Type{
+			"service": {
+				Name:               "service",
+				DefaultActiveState: "live",
+				Facts:              map[string]*providersupport.FactSpec{},
+				States: []providersupport.StateDef{
+					{Name: "live", When: liveCond},
+					{Name: "starting", When: startingCond},
+				},
+			},
+		},
+	})
+
+	m := &model.Model{
+		Meta: model.Meta{
+			Name:      "while-unresolved-test",
+			Version:   "1",
+			Providers: []string{"test"},
+		},
+		Components: map[string]*model.Component{
+			"nginx": {
+				Name: "nginx",
+				Type: "service",
+				Depends: []model.Dependency{
+					{On: []string{"api"}},
+				},
+			},
+			"api": {
+				Name: "api",
+				Type: "service",
+				Depends: []model.Dependency{
+					{On: []string{"vault"}, While: whileFactExpr},
+				},
+			},
+			"vault": {
+				Name: "vault",
+				Type: "service",
+			},
+		},
+		Order: []string{"nginx", "api", "vault"},
+	}
+	m.BuildGraph()
+
+	// No "ready" fact for vault → UnresolvedError → conservative walk.
+	store := facts.NewInMemory()
+
+	tree := Plan(m, reg, store, "")
+
+	allPaths := append(append([]Path{}, tree.Paths...), tree.Eliminated...)
+	found := map[string]bool{}
+	for _, p := range allPaths {
+		for _, c := range p.Components {
+			found[c] = true
+		}
+	}
+
+	if !found["vault"] {
+		t.Errorf("vault should appear in paths when while guard is unresolved (conservative walk), but was not found")
+	}
 }

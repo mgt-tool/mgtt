@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"mgtt/internal/expr"
 	"mgtt/internal/facts"
 	"mgtt/internal/model"
 	"mgtt/internal/providersupport"
@@ -22,11 +23,12 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 		entry = m.EntryPoint()
 	}
 
-	// Stage 2 — Path enumeration
-	paths := enumeratePaths(m, entry)
-
-	// Stage 3 — State derivation + elimination
+	// Stage 2 — State derivation (moved before path enumeration so that
+	// while-guard expressions on dependency edges can be evaluated).
 	derivation := state.Derive(m, reg, store)
+
+	// Stage 3 — Path enumeration (with while-guard filtering)
+	paths := enumeratePaths(m, entry, store, derivation)
 
 	var alive []Path
 	var eliminated []Path
@@ -111,7 +113,14 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 // returns one Path per reachable component (excluding entry as a trivial
 // single-component path). Each path is the shortest walk from entry to
 // that component.
-func enumeratePaths(m *model.Model, entry string) []Path {
+//
+// Dependency edges with a while guard are evaluated against the current
+// derived states and fact store:
+//   - while == nil           → always active (walk the edge)
+//   - while evals (true,nil) → active (walk the edge)
+//   - while evals (false,nil)→ inactive (skip the edge)
+//   - while evals (false, *UnresolvedError) → conservative, walk the edge
+func enumeratePaths(m *model.Model, entry string, store *facts.Store, derivation *state.Derivation) []Path {
 	type bfsItem struct {
 		name string
 		path []string
@@ -125,18 +134,41 @@ func enumeratePaths(m *model.Model, entry string) []Path {
 		curr := queue[0]
 		queue = queue[1:]
 
-		deps := m.DependenciesOf(curr.name)
-		for _, dep := range deps {
-			if visited[dep] {
-				continue
-			}
-			visited[dep] = true
-			newPath := make([]string, len(curr.path)+1)
-			copy(newPath, curr.path)
-			newPath[len(curr.path)] = dep
+		comp := m.Components[curr.name]
+		if comp == nil {
+			continue
+		}
 
-			paths = append(paths, Path{Components: newPath})
-			queue = append(queue, bfsItem{name: dep, path: newPath})
+		for _, dep := range comp.Depends {
+			// Evaluate the while guard if present.
+			if dep.While != nil {
+				ctx := expr.Ctx{
+					CurrentComponent: curr.name,
+					Facts:            store,
+					States:           derivation.ComponentStates,
+				}
+				result, evalErr := dep.While.Eval(ctx)
+				if !result && evalErr == nil {
+					// Condition is definitively false → skip this edge.
+					continue
+				}
+				// (true, nil) → walk; (false, *UnresolvedError) → conservative, walk.
+				// Any other error → also walk conservatively.
+				_ = evalErr
+			}
+
+			for _, target := range dep.On {
+				if visited[target] {
+					continue
+				}
+				visited[target] = true
+				newPath := make([]string, len(curr.path)+1)
+				copy(newPath, curr.path)
+				newPath[len(curr.path)] = target
+
+				paths = append(paths, Path{Components: newPath})
+				queue = append(queue, bfsItem{name: target, path: newPath})
+			}
 		}
 	}
 

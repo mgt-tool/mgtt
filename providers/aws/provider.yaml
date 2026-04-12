@@ -19,6 +19,9 @@ auth:
 types:
   rds_instance:
     facts:
+      # v0: parse mode is 'bool' for state condition compatibility.
+      # Real AWS returns "available"/"stopped" — a future version should
+      # use a custom parse mode or post-processing to convert to bool.
       available:
         type: mgtt.bool
         ttl: 60s

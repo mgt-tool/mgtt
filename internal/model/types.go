@@ -26,6 +26,7 @@ type Component struct {
 	Providers    []string            // nil → inherit Meta.Providers
 	Depends      []Dependency
 	HealthyRaw   []string            // raw expression strings, compiled in Phase 2
+	Healthy      []expr.Node         // compiled from HealthyRaw
 	FailureModes map[string][]string // state → can_cause list
 }
 

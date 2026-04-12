@@ -111,6 +111,15 @@ func Load(path string) (*Model, error) {
 			}
 		}
 
+		// healthy: compile each raw expression string into an expr.Node
+		for _, raw := range rc.Healthy {
+			node, err := expr.Parse(raw)
+			if err != nil {
+				return nil, fmt.Errorf("component %s: invalid healthy expression %q: %w", name, raw, err)
+			}
+			comp.Healthy = append(comp.Healthy, node)
+		}
+
 		// depends: normalise rawDependency.OnRaw (string or []interface{})
 		for _, rd := range rc.Depends {
 			dep := Dependency{

@@ -248,6 +248,21 @@ func TestLoad_FileNotFound(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// TestLoad_HealthyCompiled
+// ---------------------------------------------------------------------------
+
+func TestLoad_HealthyCompiled(t *testing.T) {
+	m, err := Load(testdataPath("storefront.valid.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rds := m.Components["rds"]
+	if len(rds.Healthy) != 1 {
+		t.Fatalf("expected 1 compiled healthy expression for rds, got %d", len(rds.Healthy))
+	}
+}
+
+// ---------------------------------------------------------------------------
 // TestValidate_ValidModel
 // ---------------------------------------------------------------------------
 

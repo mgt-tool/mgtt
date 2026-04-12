@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"mgtt/internal/model"
@@ -31,6 +30,7 @@ func init() {
 	simulateCmd.Flags().StringVar(&simulateScenario, "scenario", "", "path to a single scenario YAML file")
 	simulateCmd.Flags().BoolVar(&simulateAll, "all", false, "run all scenarios in the scenarios directory")
 	simulateCmd.Flags().StringVar(&scenariosDir, "scenarios-dir", "scenarios", "directory containing scenario YAML files")
+	simulateCmd.SilenceErrors = true
 	rootCmd.AddCommand(simulateCmd)
 }
 
@@ -69,11 +69,15 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 
 		renderSimulateAll(w, results)
 
-		// Exit with error if any scenario failed.
+		// Return error (without cobra printing it) if any scenario failed.
+		failCount := 0
 		for _, r := range results {
 			if !r.Pass {
-				os.Exit(1)
+				failCount++
 			}
+		}
+		if failCount > 0 {
+			return fmt.Errorf("%d scenario(s) failed", failCount)
 		}
 		return nil
 	}
@@ -88,7 +92,7 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 	renderSimulateResult(w, result)
 
 	if !result.Pass {
-		os.Exit(1)
+		return fmt.Errorf("1 scenario(s) failed")
 	}
 	return nil
 }

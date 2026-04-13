@@ -29,23 +29,21 @@ if [ -n "$VERSION" ]; then
   echo "No pre-built binary for ${OS}/${ARCH}. Falling back to source build."
 fi
 
-# Fall back: build from source (requires Go)
-if ! command -v go &>/dev/null; then
-  echo "Error: no pre-built binary available and Go is not installed."
+# Fall back: build from source (requires Go and git)
+if ! command -v go &>/dev/null || ! command -v git &>/dev/null; then
+  echo "Error: no pre-built binary available and building from source requires Go and git."
   echo ""
-  echo "Install Go from https://go.dev/dl/ then run:"
-  echo "  go install github.com/${REPO}/cmd/mgtt@latest"
+  echo "Install Go from https://go.dev/dl/ and git, then run:"
+  echo "  git clone https://github.com/${REPO}.git && cd mgtt && go build -o /usr/local/bin/mgtt ./cmd/mgtt"
   exit 1
 fi
 
 echo "Building mgtt from source..."
-GOPROXY=direct go install "github.com/${REPO}/cmd/mgtt@latest"
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
 
-GOBIN="$(go env GOPATH)/bin/mgtt"
-if [ -f "$GOBIN" ]; then
-  sudo mv "$GOBIN" "$INSTALL_DIR/mgtt" 2>/dev/null || mv "$GOBIN" "$INSTALL_DIR/mgtt"
-  echo "Installed mgtt to ${INSTALL_DIR}/mgtt"
-else
-  echo "Installed mgtt to $(go env GOPATH)/bin/mgtt"
-  echo "Note: make sure $(go env GOPATH)/bin is on your PATH"
-fi
+git clone --depth=1 "https://github.com/${REPO}.git" "$TMPDIR"
+cd "$TMPDIR"
+go build -o mgtt ./cmd/mgtt
+sudo mv mgtt "$INSTALL_DIR/mgtt" 2>/dev/null || mv mgtt "$INSTALL_DIR/mgtt"
+echo "Installed mgtt to ${INSTALL_DIR}/mgtt"

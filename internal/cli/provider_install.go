@@ -37,12 +37,23 @@ func init() {
 	rootCmd.AddCommand(providerCmd)
 }
 
+// builtinRegistry maps provider names to their git URL and subdirectory path.
+// Providers that live in the main mgtt repo use a subdir; standalone repos leave path empty.
+var builtinRegistry = map[string]struct {
+	url  string
+	path string
+}{
+	"kubernetes": {url: "https://github.com/sajonaro/mgtt", path: "providers/kubernetes"},
+	"aws":        {url: "https://github.com/sajonaro/mgtt", path: "providers/aws"},
+}
+
 // installProvider installs a provider by name, path, or git URL.
 //
 // Resolution order:
 //  1. Git URL (https:// or git@) → clone to temp dir → install from there
 //  2. Local path (starts with . or / or contains separator) → use directly
 //  3. Name lookup → $MGTT_HOME/providers/<name>/ or ./providers/<name>/
+//  4. Built-in registry → known providers cloned from git
 //
 // Steps after resolution:
 //  1. Load provider.yaml to get canonical name
@@ -51,25 +62,21 @@ func init() {
 //  4. Render summary
 func installProvider(w io.Writer, nameOrPath string) error {
 	srcDir := ""
+	var tmpDirs []string
+	defer func() {
+		for _, d := range tmpDirs {
+			os.RemoveAll(d)
+		}
+	}()
 
 	// Git URL: clone to temp dir
 	if isGitURL(nameOrPath) {
-		fmt.Fprintf(w, "  cloning %s...\n", nameOrPath)
-		tmpDir, err := os.MkdirTemp("", "mgtt-provider-*")
+		dir, err := cloneProvider(w, nameOrPath, "")
 		if err != nil {
-			return fmt.Errorf("create temp dir: %w", err)
+			return err
 		}
-		defer os.RemoveAll(tmpDir)
-
-		cloneCmd := exec.Command("git", "clone", "--depth=1", nameOrPath, tmpDir)
-		cloneCmd.Stderr = w
-		if err := cloneCmd.Run(); err != nil {
-			return fmt.Errorf("git clone: %w", err)
-		}
-		if _, err := os.Stat(filepath.Join(tmpDir, "provider.yaml")); err != nil {
-			return fmt.Errorf("cloned repo has no provider.yaml")
-		}
-		srcDir = tmpDir
+		tmpDirs = append(tmpDirs, dir)
+		srcDir = dir
 	}
 
 	// Local path
@@ -81,7 +88,7 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		}
 	}
 
-	// Name lookup
+	// Name lookup (local)
 	if srcDir == "" {
 		name := nameOrPath
 		if home := os.Getenv("MGTT_HOME"); home != "" {
@@ -98,8 +105,20 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		}
 	}
 
+	// Built-in registry lookup
 	if srcDir == "" {
-		return fmt.Errorf("provider %q not found (tried git URL, local path, and name lookup)", nameOrPath)
+		if entry, ok := builtinRegistry[nameOrPath]; ok {
+			dir, err := cloneProvider(w, entry.url, entry.path)
+			if err != nil {
+				return err
+			}
+			tmpDirs = append(tmpDirs, dir)
+			srcDir = dir
+		}
+	}
+
+	if srcDir == "" {
+		return fmt.Errorf("provider %q not found (tried git URL, local path, name lookup, and built-in registry)", nameOrPath)
 	}
 
 	// 2. Load provider.yaml first to get the canonical name.
@@ -175,6 +194,57 @@ func copyDir(src, dst string) error {
 		}
 		return os.WriteFile(target, data, info.Mode())
 	})
+}
+
+// cloneProvider clones a git repo and returns the path containing provider.yaml.
+// If subdir is non-empty, the provider lives in a subdirectory of the repo.
+// The caller is responsible for cleaning up the returned temp directory.
+func cloneProvider(w io.Writer, url, subdir string) (string, error) {
+	fmt.Fprintf(w, "  cloning %s...\n", url)
+	tmpDir, err := os.MkdirTemp("", "mgtt-provider-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+
+	cloneCmd := exec.Command("git", "clone", "--depth=1", url, tmpDir)
+	cloneCmd.Stderr = w
+	if err := cloneCmd.Run(); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("git clone: %w", err)
+	}
+
+	srcDir := tmpDir
+	if subdir != "" {
+		srcDir = filepath.Join(tmpDir, subdir)
+	}
+
+	if _, err := os.Stat(filepath.Join(srcDir, "provider.yaml")); err != nil {
+		os.RemoveAll(tmpDir)
+		if subdir != "" {
+			return "", fmt.Errorf("cloned repo has no provider.yaml at %s", subdir)
+		}
+		return "", fmt.Errorf("cloned repo has no provider.yaml")
+	}
+
+	// Return tmpDir as the root to clean up, but srcDir is what the caller uses.
+	// Since srcDir may be a subdir, we copy just that part to a new temp location
+	// so the caller gets a clean directory with only the provider.
+	if subdir != "" {
+		provDir, err := os.MkdirTemp("", "mgtt-provider-sub-*")
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("create temp dir: %w", err)
+		}
+		if err := copyDir(srcDir, provDir); err != nil {
+			os.RemoveAll(tmpDir)
+			os.RemoveAll(provDir)
+			return "", fmt.Errorf("copy provider subdir: %w", err)
+		}
+		os.RemoveAll(tmpDir)
+		return provDir, nil
+	}
+
+	return tmpDir, nil
 }
 
 // isGitURL returns true if the string looks like a git-cloneable URL.

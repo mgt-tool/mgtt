@@ -41,5 +41,8 @@ mgtt-provider-kubernetes
 # mkdocs build output
 site/
 
+# Superpowers plans/specs (local only)
+docs/superpowers/
+
 .claude
 .log

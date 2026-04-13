@@ -39,7 +39,7 @@ if ! command -v go &>/dev/null; then
 fi
 
 echo "Building mgtt from source..."
-go install "github.com/${REPO}/cmd/mgtt@latest"
+GOPROXY=direct go install "github.com/${REPO}/cmd/mgtt@latest"
 
 GOBIN="$(go env GOPATH)/bin/mgtt"
 if [ -f "$GOBIN" ]; then

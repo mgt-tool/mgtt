@@ -35,6 +35,14 @@ go build ./cmd/mgtt
 sudo mv mgtt /usr/local/bin/
 ```
 
+## Uninstall
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sajonaro/mgtt/main/uninstall.sh | sh
+```
+
+Removes the `mgtt` binary and the `~/.mgtt` data directory (installed providers and cache).
+
 ## Install Providers
 
 ```bash

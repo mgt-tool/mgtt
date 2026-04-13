@@ -1,0 +1,50 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get crd {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  established:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get crd {name} -o jsonpath={.status.conditions[?(@.type=='Established')].status}"
+      parse: bool
+      cost: low
+  names_accepted:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get crd {name} -o jsonpath={.status.conditions[?(@.type=='NamesAccepted')].status}"
+      parse: bool
+      cost: low
+
+healthy:
+  - established == true
+  - names_accepted == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: CRD not registered
+  not_established:
+    when: "exists == true & established == false"
+    description: CRD not yet ready to accept instances
+  name_conflict:
+    when: "names_accepted == false"
+    description: CRD name conflicts with another resource
+  ready:
+    when: "established == true & names_accepted == true"
+    description: CRD established and accepting instances
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [upstream_failure, deployment_blocked]
+  not_established:
+    can_cause: [upstream_failure, deployment_blocked]
+  name_conflict:
+    can_cause: [upstream_failure, deployment_blocked]

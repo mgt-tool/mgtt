@@ -1,0 +1,60 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get {kind}.{api_version} {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  ready:
+    type: mgtt.bool
+    ttl: 30s
+    description: status condition Ready=True (common convention)
+    probe:
+      cmd: "kubectl -n {namespace} get {kind}.{api_version} {name} -o jsonpath={.status.conditions[?(@.type=='Ready')].status}"
+      parse: bool
+      cost: low
+  synced:
+    type: mgtt.bool
+    ttl: 30s
+    description: status condition Synced=True (common in ArgoCD, Crossplane)
+    probe:
+      cmd: "kubectl -n {namespace} get {kind}.{api_version} {name} -o jsonpath={.status.conditions[?(@.type=='Synced')].status}"
+      parse: bool
+      cost: low
+  age:
+    type: mgtt.int
+    ttl: 60s
+    description: seconds since creation
+    probe:
+      cmd: "kubectl -n {namespace} get {kind}.{api_version} {name} -o jsonpath={.metadata.creationTimestamp}"
+      parse: age_seconds
+      cost: low
+
+healthy:
+  - exists == true
+  - ready == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: custom resource does not exist
+  not_ready:
+    when: "exists == true & ready == false"
+    description: resource exists but not ready
+  not_synced:
+    when: "exists == true & synced == false"
+    description: resource not synced with desired state
+  ready:
+    when: "exists == true & ready == true"
+    description: resource ready
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [upstream_failure, deployment_blocked]
+  not_ready:
+    can_cause: [upstream_failure, timeout]
+  not_synced:
+    can_cause: [upstream_failure, data_inconsistency]

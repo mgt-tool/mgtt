@@ -1,0 +1,39 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get priorityclass {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  value:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl get priorityclass {name} -o jsonpath={.value}"
+      parse: int
+      cost: low
+  preemption_policy:
+    type: mgtt.string
+    ttl: 60s
+    probe:
+      cmd: "kubectl get priorityclass {name} -o jsonpath={.preemptionPolicy}"
+      parse: string
+      cost: low
+
+healthy:
+  - exists == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: priority class not defined
+  ready:
+    when: "exists == true"
+    description: priority class available
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [resource_contention, upstream_failure]

@@ -1,0 +1,53 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get lease {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  holder:
+    type: mgtt.string
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get lease {name} -o jsonpath={.spec.holderIdentity}"
+      parse: string
+      cost: low
+  renew_age:
+    type: mgtt.int
+    ttl: 30s
+    description: seconds since last renewal
+    probe:
+      cmd: "kubectl -n {namespace} get lease {name} -o jsonpath={.spec.renewTime}"
+      parse: age_seconds
+      cost: low
+  lease_duration:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get lease {name} -o jsonpath={.spec.leaseDurationSeconds}"
+      parse: int
+      cost: low
+
+healthy:
+  - exists == true
+  - renew_age < lease_duration
+
+states:
+  missing:
+    when: "exists == false"
+    description: lease does not exist
+  expired:
+    when: "renew_age > lease_duration"
+    description: holder has not renewed — leader election stale
+  held:
+    when: "exists == true"
+    description: lease actively held
+
+default_active_state: held
+
+failure_modes:
+  missing:
+    can_cause: [upstream_failure]
+  expired:
+    can_cause: [upstream_failure, data_inconsistency]

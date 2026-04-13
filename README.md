@@ -1,4 +1,6 @@
-## `mgtt` — **m**odel **g**uided **t**roubleshooting **t**ool
+![mgtt](docs/images/mgtt_full_lockup.png)
+
+## model guided troubleshooting tool
 
 If you build or maintain anything with more than two components, you know the drill: something stops working, you open three terminals and start guessing.
 

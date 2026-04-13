@@ -6,6 +6,8 @@ docs_dir: docs
 
 theme:
   name: material
+  logo: images/mgtt_icon_medium.png
+  favicon: images/mgtt_icon_32px.png
   palette:
     - scheme: default
       primary: teal

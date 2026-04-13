@@ -379,14 +379,14 @@ func TestValidate_TypeResolution(t *testing.T) {
 		t.Fatalf("Load error: %v", err)
 	}
 
-	_, file, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
-
 	reg := providersupport.NewRegistry()
-	for _, name := range []string{"kubernetes", "aws"} {
-		p, err := providersupport.LoadFromFile(filepath.Join(repoRoot, "providers", name, "provider.yaml"))
+	for _, pair := range []struct{ name, file string }{
+		{"kubernetes", "testdata/kubernetes-provider.yaml"},
+		{"aws", "testdata/aws-provider.yaml"},
+	} {
+		p, err := providersupport.LoadFromFile(pair.file)
 		if err != nil {
-			t.Fatalf("LoadFromFile(%s): %v", name, err)
+			t.Fatalf("LoadFromFile(%s): %v", pair.name, err)
 		}
 		reg.Register(p)
 	}
@@ -417,11 +417,8 @@ func TestValidate_UnknownType(t *testing.T) {
 	}
 	m.BuildGraph()
 
-	_, file, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
-
 	reg := providersupport.NewRegistry()
-	p, err := providersupport.LoadFromFile(filepath.Join(repoRoot, "providers", "kubernetes", "provider.yaml"))
+	p, err := providersupport.LoadFromFile("testdata/kubernetes-provider.yaml")
 	if err != nil {
 		t.Fatalf("LoadFromFile(kubernetes): %v", err)
 	}

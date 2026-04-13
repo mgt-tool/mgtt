@@ -1,0 +1,104 @@
+meta:
+  name: kubernetes
+  version: 1.0.0
+  description: Kubernetes workload and networking components
+  requires:
+    mgtt: ">=1.0"
+  command: "$MGTT_PROVIDER_DIR/bin/mgtt-provider-kubernetes"
+
+hooks:
+  install: hooks/install.sh
+
+variables:
+  namespace:
+    description: kubernetes namespace
+    required: false
+    default: default
+
+auth:
+  strategy: environment
+  reads_from: [KUBECONFIG, ~/.kube/config, in-cluster service account]
+  access:
+    probes: kubectl read-only
+    writes: none
+
+types:
+  ingress:
+    facts:
+      upstream_count:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: kubectl -n {namespace} get endpoints {name} -o json
+          parse: "json:.subsets.0.addresses|length"
+          cost: low
+          access: kubectl read-only
+    healthy: [upstream_count > 0]
+    states:
+      live:
+        when: "upstream_count > 0"
+        description: serving traffic
+      draining:
+        when: "upstream_count == 0"
+        description: no upstreams
+    default_active_state: live
+    failure_modes:
+      draining:
+        can_cause: [upstream_failure, 5xx_errors]
+
+  deployment:
+    facts:
+      ready_replicas:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "kubectl -n {namespace} get deploy {name} -o jsonpath={.status.readyReplicas}"
+          parse: int
+          cost: low
+          access: kubectl read-only
+      desired_replicas:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "kubectl -n {namespace} get deploy {name} -o jsonpath={.spec.replicas}"
+          parse: int
+          cost: low
+      restart_count:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "kubectl -n {namespace} get pods -l app={name} -o jsonpath={.items[*].status.containerStatuses[0].restartCount}"
+          parse: "regex:(\\d+)"
+          cost: low
+      endpoints:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "kubectl -n {namespace} get endpoints {name} -o jsonpath={.subsets[0].addresses[*].ip}"
+          parse: "lines:1"
+          cost: low
+    healthy:
+      - ready_replicas == desired_replicas
+      - endpoints > 0
+      - restart_count < 5
+    states:
+      degraded:
+        when: "ready_replicas < desired_replicas & restart_count > 5"
+        description: crash-looping
+      draining:
+        when: "desired_replicas == 0"
+        description: scaled to zero
+      starting:
+        when: "ready_replicas < desired_replicas"
+        description: pods initialising
+      live:
+        when: "ready_replicas == desired_replicas"
+        description: all replicas ready
+    default_active_state: live
+    failure_modes:
+      degraded:
+        can_cause: [upstream_failure, timeout, connection_refused, 5xx_errors]
+      draining:
+        can_cause: [upstream_failure, connection_refused]
+      starting:
+        can_cause: [upstream_failure, timeout]

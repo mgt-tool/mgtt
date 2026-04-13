@@ -40,7 +40,7 @@ fi
 
 echo "Building mgtt from source..."
 TMPDIR=$(mktemp -d)
-trap "rm -rf $TMPDIR" EXIT
+trap 'rm -rf "$TMPDIR"' EXIT
 
 git clone --depth=1 "https://github.com/${REPO}.git" "$TMPDIR"
 cd "$TMPDIR"

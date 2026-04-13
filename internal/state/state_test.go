@@ -35,10 +35,13 @@ func loadStorefront(t *testing.T) (*model.Model, *providersupport.Registry) {
 	}
 
 	reg := providersupport.NewRegistry()
-	for _, name := range []string{"kubernetes", "aws"} {
-		p, err := providersupport.LoadFromFile(filepath.Join(root, "providers", name, "provider.yaml"))
+	for _, pair := range []struct{ name, file string }{
+		{"kubernetes", "testdata/kubernetes-provider.yaml"},
+		{"aws", "testdata/aws-provider.yaml"},
+	} {
+		p, err := providersupport.LoadFromFile(pair.file)
 		if err != nil {
-			t.Fatalf("load provider %s: %v", name, err)
+			t.Fatalf("load provider %s: %v", pair.name, err)
 		}
 		reg.Register(p)
 	}

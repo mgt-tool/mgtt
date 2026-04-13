@@ -190,7 +190,7 @@ func TestLoadProvider_StateOrder(t *testing.T) {
 }
 
 func TestLoadFromFile_Kubernetes(t *testing.T) {
-	p, err := LoadFromFile("../../providers/kubernetes/provider.yaml")
+	p, err := LoadFromFile("testdata/kubernetes.yaml")
 	if err != nil {
 		t.Fatalf("LoadFromFile kubernetes: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestLoadFromFile_Kubernetes(t *testing.T) {
 }
 
 func TestLoadFromFile_AWS(t *testing.T) {
-	p, err := LoadFromFile("../../providers/aws/provider.yaml")
+	p, err := LoadFromFile("testdata/aws.yaml")
 	if err != nil {
 		t.Fatalf("LoadFromFile aws: %v", err)
 	}
@@ -300,11 +300,11 @@ func TestLoadFromFile_AWS(t *testing.T) {
 
 func loadTestProviders(t *testing.T) (*Registry, *Provider, *Provider) {
 	t.Helper()
-	k8s, err := LoadFromFile("../../providers/kubernetes/provider.yaml")
+	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
 	if err != nil {
 		t.Fatalf("load kubernetes: %v", err)
 	}
-	aws, err := LoadFromFile("../../providers/aws/provider.yaml")
+	aws, err := LoadFromFile("testdata/aws.yaml")
 	if err != nil {
 		t.Fatalf("load aws: %v", err)
 	}
@@ -375,7 +375,7 @@ types:
 		t.Fatalf("load second: %v", err)
 	}
 
-	k8s, err := LoadFromFile("../../providers/kubernetes/provider.yaml")
+	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
 	if err != nil {
 		t.Fatalf("load kubernetes: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestRegistry_QueryMethods(t *testing.T) {
 }
 
 func TestLoadProvider_CompiledExpressions(t *testing.T) {
-	k8s, err := LoadFromFile("../../providers/kubernetes/provider.yaml")
+	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
 	if err != nil {
 		t.Fatalf("LoadFromFile kubernetes: %v", err)
 	}

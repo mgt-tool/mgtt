@@ -1,0 +1,13 @@
+providers:
+  kubernetes:
+    url: https://github.com/sajonaro/mgtt-provider-kubernetes
+    description: Kubernetes workloads via kubectl
+    types: [ingress, deployment]
+  aws:
+    url: https://github.com/sajonaro/mgtt-provider-aws
+    description: AWS resources via aws-cli
+    types: [rds_instance]
+  docker:
+    url: https://github.com/sajonaro/mgtt-provider-docker
+    description: Docker containers via docker inspect
+    types: [container]

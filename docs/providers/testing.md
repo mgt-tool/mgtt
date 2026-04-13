@@ -59,13 +59,13 @@ This tests the binary — does it actually collect facts from a live system?
 
 ## Reference implementation
 
-The `kubernetes/` provider in the [providers directory](https://github.com/sajonaro/mgtt/tree/main/providers/kubernetes) is the reference implementation:
+The [kubernetes provider](https://github.com/sajonaro/mgtt-provider-kubernetes) is the reference implementation:
 
 - `provider.yaml` — full vocabulary with 2 types, 5 facts, 4 states
 - `main.go` — binary using kubectl JSON output
 - `hooks/install.sh` — Go build script
 
-The `aws/` provider shows a minimal vocabulary-only provider (no binary).
+The [aws provider](https://github.com/sajonaro/mgtt-provider-aws) shows a minimal vocabulary-only provider (no binary).
 
 ---
 

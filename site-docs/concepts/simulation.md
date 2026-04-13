@@ -17,16 +17,16 @@ Same storefront used in the [troubleshooting walkthrough](troubleshooting.md):
 ```mermaid
 graph LR
   internet([internet]) --> nginx
-  nginx[nginx\nreverse proxy] --> frontend
+  nginx[nginx - reverse proxy] --> frontend
   nginx --> api
-  frontend[frontend\nReact SPA] --> api
-  api[api\nNode.js] --> rds[(rds\nAWS RDS)]
+  frontend[frontend - React SPA] --> api
+  api[api - Node.js] --> rds[(rds - AWS RDS)]
 
-  style nginx     fill:#E1F5EE,stroke:#0F6E56,color:#085041
-  style frontend  fill:#E1F5EE,stroke:#0F6E56,color:#085041
-  style api       fill:#E1F5EE,stroke:#0F6E56,color:#085041
-  style rds       fill:#E6F1FB,stroke:#185FA5,color:#0C447C
-  style internet  fill:#F1EFE8,stroke:#5F5E5A,color:#444441
+  style nginx     fill:#E1F5EE,stroke:#0F6E56,color:#000
+  style frontend  fill:#E1F5EE,stroke:#0F6E56,color:#000
+  style api       fill:#E1F5EE,stroke:#0F6E56,color:#000
+  style rds       fill:#E6F1FB,stroke:#185FA5,color:#000
+  style internet  fill:#F1EFE8,stroke:#5F5E5A,color:#000
 ```
 
 ## Step 1 — Write the model

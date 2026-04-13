@@ -190,6 +190,77 @@ Providers declare failure modes using a standard vocabulary. These are the recog
 
 ---
 
-## Writing your own provider
+## When the type you need doesn't exist
 
-If your technology isn't listed, you can write a provider that defines new types. See [Writing Providers](../providers/overview.md).
+The catalog above is small — three types across two providers. Real systems have many more component types (ElastiCache clusters, message brokers, S3 buckets, CDNs, secrets stores, etc.). When you need a type that isn't listed, you have three options:
+
+### Option 1: Write a vocabulary-only provider (fastest)
+
+Define a `provider.yaml` with your types, facts, states, and inline probe commands. No compiled binary needed — mgtt executes the shell commands directly.
+
+```yaml
+# my-aws-extras/provider.yaml
+meta:
+  name: my-aws-extras
+  version: 0.1.0
+  description: Additional AWS types for my project
+  requires:
+    mgtt: ">=1.0"
+  command: ""
+
+hooks:
+  install: ""
+
+auth:
+  strategy: environment
+  reads_from: [AWS_PROFILE, ~/.aws/credentials]
+  access:
+    probes: AWS API read-only
+    writes: none
+
+types:
+  elasticache_cluster:
+    description: AWS ElastiCache Redis/Memcached cluster
+    facts:
+      available:
+        type: mgtt.bool
+        ttl: 60s
+        probe:
+          cmd: "aws elasticache describe-cache-clusters --cache-cluster-id {name} --query 'CacheClusters[0].CacheClusterStatus' --output text"
+          parse: bool
+          cost: low
+          access: AWS API read-only
+    healthy:
+      - available == true
+    states:
+      live:
+        when: "available == true"
+        description: accepting connections
+      stopped:
+        when: "available == false"
+        description: not available
+    default_active_state: live
+    failure_modes:
+      stopped:
+        can_cause: [upstream_failure, connection_refused]
+```
+
+Install it:
+
+```bash
+mgtt provider install ./my-aws-extras
+```
+
+This is the right starting point. You can always add a compiled binary later for better performance or more complex probe logic.
+
+### Option 2: Extend an existing provider
+
+Fork the official `aws` or `kubernetes` provider repository and add types to its `provider.yaml`. This keeps all your AWS types in one provider.
+
+### Option 3: Contribute upstream
+
+If your type is broadly useful (e.g., `elasticache_cluster` for the AWS provider), open a PR against the official provider. See [Writing Providers](../providers/overview.md) for the full provider development guide.
+
+---
+
+The key point: **mgtt's type system is open**. The catalog above is what ships today, not what's possible. Any component you can observe via a shell command can be modeled.

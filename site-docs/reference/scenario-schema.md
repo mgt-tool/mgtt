@@ -221,6 +221,35 @@ expect:
   eliminated: [nginx, frontend, api, rds]
 ```
 
+## Common mistake: per-component status assertions
+
+The `expect` block describes the engine's **overall conclusion**, not per-component status. This is wrong:
+
+```yaml
+# WRONG — this is not how expect works
+expect:
+  api:
+    status: degraded
+  rds:
+    status: healthy
+  frontend:
+    status: healthy
+```
+
+The correct format asserts the engine's conclusion — root cause, failure path, and eliminated components:
+
+```yaml
+# CORRECT
+expect:
+  root_cause: api
+  path: [nginx, api]
+  eliminated: [rds, frontend]
+```
+
+The engine determines component states internally from the injected facts. You assert what the engine should *conclude*, not what each component's state should be.
+
+---
+
 ## What a failing scenario teaches you
 
 A simulation failure means the engine's conclusion doesn't match your expectation. Common causes:

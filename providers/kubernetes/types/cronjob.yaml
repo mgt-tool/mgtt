@@ -1,0 +1,62 @@
+facts:
+  suspended:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get cronjob {name} -o jsonpath={.spec.suspend}"
+      parse: bool
+      cost: low
+  active_jobs:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get cronjob {name} -o jsonpath={.status.active}"
+      parse: "json:length"
+      cost: low
+  last_schedule_age:
+    type: mgtt.int
+    ttl: 30s
+    description: seconds since last schedule time
+    probe:
+      cmd: "kubectl -n {namespace} get cronjob {name} -o jsonpath={.status.lastScheduleTime}"
+      parse: age_seconds
+      cost: low
+  last_successful_age:
+    type: mgtt.int
+    ttl: 30s
+    description: seconds since last successful completion
+    probe:
+      cmd: "kubectl -n {namespace} get cronjob {name} -o jsonpath={.status.lastSuccessfulTime}"
+      parse: age_seconds
+      cost: low
+
+healthy:
+  - suspended == false
+  - last_successful_age < 7200
+
+states:
+  suspended:
+    when: "suspended == true"
+    description: manually suspended
+  overdue:
+    when: "last_schedule_age > 3600"
+    description: has not fired in over an hour
+  failing:
+    when: "last_successful_age > 7200 & active_jobs == 0"
+    description: recent jobs not succeeding
+  active:
+    when: "active_jobs > 0"
+    description: job currently running
+  live:
+    when: "suspended == false"
+    description: scheduling normally
+
+default_active_state: live
+
+failure_modes:
+  suspended:
+    can_cause: [scheduled_task_skipped]
+  overdue:
+    can_cause: [scheduled_task_skipped, stale_data]
+  failing:
+    can_cause: [scheduled_task_skipped, stale_data, data_inconsistency]

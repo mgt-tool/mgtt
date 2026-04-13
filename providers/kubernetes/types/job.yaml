@@ -1,0 +1,68 @@
+facts:
+  succeeded:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.status.succeeded}"
+      parse: int
+      cost: low
+  failed:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.status.failed}"
+      parse: int
+      cost: low
+  active:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.status.active}"
+      parse: int
+      cost: low
+  backoff_limit:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.spec.backoffLimit}"
+      parse: int
+      cost: low
+  condition_complete:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.status.conditions[?(@.type=='Complete')].status}"
+      parse: bool
+      cost: low
+  condition_failed:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get job {name} -o jsonpath={.status.conditions[?(@.type=='Failed')].status}"
+      parse: bool
+      cost: low
+
+healthy:
+  - condition_failed == false
+
+states:
+  failed:
+    when: "condition_failed == true"
+    description: job has permanently failed
+  backoff:
+    when: "failed > 0 & active == 0 & condition_complete == false"
+    description: retrying after failure
+  running:
+    when: "active > 0"
+    description: job pods executing
+  complete:
+    when: "condition_complete == true"
+    description: job finished successfully
+
+default_active_state: complete
+
+failure_modes:
+  failed:
+    can_cause: [data_inconsistency, scheduled_task_skipped, stale_data]
+  backoff:
+    can_cause: [timeout, stale_data]

@@ -1,0 +1,79 @@
+facts:
+  phase:
+    type: mgtt.string
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.phase}"
+      parse: string
+      cost: low
+  ready:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.conditions[?(@.type=='Ready')].status}"
+      parse: bool
+      cost: low
+  restart_count:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.containerStatuses[0].restartCount}"
+      parse: int
+      cost: low
+  scheduled:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.conditions[?(@.type=='PodScheduled')].status}"
+      parse: bool
+      cost: low
+  containers_ready:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.conditions[?(@.type=='ContainersReady')].status}"
+      parse: bool
+      cost: low
+  oom_killed:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pod {name} -o jsonpath={.status.containerStatuses[*].lastState.terminated.reason}"
+      parse: "regex:OOMKilled"
+      cost: low
+
+healthy:
+  - ready == true
+  - restart_count < 5
+
+states:
+  oom_killed:
+    when: "oom_killed == true"
+    description: container killed due to memory limit
+  crash_loop:
+    when: "restart_count > 5 & ready == false"
+    description: container repeatedly crashing
+  unschedulable:
+    when: "scheduled == false"
+    description: no node can accept this pod
+  not_ready:
+    when: "ready == false"
+    description: pod exists but not serving
+  running:
+    when: "ready == true"
+    description: pod running and ready
+  succeeded:
+    when: "ready == false"
+    description: pod completed successfully
+
+default_active_state: running
+
+failure_modes:
+  oom_killed:
+    can_cause: [upstream_failure, timeout, connection_refused, 5xx_errors]
+  crash_loop:
+    can_cause: [upstream_failure, timeout, connection_refused, 5xx_errors]
+  unschedulable:
+    can_cause: [upstream_failure, connection_refused]
+  not_ready:
+    can_cause: [upstream_failure, timeout]

@@ -1,0 +1,32 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get clusterrole {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  rule_count:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl get clusterrole {name} -o json"
+      parse: "json:.rules | length"
+      cost: low
+
+healthy:
+  - exists == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: cluster role does not exist
+  ready:
+    when: "exists == true"
+    description: cluster role defined
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [permission_denied]

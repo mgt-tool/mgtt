@@ -1,0 +1,46 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get rolebinding {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  subject_count:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get rolebinding {name} -o json"
+      parse: "json:.subjects | length"
+      cost: low
+  role_ref_exists:
+    type: mgtt.bool
+    ttl: 60s
+    description: whether the referenced role actually exists
+    probe:
+      cmd: "kubectl -n {namespace} get rolebinding {name} -o jsonpath={.roleRef.name}"
+      parse: "regex:.+"
+      cost: medium
+
+healthy:
+  - exists == true
+  - role_ref_exists == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: role binding does not exist
+  dangling:
+    when: "exists == true & role_ref_exists == false"
+    description: references a role that does not exist
+  ready:
+    when: "exists == true & role_ref_exists == true"
+    description: binding active
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [permission_denied]
+  dangling:
+    can_cause: [permission_denied]

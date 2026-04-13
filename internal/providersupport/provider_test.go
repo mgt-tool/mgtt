@@ -903,6 +903,142 @@ func TestKubernetesProvider_PrerequisiteTypes(t *testing.T) {
 	}
 }
 
+func TestKubernetesProvider_RBACTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"role":               {wantFacts: 2, wantStates: 2, defaultSt: "ready"},
+		"clusterrole":        {wantFacts: 2, wantStates: 2, defaultSt: "ready"},
+		"rolebinding":        {wantFacts: 3, wantStates: 3, defaultSt: "ready"},
+		"clusterrolebinding": {wantFacts: 3, wantStates: 3, defaultSt: "ready"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestKubernetesProvider_WebhookTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"validatingwebhookconfiguration": {wantFacts: 4, wantStates: 4, defaultSt: "active"},
+		"mutatingwebhookconfiguration":   {wantFacts: 4, wantStates: 4, defaultSt: "active"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestKubernetesProvider_ExtensibilityTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"customresourcedefinition": {wantFacts: 3, wantStates: 4, defaultSt: "ready"},
+		"priorityclass":           {wantFacts: 3, wantStates: 2, defaultSt: "ready"},
+		"lease":                   {wantFacts: 4, wantStates: 3, defaultSt: "held"},
+		"custom_resource":         {wantFacts: 4, wantStates: 4, defaultSt: "ready"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 	dir := t.TempDir()
 	data, err := os.ReadFile("testdata/kubernetes.yaml")

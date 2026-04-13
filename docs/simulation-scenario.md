@@ -22,11 +22,6 @@ graph LR
   frontend[frontend - React SPA] --> api
   api[api - Node.js] --> rds[(rds - AWS RDS)]
 
-  style nginx     fill:#E1F5EE,stroke:#0F6E56,color:#000
-  style frontend  fill:#E1F5EE,stroke:#0F6E56,color:#000
-  style api       fill:#E1F5EE,stroke:#0F6E56,color:#000
-  style rds       fill:#E6F1FB,stroke:#185FA5,color:#000
-  style internet  fill:#F1EFE8,stroke:#5F5E5A,color:#000
 ```
 
 ## Step 1 — Write the model

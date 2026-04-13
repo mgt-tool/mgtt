@@ -1,0 +1,85 @@
+facts:
+  current_replicas:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.status.currentReplicas}"
+      parse: int
+      cost: low
+  desired_replicas:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.status.desiredReplicas}"
+      parse: int
+      cost: low
+  min_replicas:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.spec.minReplicas}"
+      parse: int
+      cost: low
+  max_replicas:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.spec.maxReplicas}"
+      parse: int
+      cost: low
+  cpu_current:
+    type: mgtt.percentage
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.status.currentMetrics[?(@.type=='Resource')].resource.current.averageUtilization}"
+      parse: int
+      cost: low
+  cpu_target:
+    type: mgtt.percentage
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.spec.metrics[?(@.type=='Resource')].resource.target.averageUtilization}"
+      parse: int
+      cost: low
+  scaling_active:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.status.conditions[?(@.type=='ScalingActive')].status}"
+      parse: bool
+      cost: low
+  able_to_scale:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get hpa {name} -o jsonpath={.status.conditions[?(@.type=='AbleToScale')].status}"
+      parse: bool
+      cost: low
+
+healthy:
+  - able_to_scale == true
+  - scaling_active == true
+
+states:
+  unable_to_scale:
+    when: "able_to_scale == false"
+    description: HPA cannot adjust replicas
+  at_max:
+    when: "current_replicas == max_replicas & cpu_current > cpu_target"
+    description: at maximum replicas but still over target
+  scaling:
+    when: "current_replicas != desired_replicas"
+    description: scaling in progress
+  live:
+    when: "scaling_active == true & able_to_scale == true"
+    description: autoscaler operating normally
+
+default_active_state: live
+
+failure_modes:
+  unable_to_scale:
+    can_cause: [upstream_failure, timeout, 5xx_errors, resource_contention]
+  at_max:
+    can_cause: [timeout, 5xx_errors, resource_contention]
+  scaling:
+    can_cause: [timeout]

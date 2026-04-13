@@ -1,0 +1,39 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get csidriver {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  node_count:
+    type: mgtt.int
+    ttl: 60s
+    description: number of CSINode objects referencing this driver
+    probe:
+      cmd: "kubectl get csinodes -o json"
+      parse: "json:.items | length"
+      cost: medium
+
+healthy:
+  - exists == true
+  - node_count > 0
+
+states:
+  missing:
+    when: "exists == false"
+    description: CSI driver not registered
+  no_nodes:
+    when: "exists == true & node_count == 0"
+    description: driver registered but not running on any node
+  ready:
+    when: "exists == true & node_count > 0"
+    description: driver active on nodes
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [upstream_failure, timeout]
+  no_nodes:
+    can_cause: [upstream_failure, timeout]

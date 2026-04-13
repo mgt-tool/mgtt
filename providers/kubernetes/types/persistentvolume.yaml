@@ -1,0 +1,53 @@
+facts:
+  phase:
+    type: mgtt.string
+    ttl: 30s
+    probe:
+      cmd: "kubectl get pv {name} -o jsonpath={.status.phase}"
+      parse: string
+      cost: low
+  capacity:
+    type: mgtt.int
+    ttl: 60s
+    description: capacity in bytes
+    probe:
+      cmd: "kubectl get pv {name} -o jsonpath={.spec.capacity.storage}"
+      parse: int
+      cost: low
+  reclaim_policy:
+    type: mgtt.string
+    ttl: 60s
+    probe:
+      cmd: "kubectl get pv {name} -o jsonpath={.spec.persistentVolumeReclaimPolicy}"
+      parse: string
+      cost: low
+
+healthy:
+  - phase == Bound
+
+states:
+  failed:
+    when: "phase == Failed"
+    description: reclamation failed
+  released:
+    when: "phase == Released"
+    description: claim deleted, not yet reclaimed
+  pending:
+    when: "phase == Pending"
+    description: not yet available
+  available:
+    when: "phase == Available"
+    description: unbound, available for claims
+  bound:
+    when: "phase == Bound"
+    description: bound to a claim
+
+default_active_state: bound
+
+failure_modes:
+  failed:
+    can_cause: [data_loss, upstream_failure]
+  released:
+    can_cause: [upstream_failure]
+  pending:
+    can_cause: [upstream_failure, timeout]

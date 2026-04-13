@@ -1,0 +1,52 @@
+facts:
+  phase:
+    type: mgtt.string
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pvc {name} -o jsonpath={.status.phase}"
+      parse: string
+      cost: low
+  capacity:
+    type: mgtt.int
+    ttl: 60s
+    description: capacity in bytes
+    probe:
+      cmd: "kubectl -n {namespace} get pvc {name} -o jsonpath={.status.capacity.storage}"
+      parse: int
+      cost: low
+  storage_class:
+    type: mgtt.string
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get pvc {name} -o jsonpath={.spec.storageClassName}"
+      parse: string
+      cost: low
+  volume_name:
+    type: mgtt.string
+    ttl: 60s
+    probe:
+      cmd: "kubectl -n {namespace} get pvc {name} -o jsonpath={.spec.volumeName}"
+      parse: string
+      cost: low
+
+healthy:
+  - phase == Bound
+
+states:
+  lost:
+    when: "phase == Lost"
+    description: underlying volume lost
+  pending:
+    when: "phase == Pending"
+    description: waiting for volume provisioning
+  bound:
+    when: "phase == Bound"
+    description: volume bound and available
+
+default_active_state: bound
+
+failure_modes:
+  lost:
+    can_cause: [data_loss, upstream_failure, connection_refused]
+  pending:
+    can_cause: [upstream_failure, timeout]

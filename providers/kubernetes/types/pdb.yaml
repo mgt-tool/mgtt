@@ -1,0 +1,51 @@
+facts:
+  allowed_disruptions:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pdb {name} -o jsonpath={.status.disruptionsAllowed}"
+      parse: int
+      cost: low
+  current_healthy:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pdb {name} -o jsonpath={.status.currentHealthy}"
+      parse: int
+      cost: low
+  desired_healthy:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pdb {name} -o jsonpath={.status.desiredHealthy}"
+      parse: int
+      cost: low
+  expected_pods:
+    type: mgtt.int
+    ttl: 30s
+    probe:
+      cmd: "kubectl -n {namespace} get pdb {name} -o jsonpath={.status.expectedPods}"
+      parse: int
+      cost: low
+
+healthy:
+  - allowed_disruptions > 0
+
+states:
+  blocked:
+    when: "allowed_disruptions == 0 & current_healthy <= desired_healthy"
+    description: no disruptions allowed — blocks node drains
+  violated:
+    when: "current_healthy < desired_healthy"
+    description: fewer healthy pods than minimum
+  live:
+    when: "allowed_disruptions > 0"
+    description: disruption budget satisfied
+
+default_active_state: live
+
+failure_modes:
+  blocked:
+    can_cause: [deployment_blocked, node_drain_stuck]
+  violated:
+    can_cause: [upstream_failure, timeout]

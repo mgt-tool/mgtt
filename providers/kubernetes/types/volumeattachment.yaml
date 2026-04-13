@@ -1,0 +1,50 @@
+facts:
+  attached:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl get volumeattachment {name} -o jsonpath={.status.attached}"
+      parse: bool
+      cost: low
+  attach_error:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl get volumeattachment {name} -o jsonpath={.status.attachError.message}"
+      parse: "regex:.+"
+      cost: low
+  age:
+    type: mgtt.int
+    ttl: 30s
+    description: seconds since creation
+    probe:
+      cmd: "kubectl get volumeattachment {name} -o jsonpath={.metadata.creationTimestamp}"
+      parse: age_seconds
+      cost: low
+
+healthy:
+  - attached == true
+
+states:
+  error:
+    when: "attach_error == true"
+    description: volume attachment failed with error
+  stuck:
+    when: "attached == false & age > 300"
+    description: attachment taking too long
+  attaching:
+    when: "attached == false"
+    description: attachment in progress
+  attached:
+    when: "attached == true"
+    description: volume attached to node
+
+default_active_state: attached
+
+failure_modes:
+  error:
+    can_cause: [upstream_failure, data_loss]
+  stuck:
+    can_cause: [upstream_failure, timeout]
+  attaching:
+    can_cause: [timeout]

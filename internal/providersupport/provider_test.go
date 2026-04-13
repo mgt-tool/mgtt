@@ -762,6 +762,147 @@ func TestKubernetesProvider_NetworkingTypes(t *testing.T) {
 	}
 }
 
+func TestKubernetesProvider_ScalingAndStorageTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"hpa":              {wantFacts: 8, wantStates: 4, defaultSt: "live"},
+		"pdb":              {wantFacts: 4, wantStates: 3, defaultSt: "live"},
+		"pvc":              {wantFacts: 4, wantStates: 3, defaultSt: "bound"},
+		"persistentvolume": {wantFacts: 3, wantStates: 5, defaultSt: "bound"},
+		"storageclass":     {wantFacts: 3, wantStates: 2, defaultSt: "ready"},
+		"csidriver":        {wantFacts: 2, wantStates: 3, defaultSt: "ready"},
+		"volumeattachment": {wantFacts: 3, wantStates: 4, defaultSt: "attached"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestKubernetesProvider_ClusterTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"node":          {wantFacts: 9, wantStates: 5, defaultSt: "ready"},
+		"resourcequota": {wantFacts: 7, wantStates: 3, defaultSt: "active"},
+		"limitrange":    {wantFacts: 3, wantStates: 2, defaultSt: "active"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestKubernetesProvider_PrerequisiteTypes(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	types := map[string]struct {
+		wantFacts  int
+		wantStates int
+		defaultSt  string
+	}{
+		"namespace":      {wantFacts: 2, wantStates: 3, defaultSt: "active"},
+		"serviceaccount": {wantFacts: 3, wantStates: 3, defaultSt: "ready"},
+		"secret":         {wantFacts: 3, wantStates: 3, defaultSt: "ready"},
+		"configmap":      {wantFacts: 3, wantStates: 3, defaultSt: "ready"},
+		"operator":       {wantFacts: 4, wantStates: 4, defaultSt: "ready"},
+	}
+
+	for typeName, want := range types {
+		t.Run(typeName, func(t *testing.T) {
+			typ, ok := p.Types[typeName]
+			if !ok {
+				t.Fatalf("missing type %s", typeName)
+			}
+			if len(typ.Facts) != want.wantFacts {
+				t.Errorf("facts count = %d, want %d", len(typ.Facts), want.wantFacts)
+			}
+			if len(typ.States) != want.wantStates {
+				t.Errorf("states count = %d, want %d", len(typ.States), want.wantStates)
+			}
+			if typ.DefaultActiveState != want.defaultSt {
+				t.Errorf("default_active_state = %q, want %q", typ.DefaultActiveState, want.defaultSt)
+			}
+			for _, h := range typ.Healthy {
+				if h == nil {
+					t.Error("nil healthy expression")
+				}
+			}
+			for _, s := range typ.States {
+				if s.WhenRaw != "" && s.When == nil {
+					t.Errorf("state %q: When not compiled", s.Name)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 	dir := t.TempDir()
 	data, err := os.ReadFile("testdata/kubernetes.yaml")

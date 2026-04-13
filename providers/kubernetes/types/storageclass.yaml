@@ -1,0 +1,39 @@
+facts:
+  exists:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get storageclass {name} -o jsonpath={.metadata.name}"
+      parse: "regex:.+"
+      cost: low
+  provisioner:
+    type: mgtt.string
+    ttl: 60s
+    probe:
+      cmd: "kubectl get storageclass {name} -o jsonpath={.provisioner}"
+      parse: string
+      cost: low
+  is_default:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "kubectl get storageclass {name} -o jsonpath={.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class}"
+      parse: bool
+      cost: low
+
+healthy:
+  - exists == true
+
+states:
+  missing:
+    when: "exists == false"
+    description: storage class not registered
+  ready:
+    when: "exists == true"
+    description: storage class available
+
+default_active_state: ready
+
+failure_modes:
+  missing:
+    can_cause: [upstream_failure, timeout]

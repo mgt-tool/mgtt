@@ -1,6 +1,0 @@
-  ✓ nginx     2 dependencies valid
-  ✓ frontend  1 dependency valid
-  ✓ api       1 dependency valid
-  ✓ rds       healthy override valid
-
-  4 components · 0 errors · 0 warnings

@@ -25,7 +25,7 @@ func repoRoot() string {
 func loadStorefront(t *testing.T) (*model.Model, *providersupport.Registry) {
 	t.Helper()
 	root := repoRoot()
-	m, err := model.Load(filepath.Join(root, "examples", "storefront", "system.model.yaml"))
+	m, err := model.Load(filepath.Join(root, "testdata", "models", "sample-model.yaml"))
 	if err != nil {
 		t.Fatalf("load model: %v", err)
 	}

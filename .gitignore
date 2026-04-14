@@ -31,11 +31,8 @@ Thumbs.db
 # MGTT runtime files
 .mgtt-current
 *.state.yaml
-!fixtures/*.yaml
-!scenarios/*.yaml
 
-# Provider compiled binaries
-providers/*/bin/
+# mgtt binary (built locally)
 mgtt-provider-kubernetes
 
 # mkdocs build output

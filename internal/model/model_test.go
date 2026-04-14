@@ -177,7 +177,7 @@ func TestDepGraph_NoCycle(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoad_StorefrontModel(t *testing.T) {
-	m, err := Load(testdataPath("storefront.valid.yaml"))
+	m, err := Load(testdataPath("sample-model.yaml"))
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestLoad_StorefrontModel(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoad_EntryPoint(t *testing.T) {
-	m, err := Load(testdataPath("storefront.valid.yaml"))
+	m, err := Load(testdataPath("sample-model.yaml"))
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestLoad_FileNotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoad_HealthyCompiled(t *testing.T) {
-	m, err := Load(testdataPath("storefront.valid.yaml"))
+	m, err := Load(testdataPath("sample-model.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestLoad_HealthyCompiled(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestValidate_ValidModel(t *testing.T) {
-	m, err := Load(testdataPath("storefront.valid.yaml"))
+	m, err := Load(testdataPath("sample-model.yaml"))
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestValidate_MissingType(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestValidate_TypeResolution(t *testing.T) {
-	m, err := Load(testdataPath("storefront.valid.yaml"))
+	m, err := Load(testdataPath("sample-model.yaml"))
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}

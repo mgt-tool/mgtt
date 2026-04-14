@@ -494,36 +494,37 @@ func TestValidateCommand_TemplateWithPipeIsOK(t *testing.T) {
 // Fixture backend
 // ---------------------------------------------------------------------------
 
-func TestFixture_Load(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+const fixturePath = "testdata/fixture.yaml"
+
+func TestFixture_IntFact(t *testing.T) {
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "kubernetes",
-		Component: "api",
-		Fact:      "restart_count",
+		Provider:  "provider_a",
+		Component: "comp_int",
+		Fact:      "count",
 		Parse:     "int",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Parsed != 47 {
-		t.Fatalf("expected 47, got %v", result.Parsed)
+	if result.Parsed != 42 {
+		t.Fatalf("expected 42, got %v", result.Parsed)
 	}
 }
 
-func TestFixture_RDS_Available(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+func TestFixture_BoolFact(t *testing.T) {
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// The fixture returns "true\n" for available, parsed as bool.
 	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "aws",
-		Component: "rds",
+		Provider:  "provider_b",
+		Component: "comp_flags",
 		Fact:      "available",
 		Parse:     "bool",
 	})
@@ -533,72 +534,53 @@ func TestFixture_RDS_Available(t *testing.T) {
 	assertEqual(t, result.Parsed, true)
 }
 
-func TestFixture_RDS_ConnectionCount(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+func TestFixture_FloatFact(t *testing.T) {
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "aws",
-		Component: "rds",
-		Fact:      "connection_count",
+		Provider:  "provider_b",
+		Component: "comp_flags",
+		Fact:      "rate",
 		Parse:     "float",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertAlmostEqual(t, result.Parsed, 498.0)
+	assertAlmostEqual(t, result.Parsed, 498.5)
 }
 
-func TestFixture_Kubernetes_NginxUpstreamCount(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+func TestFixture_JSONPathParse(t *testing.T) {
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "kubernetes",
-		Component: "nginx",
-		Fact:      "upstream_count",
+		Provider:  "provider_a",
+		Component: "comp_json",
+		Fact:      "payload",
 		Parse:     "json:.subsets.0.addresses|length",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertEqual(t, result.Parsed, 0)
-}
-
-func TestFixture_Kubernetes_FrontendEndpoints(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "kubernetes",
-		Component: "frontend",
-		Fact:      "endpoints",
-		Parse:     "lines:1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// "10.0.1.2\n10.0.1.3\n" → 2 non-empty lines.
 	assertEqual(t, result.Parsed, 2)
 }
 
-func TestFixture_Kubernetes_APIDesiredReplicas(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+func TestFixture_LinesParse(t *testing.T) {
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	result, err := ex.Run(context.Background(), probe.Command{
-		Provider:  "kubernetes",
-		Component: "api",
-		Fact:      "desired_replicas",
-		Parse:     "int",
+		Provider:  "provider_a",
+		Component: "comp_lines",
+		Fact:      "endpoints",
+		Parse:     "lines:1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -607,14 +589,14 @@ func TestFixture_Kubernetes_APIDesiredReplicas(t *testing.T) {
 }
 
 func TestFixture_NotFound(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	_, err = ex.Run(context.Background(), probe.Command{
-		Provider:  "kubernetes",
-		Component: "api",
+		Provider:  "provider_a",
+		Component: "comp_int",
 		Fact:      "nonexistent_fact",
 		Parse:     "int",
 	})
@@ -624,16 +606,16 @@ func TestFixture_NotFound(t *testing.T) {
 }
 
 func TestFixture_ProviderNotFound(t *testing.T) {
-	ex, err := fixture.Load("../../../fixtures/storefront-incident.yaml")
+	ex, err := fixture.Load(fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	_, err = ex.Run(context.Background(), probe.Command{
-		Provider:  "gcp",
-		Component: "api",
-		Fact:      "status",
-		Parse:     "string",
+		Provider:  "unknown_provider",
+		Component: "comp_int",
+		Fact:      "count",
+		Parse:     "int",
 	})
 	if err == nil {
 		t.Fatal("expected error for missing provider")

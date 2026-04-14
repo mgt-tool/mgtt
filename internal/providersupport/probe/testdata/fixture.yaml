@@ -1,0 +1,27 @@
+# Synthetic fixture for the fixture-backend executor tests. Covers the parse
+# modes the backend needs to dispatch through: int, bool, float, json:path,
+# and lines:N.
+provider_a:
+  comp_int:
+    count:
+      stdout: "42\n"
+      exit: 0
+    missing_output:
+      stdout: "\n"
+      exit: 0
+  comp_json:
+    payload:
+      stdout: "{\"subsets\":[{\"addresses\":[{\"ip\":\"10.0.0.1\"},{\"ip\":\"10.0.0.2\"}]}]}\n"
+      exit: 0
+  comp_lines:
+    endpoints:
+      stdout: "10.0.1.2\n10.0.1.3\n10.0.1.4\n"
+      exit: 0
+provider_b:
+  comp_flags:
+    available:
+      stdout: "true\n"
+      exit: 0
+    rate:
+      stdout: "498.5\n"
+      exit: 0

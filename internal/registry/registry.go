@@ -14,11 +14,13 @@ import (
 const DefaultRegistryURL = "https://mgt-tool.github.io/mgtt/registry.yaml"
 const cacheTTL = 24 * time.Hour
 
-// Entry is a single provider in the registry.
+// Entry is a single provider in the registry. Categories summarise the
+// provider's coverage at a high level — the authoritative type list lives in
+// the provider's own provider.yaml.
 type Entry struct {
 	URL         string   `yaml:"url"`
 	Description string   `yaml:"description"`
-	Types       []string `yaml:"types"`
+	Categories  []string `yaml:"categories"`
 }
 
 // Registry is the parsed registry index.

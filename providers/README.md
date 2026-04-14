@@ -21,6 +21,32 @@ my-provider/
     └── mgtt-provider-my-provider   compiled binary (gitignored)
 ```
 
+## Multi-File Provider Structure
+
+For providers with many types (like the Kubernetes provider with 37 types), you can
+split type definitions into individual files:
+
+```
+my-provider/
+├── provider.yaml              meta, auth, variables, hooks (no types: key)
+├── types/
+│   ├── deployment.yaml        one file per type
+│   ├── service.yaml
+│   └── ...
+├── hooks/
+│   └── install.sh
+└── bin/
+    └── mgtt-provider-my-provider
+```
+
+Each `.yaml` file in `types/` contains exactly what would go under `types.<name>:` in
+a single-file provider. The filename (minus `.yaml`) becomes the type name.
+
+**Backward-compatible**: providers with inline `types:` in `provider.yaml` still work.
+The loader checks for `types:` first; if absent, it scans the `types/` directory.
+
+Load multi-file providers with `LoadFromDir("path/to/my-provider")`.
+
 ## Step 1: Write the Vocabulary (`provider.yaml`)
 
 The vocabulary tells mgtt's constraint engine what your technology looks like —

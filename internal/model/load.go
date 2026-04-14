@@ -29,14 +29,11 @@ type rawMeta struct {
 
 // rawComponent mirrors the YAML component block.
 type rawComponent struct {
-	Type         string                   `yaml:"type"`
-	Providers    []string                 `yaml:"providers"`
-	Depends      []rawDependency          `yaml:"depends"`
-	Healthy      []string                 `yaml:"healthy"`
-	FailureModes map[string]rawFailMode   `yaml:"failure_modes"`
-
-	// yamlLine is populated after parsing by scanning the raw document node.
-	yamlLine int
+	Type         string                 `yaml:"type"`
+	Providers    []string               `yaml:"providers"`
+	Depends      []rawDependency        `yaml:"depends"`
+	Healthy      []string               `yaml:"healthy"`
+	FailureModes map[string]rawFailMode `yaml:"failure_modes"`
 }
 
 // rawDependency mirrors depends list entries.

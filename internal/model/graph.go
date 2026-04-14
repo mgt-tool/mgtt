@@ -55,19 +55,7 @@ func (g *depGraph) EntryPoint() string {
 	return ""
 }
 
-// AllRoots returns all components with in-degree 0 in declaration order.
-func (g *depGraph) AllRoots() []string {
-	var roots []string
-	for _, name := range g.order {
-		if g.inDeg[name] == 0 {
-			roots = append(roots, name)
-		}
-	}
-	return roots
-}
-
-// DependenciesOf returns the adjacency list for the named component — the
-// slice of component names that name directly depends on.
+// DependenciesOf returns the adjacency list for the named component.
 func (g *depGraph) DependenciesOf(name string) []string {
 	return g.adj[name]
 }

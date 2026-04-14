@@ -40,12 +40,8 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 		deepest := p.Components[len(p.Components)-1]
 		deepestState := derivation.ComponentStates[deepest]
 
-		// Resolve the default_active_state for this component's type.
 		comp := m.Components[deepest]
 		defaultActive := resolveDefaultActive(comp, m.Meta.Providers, reg)
-
-		// Build hypothesis string.
-		p.Hypothesis = fmt.Sprintf("%s.state == %s", deepest, deepestState)
 
 		if isEliminated(deepest, deepestState, defaultActive, store) {
 			// The deepest component is eliminable. If it has no facts (unchecked)
@@ -186,8 +182,9 @@ func enumeratePaths(m *model.Model, entry string, store *facts.Store, derivation
 	return paths
 }
 
-// resolveDefaultActive looks up the default_active_state for a component's type.
-func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *providersupport.Registry) string {
+// ResolveDefaultActive looks up the default_active_state for a component's
+// type, falling back to the model-level providers list.
+func ResolveDefaultActive(comp *model.Component, metaProviders []string, reg *providersupport.Registry) string {
 	providers := comp.Providers
 	if len(providers) == 0 {
 		providers = metaProviders
@@ -197,6 +194,11 @@ func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *pr
 		return ""
 	}
 	return t.DefaultActiveState
+}
+
+// resolveDefaultActive is the package-internal alias kept for call sites here.
+func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *providersupport.Registry) string {
+	return ResolveDefaultActive(comp, metaProviders, reg)
 }
 
 // suggestProbe picks the next fact to collect. It walks all components that

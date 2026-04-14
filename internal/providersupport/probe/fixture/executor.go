@@ -64,12 +64,7 @@ func (e *Executor) Run(_ context.Context, cmd probe.Command) (probe.Result, erro
 
 	parsed, err := probe.ParseOutput(cmd.Parse, entry.Stdout, entry.Exit)
 	if err != nil {
-		return probe.Result{Raw: entry.Stdout, ExitCode: entry.Exit}, err
+		return probe.Result{Raw: entry.Stdout}, err
 	}
-
-	return probe.Result{
-		Raw:      entry.Stdout,
-		Parsed:   parsed,
-		ExitCode: entry.Exit,
-	}, nil
+	return probe.Result{Raw: entry.Stdout, Parsed: parsed}, nil
 }

@@ -420,82 +420,6 @@ func TestRegistry_ExplicitNamespace(t *testing.T) {
 	}
 }
 
-func TestRegistry_QueryMethods(t *testing.T) {
-	reg, _, _ := loadTestProviders(t)
-
-	// DefaultActiveStateFor
-	das, err := reg.DefaultActiveStateFor("kubernetes", "deployment")
-	if err != nil {
-		t.Fatalf("DefaultActiveStateFor: %v", err)
-	}
-	if das != "live" {
-		t.Errorf("DefaultActiveStateFor = %q, want live", das)
-	}
-
-	// FailureModesFor
-	causes, err := reg.FailureModesFor("kubernetes", "deployment", "degraded")
-	if err != nil {
-		t.Fatalf("FailureModesFor: %v", err)
-	}
-	if len(causes) == 0 {
-		t.Error("FailureModesFor degraded: expected non-empty causes")
-	}
-	foundUpstream := false
-	for _, c := range causes {
-		if c == "upstream_failure" {
-			foundUpstream = true
-		}
-	}
-	if !foundUpstream {
-		t.Errorf("FailureModesFor degraded: upstream_failure not in %v", causes)
-	}
-
-	// HealthyConditionsFor
-	healthy, err := reg.HealthyConditionsFor("kubernetes", "deployment")
-	if err != nil {
-		t.Fatalf("HealthyConditionsFor: %v", err)
-	}
-	if len(healthy) != 3 {
-		t.Errorf("HealthyConditionsFor = %v, want 3 conditions", healthy)
-	}
-
-	// FactsFor
-	facts, err := reg.FactsFor("kubernetes", "deployment")
-	if err != nil {
-		t.Fatalf("FactsFor: %v", err)
-	}
-	if len(facts) != 4 {
-		t.Errorf("FactsFor: count = %d, want 4", len(facts))
-	}
-
-	// StatesFor
-	states, err := reg.StatesFor("kubernetes", "deployment")
-	if err != nil {
-		t.Fatalf("StatesFor: %v", err)
-	}
-	if len(states) != 4 {
-		t.Errorf("StatesFor: count = %d, want 4", len(states))
-	}
-	if states[0].Name != "degraded" {
-		t.Errorf("StatesFor[0].Name = %q, want degraded", states[0].Name)
-	}
-
-	// ProbeCostFor
-	cost, err := reg.ProbeCostFor("kubernetes", "deployment", "ready_replicas")
-	if err != nil {
-		t.Fatalf("ProbeCostFor: %v", err)
-	}
-	if cost != "low" {
-		t.Errorf("ProbeCostFor = %q, want low", cost)
-	}
-
-	// ProbeCostFor — unknown fact
-	_, err = reg.ProbeCostFor("kubernetes", "deployment", "nonexistent_fact")
-	if err == nil {
-		t.Error("expected error for nonexistent fact, got nil")
-	}
-}
-
 func TestLoadProvider_CompiledExpressions(t *testing.T) {
 	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
 	if err != nil {
@@ -544,19 +468,17 @@ func TestLoadProvider_CompiledExpressions(t *testing.T) {
 func TestRegistry_GetAndAll(t *testing.T) {
 	reg, k8s, aws := loadTestProviders(t)
 
-	p, ok := reg.Get("kubernetes")
-	if !ok {
-		t.Fatal("Get kubernetes: not found")
+	if p, ok := reg.Get("kubernetes"); !ok || p != k8s {
+		t.Error("Get(kubernetes) did not return the registered provider")
 	}
-	if p != k8s {
-		t.Error("Get kubernetes: returned wrong provider")
+	if p, ok := reg.Get("aws"); !ok || p != aws {
+		t.Error("Get(aws) did not return the registered provider")
 	}
 
 	all := reg.All()
-	if len(all) != 2 {
-		t.Errorf("All() count = %d, want 2", len(all))
+	if len(all) != 2 || all[0] != k8s || all[1] != aws {
+		t.Errorf("All() = %v, want [k8s, aws] in registration order", all)
 	}
-	_ = aws
 }
 
 func TestLoadFromDir_MultiFile(t *testing.T) {

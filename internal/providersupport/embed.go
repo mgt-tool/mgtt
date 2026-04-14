@@ -64,3 +64,16 @@ func ListEmbedded() []string {
 	}
 	return names
 }
+
+// LoadAllEmbedded returns a registry populated with every provider discovered
+// by ListEmbedded. Providers that fail to load are silently skipped; use
+// LoadEmbedded directly if you need to surface per-provider errors.
+func LoadAllEmbedded() *Registry {
+	reg := NewRegistry()
+	for _, name := range ListEmbedded() {
+		if p, err := LoadEmbedded(name); err == nil {
+			reg.Register(p)
+		}
+	}
+	return reg
+}

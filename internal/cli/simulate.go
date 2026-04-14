@@ -45,14 +45,7 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load model: %w", err)
 	}
 
-	// Load providers.
-	reg := providersupport.NewRegistry()
-	for _, name := range providersupport.ListEmbedded() {
-		p, err := providersupport.LoadEmbedded(name)
-		if err == nil {
-			reg.Register(p)
-		}
-	}
+	reg := providersupport.LoadAllEmbedded()
 
 	w := cmd.OutOrStdout()
 

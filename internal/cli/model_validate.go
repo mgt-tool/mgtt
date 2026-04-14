@@ -32,14 +32,7 @@ var modelValidateCmd = &cobra.Command{
 			return err
 		}
 
-		// Load embedded providers and build registry for type resolution.
-		reg := providersupport.NewRegistry()
-		for _, name := range providersupport.ListEmbedded() {
-			p, err := providersupport.LoadEmbedded(name)
-			if err == nil {
-				reg.Register(p)
-			}
-		}
+		reg := providersupport.LoadAllEmbedded()
 
 		result := model.Validate(m, reg)
 

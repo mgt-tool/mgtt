@@ -22,7 +22,6 @@ type Command struct {
 
 // Result holds the output of a probe execution.
 type Result struct {
-	Raw      string // original stdout
-	Parsed   any    // typed value after parsing
-	ExitCode int
+	Raw    string // original stdout
+	Parsed any    // typed value after parsing
 }

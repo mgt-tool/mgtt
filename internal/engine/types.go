@@ -15,10 +15,9 @@ type PathTree struct {
 
 // Path represents a single failure path through the dependency graph.
 type Path struct {
-	ID         string   // "PATH A", "PATH B", ...
-	Components []string // e.g. ["nginx", "api", "rds"]
-	Hypothesis string   // e.g. "rds.state == stopped"
-	Reason     string   // why eliminated, if eliminated
+	ID         string
+	Components []string
+	Reason     string // why eliminated, if eliminated
 }
 
 // Probe is a suggested next step — which fact to collect to narrow down the

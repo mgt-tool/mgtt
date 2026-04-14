@@ -66,17 +66,8 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load model: %w", err)
 	}
 
-	// 2. Load providers (embedded).
-	reg := providersupport.NewRegistry()
-	for _, name := range providersupport.ListEmbedded() {
-		p, err := providersupport.LoadEmbedded(name)
-		if err == nil {
-			reg.Register(p)
-		}
-	}
+	reg := providersupport.LoadAllEmbedded()
 
-	// 3. Create executor (fixture or exec based on MGTT_FIXTURES).
-	//    Build runner map from provider declarations unless in fixture mode.
 	var executor probe.Executor
 	runners := make(map[string]*probe.ExternalRunner)
 	if fixturePath := os.Getenv("MGTT_FIXTURES"); fixturePath != "" {
@@ -193,7 +184,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		derivation := state.Derive(m, reg, store)
 		compState := derivation.ComponentStates[s.Component]
 		comp = m.Components[s.Component]
-		defaultActive := resolveDefaultActiveForCLI(comp, m.Meta.Providers, reg)
+		defaultActive := engine.ResolveDefaultActive(comp, m.Meta.Providers, reg)
 		healthy := compState == defaultActive && defaultActive != ""
 
 		renderProbeResult(w, s.Component, s.Fact, result.Parsed, healthy)
@@ -209,19 +200,6 @@ func resolveCommand(command, providerName string) string {
 		dir = filepath.Join("providers", providerName)
 	}
 	return strings.ReplaceAll(command, "$MGTT_PROVIDER_DIR", dir)
-}
-
-// resolveDefaultActiveForCLI looks up the default_active_state for a component.
-func resolveDefaultActiveForCLI(comp *model.Component, metaProviders []string, reg *providersupport.Registry) string {
-	providers := comp.Providers
-	if len(providers) == 0 {
-		providers = metaProviders
-	}
-	t, _, err := reg.ResolveType(providers, comp.Type)
-	if err != nil {
-		return ""
-	}
-	return t.DefaultActiveState
 }
 
 // renderPlanHeader renders the initial entry point message.

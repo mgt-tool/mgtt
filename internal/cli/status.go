@@ -24,13 +24,7 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("load model: %w", err)
 		}
 
-		reg := providersupport.NewRegistry()
-		for _, name := range providersupport.ListEmbedded() {
-			p, err := providersupport.LoadEmbedded(name)
-			if err == nil {
-				reg.Register(p)
-			}
-		}
+		reg := providersupport.LoadAllEmbedded()
 
 		var store *facts.Store
 		if inc, err := incident.Current(); err == nil {

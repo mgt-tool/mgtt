@@ -33,7 +33,6 @@ func Run(m *model.Model, reg *providersupport.Registry, sc *Scenario) *Result {
 		Scenario: sc,
 		Actual:   actual,
 		Pass:     pass,
-		Tree:     tree,
 	}
 }
 

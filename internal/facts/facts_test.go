@@ -126,33 +126,6 @@ func TestAllComponentsEmpty(t *testing.T) {
 	}
 }
 
-func TestDiskBacked_SaveAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.state.yaml")
-
-	meta := facts.StoreMeta{Model: "test", Version: "1.0", Incident: "inc-001", Started: time.Now()}
-	s := facts.NewDiskBacked(path, meta)
-	s.Append("api", facts.Fact{Key: "ready_replicas", Value: 0, Collector: "test", At: time.Now()})
-	s.Append("api", facts.Fact{Key: "restart_count", Value: 12, Collector: "test", At: time.Now()})
-
-	if err := s.Save(); err != nil {
-		t.Fatal(err)
-	}
-
-	loaded, err := facts.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.Meta.Incident != "inc-001" {
-		t.Fatalf("expected incident 'inc-001', got %q", loaded.Meta.Incident)
-	}
-	f := loaded.Latest("api", "ready_replicas")
-	if f == nil {
-		t.Fatal("expected fact")
-	}
-	// Note: YAML may deserialize int as int or float — handle both
-}
-
 func TestAppendAndSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.state.yaml")

@@ -26,17 +26,14 @@ type rawProvider struct {
 }
 
 type rawMeta struct {
-	Name        string            `yaml:"name"`
-	Version     string            `yaml:"version"`
-	Description string            `yaml:"description"`
-	Requires    map[string]string `yaml:"requires"`
-	Command     string            `yaml:"command"`
-	Runner      string            `yaml:"runner"` // DEPRECATED — use command
+	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
+	Description string `yaml:"description"`
+	Command     string `yaml:"command"`
 }
 
 type rawHooks struct {
 	Install string `yaml:"install"`
-	Update  string `yaml:"update"`
 }
 
 type rawVar struct {
@@ -46,19 +43,17 @@ type rawVar struct {
 }
 
 type rawAuth struct {
-	Strategy  string   `yaml:"strategy"`
-	ReadsFrom []string `yaml:"reads_from"`
-	Access    struct {
+	Strategy string `yaml:"strategy"`
+	Access   struct {
 		Probes string `yaml:"probes"`
 		Writes string `yaml:"writes"`
 	} `yaml:"access"`
 }
 
 type rawFact struct {
-	Type    string      `yaml:"type"`
-	TTL     string      `yaml:"ttl"`
-	Default interface{} `yaml:"default"`
-	Probe   rawProbe    `yaml:"probe"`
+	Type  string   `yaml:"type"`
+	TTL   string   `yaml:"ttl"`
+	Probe rawProbe `yaml:"probe"`
 }
 
 type rawProbe struct {
@@ -112,19 +107,13 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 			Name:        raw.Meta.Name,
 			Version:     raw.Meta.Version,
 			Description: raw.Meta.Description,
-			Requires:    raw.Meta.Requires,
 			Command:     raw.Meta.Command,
 		},
-		Hooks: ProviderHooks{
-			Install: raw.Hooks.Install,
-			Update:  raw.Hooks.Update,
-		},
-		DataTypes: make(map[string]DataType),
+		Hooks:     ProviderHooks{Install: raw.Hooks.Install},
 		Types:     make(map[string]*Type),
 		Variables: make(map[string]Variable),
 		Auth: AuthSpec{
-			Strategy:  raw.Auth.Strategy,
-			ReadsFrom: raw.Auth.ReadsFrom,
+			Strategy: raw.Auth.Strategy,
 			Access: AuthAccess{
 				Probes: raw.Auth.Access.Probes,
 				Writes: raw.Auth.Access.Writes,
@@ -382,7 +371,6 @@ func parseFact(rf *rawFact) (*FactSpec, error) {
 
 	fs := &FactSpec{
 		TypeName: rf.Type,
-		Default:  rf.Default,
 		Probe: ProbeDef{
 			Cmd:    rf.Probe.Cmd,
 			Parse:  rf.Probe.Parse,

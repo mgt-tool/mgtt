@@ -2,18 +2,14 @@
 
 Community-maintained providers for mgtt.
 
-## Official Providers
-
+---
 | Provider | Type | Description | Install |
 |----------|------|-------------|---------|
 | [kubernetes](https://github.com/mgt-tool/mgtt-provider-kubernetes) | ingress, deployment | Kubernetes workloads via kubectl | `mgtt provider install kubernetes` |
 | [aws](https://github.com/mgt-tool/mgtt-provider-aws) | rds_instance | AWS RDS via aws-cli | `mgtt provider install aws` |
-
-## Community Providers
-
-| Provider | Type | Description | Install |
-|----------|------|-------------|---------|
 | [docker](https://github.com/mgt-tool/mgtt-provider-docker) | container | Docker containers via docker inspect | `mgtt provider install docker` |
+
+---
 
 ## Publishing Your Provider
 

@@ -50,22 +50,13 @@ func lsComponents(cmd *cobra.Command) error {
 		return fmt.Errorf("load model: %w", err)
 	}
 
-	reg := providersupport.NewRegistry()
-	for _, name := range providersupport.ListEmbedded() {
-		p, err := providersupport.LoadEmbedded(name)
-		if err == nil {
-			reg.Register(p)
-		}
-	}
+	reg := providersupport.LoadAllEmbedded()
 
-	// Try to load facts from current incident for state derivation.
-	var derivation *state.Derivation
+	store := facts.NewInMemory()
 	if inc, err := incident.Current(); err == nil {
-		derivation = state.Derive(m, reg, inc.Store)
-	} else {
-		// No incident — derive with empty store.
-		derivation = state.Derive(m, reg, facts.NewInMemory())
+		store = inc.Store
 	}
+	derivation := state.Derive(m, reg, store)
 
 	renderComponentsList(cmd.OutOrStdout(), m, derivation)
 	return nil

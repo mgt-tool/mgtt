@@ -1078,7 +1078,7 @@ auth:
 ```
 
 ```yaml
-# providers/aws/provider.yaml
+# mgtt-provider-aws/provider.yaml
 auth:
   strategy:   environment
   reads_from:

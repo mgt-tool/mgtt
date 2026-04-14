@@ -57,8 +57,8 @@ func renderProviderOverview(w io.Writer, p *providersupport.Provider) {
 	fmt.Fprintf(w, "  provider:    %s\n", p.Meta.Name)
 	fmt.Fprintf(w, "  version:     v%s\n", p.Meta.Version)
 	fmt.Fprintf(w, "  description: %s\n", p.Meta.Description)
-	if len(p.Meta.Categories) > 0 {
-		fmt.Fprintf(w, "  categories:  %s\n", strings.Join(p.Meta.Categories, ", "))
+	if len(p.Meta.Tags) > 0 {
+		fmt.Fprintf(w, "  tags:        %s\n", strings.Join(p.Meta.Tags, ", "))
 	}
 	fmt.Fprintf(w, "  auth:        %s\n", p.Auth.Strategy)
 	fmt.Fprintf(w, "  access:      %s\n", p.Auth.Access.Probes)

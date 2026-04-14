@@ -8,7 +8,7 @@ Community-maintained providers for mgtt.
 | [aws](https://github.com/mgt-tool/mgtt-provider-aws) | databases, compute, messaging, storage | `mgtt provider install aws` |
 | [docker](https://github.com/mgt-tool/mgtt-provider-docker) | containers | `mgtt provider install docker` |
 
-Run `mgtt provider inspect <name>` after install to see the full type catalog the provider declares — the registry intentionally shows categories only.
+Run `mgtt provider inspect <name>` after install to see the full type catalog the provider declares — the registry intentionally shows tags only.
 
 ## Publishing Your Provider
 
@@ -29,9 +29,9 @@ providers:
   kubernetes:
     url: https://github.com/mgt-tool/mgtt-provider-kubernetes
     description: Kubernetes cluster resources via kubectl
-    categories: [workloads, networking, storage, rbac, scaling, webhooks, extensibility]
+    tags: [workloads, networking, storage, rbac, scaling, webhooks, extensibility]
   aws:
     url: https://github.com/mgt-tool/mgtt-provider-aws
     description: AWS managed services via aws-cli
-    categories: [databases, compute, messaging, storage]
+    tags: [databases, compute, messaging, storage]
 ```

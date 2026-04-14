@@ -18,7 +18,7 @@ type ProviderMeta struct {
 	Name        string
 	Version     string
 	Description string
-	Categories  []string // high-level coverage groups (e.g. "workloads", "storage")
+	Tags        []string // loose subject/topic labels — what the provider is about
 	Command     string   // path to provider binary; may contain $MGTT_PROVIDER_DIR
 }
 

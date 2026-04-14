@@ -1061,3 +1061,102 @@ func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 		t.Fatal("missing type deployment — inline types not loaded")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Full integration tests — all 37 Kubernetes types
+// ---------------------------------------------------------------------------
+
+func TestKubernetesProvider_FullLoad(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	if p.Meta.Name != "kubernetes" {
+		t.Errorf("Meta.Name = %q, want kubernetes", p.Meta.Name)
+	}
+
+	// Verify all 37 types loaded.
+	expectedTypes := []string{
+		// Workloads
+		"deployment", "statefulset", "daemonset", "replicaset", "cronjob", "job", "pod",
+		// Networking
+		"service", "ingress", "ingressclass", "endpoints", "networkpolicy",
+		// Scaling & availability
+		"hpa", "pdb",
+		// Storage
+		"pvc", "persistentvolume", "storageclass", "csidriver", "volumeattachment",
+		// Cluster
+		"node",
+		// Resource control
+		"resourcequota", "limitrange",
+		// Prerequisites
+		"namespace", "serviceaccount", "secret", "configmap", "operator",
+		// RBAC
+		"role", "clusterrole", "rolebinding", "clusterrolebinding",
+		// Webhooks
+		"validatingwebhookconfiguration", "mutatingwebhookconfiguration",
+		// API / scheduling / extensibility
+		"customresourcedefinition", "priorityclass", "lease", "custom_resource",
+	}
+
+	if len(p.Types) != len(expectedTypes) {
+		t.Errorf("type count = %d, want %d", len(p.Types), len(expectedTypes))
+	}
+
+	for _, name := range expectedTypes {
+		typ, ok := p.Types[name]
+		if !ok {
+			t.Errorf("missing type %q", name)
+			continue
+		}
+		// Every type must have at least 1 fact, 1 state, and a default_active_state.
+		if len(typ.Facts) == 0 {
+			t.Errorf("type %q has no facts", name)
+		}
+		if len(typ.States) == 0 {
+			t.Errorf("type %q has no states", name)
+		}
+		if typ.DefaultActiveState == "" {
+			t.Errorf("type %q has no default_active_state", name)
+		}
+		// All healthy expressions must be compiled.
+		for i, h := range typ.Healthy {
+			if h == nil {
+				t.Errorf("type %q: Healthy[%d] not compiled", name, i)
+			}
+		}
+		// All state when-expressions must be compiled.
+		for _, s := range typ.States {
+			if s.WhenRaw != "" && s.When == nil {
+				t.Errorf("type %q: state %q When not compiled", name, s.Name)
+			}
+		}
+	}
+}
+
+func TestKubernetesProvider_RegistryIntegration(t *testing.T) {
+	p, err := LoadFromDir("../../providers/kubernetes")
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+
+	reg := NewRegistry()
+	reg.Register(p)
+
+	// Resolve a sampling of types.
+	samples := []string{"deployment", "service", "hpa", "node", "secret", "rolebinding", "custom_resource"}
+	for _, typeName := range samples {
+		typ, provName, err := reg.ResolveType([]string{"kubernetes"}, typeName)
+		if err != nil {
+			t.Errorf("ResolveType %q: %v", typeName, err)
+			continue
+		}
+		if provName != "kubernetes" {
+			t.Errorf("ResolveType %q: provider = %q, want kubernetes", typeName, provName)
+		}
+		if typ.Name != typeName {
+			t.Errorf("ResolveType %q: type.Name = %q", typeName, typ.Name)
+		}
+	}
+}

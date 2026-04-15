@@ -89,6 +89,25 @@ mgtt plan                          # troubleshoot a live system
 - [Full Specification](./docs/specs.md) — the v1.0 spec
 - [Documentation site](https://mgt-tool.github.io/mgtt) — browsable docs
 
+## For TLA+ users
+
+If you've written a TLA+ spec, mgtt will feel familiar — it borrows the same philosophy and applies it to operational troubleshooting rather than protocol verification.
+
+**What carries over:**
+
+- **Model-first, before the system exists.** In TLA+ you write the spec and run TLC before writing code. In mgtt you write `provider.yaml` + `system.model.yaml` and run `mgtt simulate` against scenarios before production hits them. Both tools monetize "think before you act."
+- **States, transitions, invariants.** A mgtt type's state machine (`states.when` guards, first-match-wins) is the same shape as a TLA+ state + action ontology. `healthy:` is the per-component invariant.
+- **Unresolved as a first-class answer.** TLC treats unexplored branches honestly; mgtt's `UnresolvedError` propagates through expression evaluation so a missing fact short-circuits to "unknown", never coerces to a lie.
+- **Counterexamples, not assertions.** TLC hands you a concrete violating trace; `mgtt plan` hands you a concrete probe-by-probe narrowing — "probed A (healthy, eliminated), probed B (healthy, eliminated), root cause: C." Evidence, not claims.
+
+**What's different:**
+
+- **Runtime, not just symbolic.** mgtt mixes the declarative model with live observation. That's closer to runtime verification than to classical model checking.
+- **Cost-ordered diagnosis, not exhaustive exploration.** mgtt walks a dependency graph and eliminates branches based on observed facts, ranked by probe cost. TLC explores the full reachable state space; mgtt finds the cheapest path to a root cause.
+- **Operational concerns are first-class.** Probe cost, cache TTLs, read-only auth scope — things Lamport would rightly consider below the spec layer — sit inside the mgtt vocabulary because operators need them at 3am.
+
+If you squint, mgtt is "TLA+ for oncall": declare-first-then-check, invariants-and-states ontology, but trading exhaustive proof for a ranked live-probe plan that fits in a terminal.
+
 ## License
 
 MIT

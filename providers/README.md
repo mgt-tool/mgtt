@@ -207,6 +207,25 @@ Reference them as `mgtt.int`, `mgtt.bool`, etc. in your fact type declarations.
 
 Your binary implements a simple protocol: mgtt calls it with args, it returns JSON on stdout.
 
+> **For Go providers, use the SDK.** The [`sdk/provider`](../sdk/provider/README.md) package
+> implements the protocol for you — argv parsing, version subcommand, exit-code mapping,
+> `status: not_found` translation, and a generic backend-CLI helper with timeout, size cap,
+> and pluggable error classification. A complete provider is ~20 lines:
+>
+> ```go
+> import "github.com/mgt-tool/mgtt/sdk/provider"
+>
+> func main() {
+>     r := provider.NewRegistry()
+>     r.Register("server", map[string]provider.ProbeFn{
+>         "connected": probeConnected,
+>     })
+>     provider.Main(r)
+> }
+> ```
+>
+> The wire-protocol details below are still authoritative — see [`docs/PROBE_PROTOCOL.md`](../docs/PROBE_PROTOCOL.md) — but you only need to read them if you're writing a provider in another language or debugging the wire format.
+
 ### The Protocol
 
 **`probe`** — the primary operation. mgtt calls this when it needs a fact value:

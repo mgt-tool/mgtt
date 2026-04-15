@@ -64,6 +64,13 @@ func Run(ctx context.Context, r *Registry, args []string, stdout, stderr io.Writ
 			continue
 		}
 		req.Extra[k] = val
+		// Keep the Namespace convenience field in sync with Extra. Core
+		// does not privilege this key (buildArgs passes it like any other
+		// flag); the field is purely SDK sugar so providers can read from
+		// req.Namespace instead of req.Extra["namespace"].
+		if k == "namespace" {
+			req.Namespace = val
+		}
 	}
 
 	res, err := r.Probe(ctx, req)

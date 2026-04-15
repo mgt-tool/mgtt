@@ -104,9 +104,9 @@ func TestRun_ExtraFlagsParsedIntoRequest(t *testing.T) {
 	if code != 0 {
 		t.Fatal(stderr.String())
 	}
-	// Namespace is an accessor over Extra["namespace"] — core does not
-	// default it, so "prod" is expected here.
-	if captured.Namespace() != "prod" {
+	// Namespace is a convenience field populated alongside Extra when the
+	// --namespace flag is present. Core does not default it.
+	if captured.Namespace != "prod" {
 		t.Fatalf("namespace not parsed: %+v", captured)
 	}
 	if captured.Extra["namespace"] != "prod" {

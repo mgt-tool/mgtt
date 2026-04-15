@@ -13,9 +13,13 @@ import (
 )
 
 // fixtureEntry holds the raw stdout and exit code for a single probe.
+//
+// Status is optional and matches the probe protocol: omitted/"" → "ok",
+// "not_found" → engine sees a missing resource (value is null, no parsing).
 type fixtureEntry struct {
 	Stdout string `yaml:"stdout"`
 	Exit   int    `yaml:"exit"`
+	Status string `yaml:"status"`
 }
 
 // Executor is a probe.Executor that returns values from a loaded fixture file.
@@ -62,9 +66,12 @@ func (e *Executor) Run(_ context.Context, cmd probe.Command) (probe.Result, erro
 		return probe.Result{}, fmt.Errorf("fixture not found: %s.%s.%s", cmd.Provider, cmd.Component, cmd.Fact)
 	}
 
+	if entry.Status == probe.StatusNotFound {
+		return probe.Result{Raw: entry.Stdout, Parsed: nil, Status: probe.StatusNotFound}, nil
+	}
 	parsed, err := probe.ParseOutput(cmd.Parse, entry.Stdout, entry.Exit)
 	if err != nil {
-		return probe.Result{Raw: entry.Stdout}, err
+		return probe.Result{Raw: entry.Stdout, Status: probe.StatusOk}, err
 	}
-	return probe.Result{Raw: entry.Stdout, Parsed: parsed}, nil
+	return probe.Result{Raw: entry.Stdout, Parsed: parsed, Status: probe.StatusOk}, nil
 }

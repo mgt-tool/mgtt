@@ -40,5 +40,5 @@ func (e *Executor) Run(ctx context.Context, cmd probe.Command) (probe.Result, er
 	}
 
 	parsed, parseErr := probe.ParseOutput(cmd.Parse, string(out), exitCode)
-	return probe.Result{Raw: string(out), Parsed: parsed}, parseErr
+	return probe.Result{Raw: string(out), Parsed: parsed, Status: probe.StatusOk}, parseErr
 }

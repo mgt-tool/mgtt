@@ -135,6 +135,14 @@ func runPlan(cmd *cobra.Command, args []string) error {
 			break
 		}
 
+		// not_found: the underlying resource is missing. Surface the fact name
+		// and resource so the operator sees the actionable signal, then move on
+		// to the next probe step rather than storing a misleading nil value.
+		if result.Status == probe.StatusNotFound {
+			fmt.Fprintf(w, "\n  resource not found: %s.%s\n", s.Component, s.Fact)
+			continue
+		}
+
 		// Store the fact.
 		store.Append(s.Component, facts.Fact{
 			Key:       s.Fact,

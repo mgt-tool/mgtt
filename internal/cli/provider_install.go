@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,12 +20,24 @@ var providerCmd = &cobra.Command{
 	Short: "Provider operations",
 }
 
-var providerInstallNoCache bool
+var (
+	providerInstallNoCache  bool
+	providerInstallRegistry string
+)
 
 var providerInstallCmd = &cobra.Command{
 	Use:   "install [names...]",
 	Short: "Install one or more providers",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Install providers by name (resolved via registry), git URL, or local path.
+
+Registry resolution:
+  --registry <url>           Override the registry URL for this invocation.
+  --registry disabled        Skip registry resolution entirely (air-gapped).
+  --registry file://<path>   Load the registry from a local file (mirrored).
+
+The MGTT_REGISTRY_URL env var sets the same value persistently;
+--registry overrides it per-invocation.`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, name := range args {
 			if err := installProvider(cmd.OutOrStdout(), name); err != nil {
@@ -37,6 +50,8 @@ var providerInstallCmd = &cobra.Command{
 
 func init() {
 	providerInstallCmd.Flags().BoolVar(&providerInstallNoCache, "no-cache", false, "bypass registry cache")
+	providerInstallCmd.Flags().StringVar(&providerInstallRegistry, "registry", "",
+		"registry URL override (use 'disabled' / 'none' / 'off' to skip registry resolution; or 'file://<path>' for local index)")
 	providerCmd.AddCommand(providerInstallCmd)
 	rootCmd.AddCommand(providerCmd)
 }
@@ -83,22 +98,39 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		}
 	}
 
-	// 4. Registry lookup
+	// 4. Registry lookup. Skipped silently when the operator opted out
+	// (MGTT_REGISTRY_URL=disabled or --registry disabled). Other registry
+	// errors print a warning and fall through.
+	registryDisabled := false
 	if srcDir == "" {
-		reg, err := registry.Fetch(providerInstallNoCache)
-		if err != nil {
+		reg, err := registry.Fetch(registry.Source{
+			URL:     providerInstallRegistry,
+			NoCache: providerInstallNoCache,
+		})
+		switch {
+		case errors.Is(err, registry.ErrRegistryDisabled):
+			registryDisabled = true
+		case err != nil:
 			fmt.Fprintf(w, "  warning: could not fetch registry: %v\n", err)
-		} else if entry, ok := reg.Lookup(nameOrPath); ok {
-			dir, err := cloneRepo(w, entry.URL)
-			if err != nil {
-				return err
+		default:
+			if entry, ok := reg.Lookup(nameOrPath); ok {
+				dir, err := cloneRepo(w, entry.URL)
+				if err != nil {
+					return err
+				}
+				tmpDirs = append(tmpDirs, dir)
+				srcDir = dir
 			}
-			tmpDirs = append(tmpDirs, dir)
-			srcDir = dir
 		}
 	}
 
 	if srcDir == "" {
+		if registryDisabled {
+			// Wrap the sentinel so callers can errors.Is(err, registry.ErrRegistryDisabled)
+			// to distinguish opt-out from network failure.
+			return fmt.Errorf("%w: %q is not a git URL or local path — pass one explicitly",
+				registry.ErrRegistryDisabled, nameOrPath)
+		}
 		return fmt.Errorf("not found (tried git URL, local path, name lookup, and registry)")
 	}
 

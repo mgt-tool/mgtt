@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mgt-tool/mgtt/internal/engine"
@@ -130,6 +131,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 			Fact:      s.Fact,
 			Type:      compType,
 			Vars:      m.Meta.Vars,
+			Timeout:   probeTimeout(),
 		})
 		if err != nil {
 			fmt.Fprintf(w, "\n  probe error: %v\n", err)
@@ -181,6 +183,31 @@ func runPlan(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+
+// probeTimeout reads MGTT_PROBE_TIMEOUT (e.g. "60s", "2m") and returns it
+// as a time.Duration. Returns 0 (= use the runner's default 30s) when the
+// var is unset.
+//
+// Unparseable values emit a one-time stderr warning and fall back to the
+// default — operators who set "60" (no unit) discover their config is wrong
+// instead of silently getting the 30s they thought they overrode.
+func probeTimeout() time.Duration {
+	v := os.Getenv("MGTT_PROBE_TIMEOUT")
+	if v == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		probeTimeoutWarnOnce.Do(func() {
+			fmt.Fprintf(os.Stderr,
+				"[mgtt] MGTT_PROBE_TIMEOUT=%q is not a valid duration (e.g. '60s', '2m'); using default\n", v)
+		})
+		return 0
+	}
+	return d
+}
+
+var probeTimeoutWarnOnce sync.Once
 
 // buildExecutor selects a probe executor based on MGTT_FIXTURES. In fixture
 // mode, all probes go through the fixture executor. Otherwise the shell

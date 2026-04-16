@@ -5,6 +5,7 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 //  4. Install it via `mgtt provider install --image <ref>`.
 //  5. Verify the install metadata on disk.
 //  6. Verify `mgtt provider ls` shows the provider with method=image.
+//  6b. Run `mgtt plan` against a fixture model to exercise buildExecutor's image branch.
 //  7. Invoke the image binary directly (docker run) to confirm the probe protocol works.
 //  8. Uninstall and verify cleanup + "docker rmi" hint.
 func TestImageInstall_FullRoundTrip(t *testing.T) {
@@ -34,8 +36,13 @@ func TestImageInstall_FullRoundTrip(t *testing.T) {
 		t.Fatalf("resolve repo root: %v", err)
 	}
 
-	// 1. Start a local Docker registry on a random-ish port.
-	// We use port 15432 to avoid collision with any other service.
+	// 1. Start a local Docker registry on a fixed port.
+	// Port 15432 is chosen to be well outside the ephemeral range (32768-60999
+	// on Linux). If two test runs overlap on the same machine (e.g. parallel CI
+	// jobs), one will fail to bind; the fix is to pick an ephemeral port by
+	// listening on :0 and passing the assigned port to `docker run -p`. That
+	// is tracked as a follow-up; for now the fixed port is acceptable for
+	// single-job CI.
 	registryPort := "15432"
 	registryHost := fmt.Sprintf("localhost:%s", registryPort)
 	registryName := "mgtt-it-registry"
@@ -55,8 +62,21 @@ func TestImageInstall_FullRoundTrip(t *testing.T) {
 		_ = exec.Command("docker", "rm", "-f", registryName).Run()
 	})
 
-	// Give the registry a moment to be ready.
-	time.Sleep(500 * time.Millisecond)
+	// Wait for registry to be ready (up to 30s).
+	registryReady := false
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get("http://127.0.0.1:" + registryPort + "/v2/")
+		if err == nil {
+			resp.Body.Close()
+			registryReady = true
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !registryReady {
+		t.Fatal("registry did not become ready within 30s")
+	}
 
 	// 2. Build the fixture image.
 	// The Dockerfile copies from the repo root so it can resolve the local
@@ -162,9 +182,9 @@ func TestImageInstall_FullRoundTrip(t *testing.T) {
 	cmd = exec.CommandContext(ctx, mgttBin, "provider", "ls")
 	cmd.Env = append(os.Environ(), "MGTT_HOME="+mgttHome)
 	cmd.Dir = repoRoot
-	listOut, err := cmd.Output()
+	listOut, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("provider ls: %v", err)
+		t.Fatalf("provider ls: %v\n%s", err, listOut)
 	}
 	t.Logf("provider ls output:\n%s", listOut)
 	if !strings.Contains(string(listOut), "image") {
@@ -174,15 +194,62 @@ func TestImageInstall_FullRoundTrip(t *testing.T) {
 		t.Errorf("provider ls output does not contain 'fixture':\n%s", listOut)
 	}
 
+	// 6b. Run `mgtt plan` against a trivial fixture model to exercise the full
+	// buildExecutor → NewImageRunner → docker-run path (not just the binary
+	// directly). The model names the installed 'fixture' provider and declares a
+	// single 'my-widget' component of type 'widget'. Since the test runs under
+	// exec.Command, isInteractive() returns false and probes are auto-accepted.
+	fixtureModelPath := filepath.Join(t.TempDir(), "fixture.model.yaml")
+	fixtureModel := `meta:
+  name: fixture-test
+  version: "1.0"
+  providers: [fixture]
+
+components:
+  my-widget:
+    type: widget
+    providers: [fixture]
+    vars: {}
+`
+	if err := os.WriteFile(fixtureModelPath, []byte(fixtureModel), 0o644); err != nil {
+		t.Fatalf("write fixture model: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, mgttBin, "plan", "--model", fixtureModelPath, "--component", "my-widget")
+	cmd.Env = append(os.Environ(), "MGTT_HOME="+mgttHome)
+	cmd.Dir = repoRoot
+	planOut, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("mgtt plan: %v\n%s", err, planOut)
+	}
+	t.Logf("mgtt plan output:\n%s", planOut)
+	// The plan output should show the probe result (count=42) and the component
+	// resolving to healthy (count > 0 is satisfied).
+	if !strings.Contains(string(planOut), "my-widget") {
+		t.Errorf("mgtt plan output missing 'my-widget':\n%s", planOut)
+	}
+	if !strings.Contains(string(planOut), "42") {
+		t.Errorf("mgtt plan output missing probe value '42':\n%s", planOut)
+	}
+	if !strings.Contains(string(planOut), "healthy") {
+		t.Errorf("mgtt plan output missing 'healthy':\n%s", planOut)
+	}
+
 	// 7. Probe the image binary directly via docker run.
 	// This validates the probe protocol without requiring a full model:
 	//   docker run --rm <ref> probe my-widget count --type widget
 	// should produce {"value":42,"raw":"42","status":"ok"}.
-	probeOut, err := exec.CommandContext(ctx, "docker", "run", "--rm", digestRef,
+	// Use Stdout-only output so the JSON parse is not confused by docker stderr;
+	// capture stderr separately to surface it on failure.
+	probeCmd := exec.CommandContext(ctx, "docker", "run", "--rm", digestRef,
 		"probe", "my-widget", "count", "--type", "widget",
-	).Output()
+	)
+	probeOut, err := probeCmd.Output()
 	if err != nil {
-		t.Fatalf("docker run probe: %v", err)
+		var stderr []byte
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = ee.Stderr
+		}
+		t.Fatalf("docker run probe: %v\nstderr: %s", err, stderr)
 	}
 	t.Logf("probe output: %s", probeOut)
 

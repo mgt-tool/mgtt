@@ -60,6 +60,10 @@ func (d *DockerCmd) PullImage(ctx context.Context, ref string) error {
 // positional args after the image name become arguments to the entrypoint,
 // not a replacement command. The provider image MUST embed its provider.yaml
 // at /provider.yaml — no other location is supported.
+//
+// NOTE: the provider image MUST include `cat` on PATH. Base images like
+// debian-slim, alpine, and ubuntu satisfy this; distroless and scratch do NOT.
+// A follow-up task should switch this to `docker cp` to remove the requirement.
 func (d *DockerCmd) ExtractManifest(ctx context.Context, ref string) ([]byte, error) {
 	if d.Timeout > 0 {
 		var cancel context.CancelFunc

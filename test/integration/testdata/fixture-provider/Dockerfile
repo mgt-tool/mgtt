@@ -14,7 +14,7 @@ COPY sdk/ sdk/
 COPY test/integration/testdata/fixture-provider/ fixture/
 
 WORKDIR /build/fixture
-# Patch the replace directive to point at the mgtt module location inside the image.
+# Repoint replace from host-relative path (../../../../) to image-relative path.
 RUN go mod edit -replace=github.com/mgt-tool/mgtt=../
 RUN go mod tidy
 RUN go build -o /out/mgtt-provider-fixture .

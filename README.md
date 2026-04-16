@@ -91,22 +91,13 @@ mgtt plan                          # troubleshoot a live system
 
 ## For TLA+ users
 
-If you've written a TLA+ spec, mgtt will feel familiar — it borrows the same philosophy and applies it to operational troubleshooting rather than protocol verification.
+**mgtt is for troubleshooting live production, not proving protocols correct.** If you've written a TLA+ spec, the philosophy will feel familiar — but the job is different. TLA+ asks "is my design correct under all interleavings?" mgtt asks "my pager just went off, which of my running components is actually broken?"
 
-**What carries over:**
+The parallel that helps: you write the spec of your system (types, states, how failures propagate) once, and *that same spec* drives two things — simulation in CI (like TLC, but against scenario injections) and live diagnosis at 3am (walking the dependency graph, probing real kubectl/AWS/docker, eliminating healthy branches). The model is the source of truth; the engine turns it into either a proof of design or a root-cause.
 
-- **Model-first, before the system exists.** In TLA+ you write the spec and run TLC before writing code. In mgtt you write `provider.yaml` + `system.model.yaml` and run `mgtt simulate` against scenarios before production hits them. Both tools monetize "think before you act."
-- **States, transitions, invariants.** A mgtt type's state machine (`states.when` guards, first-match-wins) is the same shape as a TLA+ state + action ontology. `healthy:` is the per-component invariant.
-- **Unresolved as a first-class answer.** TLC treats unexplored branches honestly; mgtt's `UnresolvedError` propagates through expression evaluation so a missing fact short-circuits to "unknown", never coerces to a lie.
-- **Counterexamples, not assertions.** TLC hands you a concrete violating trace; `mgtt plan` hands you a concrete probe-by-probe narrowing — "probed A (healthy, eliminated), probed B (healthy, eliminated), root cause: C." Evidence, not claims.
+Where the analogy ends: mgtt doesn't do exhaustive state-space exploration — it does cost-ordered live probing. Every step observes real infrastructure; every probe you *didn't* need to run is information saved. Operational concerns (probe cost, TTLs, read-only auth scope) are first-class vocabulary because the goal is to be useful in the terminal where the incident is happening, not to hand an engineer a 300-state counterexample trace at 3am.
 
-**What's different:**
-
-- **Runtime, not just symbolic.** mgtt mixes the declarative model with live observation. That's closer to runtime verification than to classical model checking.
-- **Cost-ordered diagnosis, not exhaustive exploration.** mgtt walks a dependency graph and eliminates branches based on observed facts, ranked by probe cost. TLC explores the full reachable state space; mgtt finds the cheapest path to a root cause.
-- **Operational concerns are first-class.** Probe cost, cache TTLs, read-only auth scope — things Lamport would rightly consider below the spec layer — sit inside the mgtt vocabulary because operators need them at 3am.
-
-If you squint, mgtt is "TLA+ for oncall": declare-first-then-check, invariants-and-states ontology, but trading exhaustive proof for a ranked live-probe plan that fits in a terminal.
+Call it "a spec that also runs a diagnostic plan against your cluster." If TLA+ is design-time correctness, mgtt is run-time localization.
 
 ## License
 

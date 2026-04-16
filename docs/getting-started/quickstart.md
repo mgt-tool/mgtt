@@ -217,6 +217,8 @@ mgtt plan                              # press Y at each probe
 mgtt incident end
 ```
 
+(See [Provider Install Methods](../concepts/provider-install-methods.md) for alternatives like image install.)
+
 The engine walks the dependency graph, probes components in order of information value, and eliminates healthy branches until one failure path remains.
 
 [Full troubleshooting walkthrough](../concepts/troubleshooting.md)

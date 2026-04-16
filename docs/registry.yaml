@@ -34,6 +34,7 @@ providers:
       - drift
   tempo:
     url: https://github.com/mgt-tool/mgtt-provider-tempo
+    image: ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:TBD   # image distribution — not yet published, illustrative
     description: Per-span SLO checks against Grafana Tempo — current_p99, breach_duration, error_rate
     tags:
       - tracing

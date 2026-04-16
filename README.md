@@ -81,6 +81,7 @@ mgtt plan                          # troubleshoot a live system
 - [Simulation](./docs/concepts/simulation.md) — design-time model validation
 - [Troubleshooting](./docs/concepts/troubleshooting.md) — runtime incident response
 - [Multi-File Models](./docs/concepts/multi-file-models.md) — when one system needs more than one model file (steady-state vs deploy-moment, etc.)
+- [Provider Install Methods](./docs/concepts/provider-install-methods.md) — git clone vs Docker image; both install paths live side by side
 - [Model Schema](./docs/reference/model-schema.md) — every field in `system.model.yaml`
 - [Scenario Schema](./docs/reference/scenario-schema.md) — every field in scenario files
 - [Type Catalog](./docs/reference/type-catalog.md) — all provider types, facts, and states

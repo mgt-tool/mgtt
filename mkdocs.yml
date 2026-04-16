@@ -42,6 +42,7 @@ nav:
     - Simulation: concepts/simulation.md
     - Troubleshooting: concepts/troubleshooting.md
     - Multi-File Models: concepts/multi-file-models.md
+    - Provider Install Methods: concepts/provider-install-methods.md
   - Writing Providers:
     - Overview: providers/overview.md
     - Vocabulary: providers/vocabulary.md

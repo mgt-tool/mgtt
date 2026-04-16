@@ -12,13 +12,13 @@ import (
 // Docker images. Tests inject Run; production uses the real `docker` CLI.
 type DockerCmd struct {
 	Run     func(ctx context.Context, args ...string) ([]byte, error)
-	Timeout time.Duration
+	Timeout time.Duration // Timeout bounds a single docker invocation. Zero means no timeout.
 }
 
 // NewDockerCmd returns a DockerCmd that shells out to the host `docker`.
 func NewDockerCmd() *DockerCmd {
 	return &DockerCmd{
-		Timeout: 60 * time.Second,
+		Timeout: 5 * time.Minute,
 		Run: func(ctx context.Context, args ...string) ([]byte, error) {
 			return exec.CommandContext(ctx, "docker", args...).CombinedOutput()
 		},
@@ -42,22 +42,31 @@ func ValidateImageRef(ref string) error {
 // PullImage runs `docker pull <ref>`. Returns the docker output on error so
 // callers can show the user what went wrong.
 func (d *DockerCmd) PullImage(ctx context.Context, ref string) error {
-	cctx, cancel := context.WithTimeout(ctx, d.Timeout)
-	defer cancel()
-	out, err := d.Run(cctx, "pull", ref)
+	if d.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d.Timeout)
+		defer cancel()
+	}
+	out, err := d.Run(ctx, "pull", ref)
 	if err != nil {
 		return fmt.Errorf("docker pull %s: %w\n%s", ref, err, out)
 	}
 	return nil
 }
 
-// ExtractManifest runs `docker run --rm <ref> cat /provider.yaml` and returns
-// the file contents. The provider image MUST embed its provider.yaml at
-// /provider.yaml — no other location is supported.
+// ExtractManifest runs `docker run --rm --entrypoint cat <ref> /provider.yaml`
+// and returns the file contents. The --entrypoint flag is necessary because
+// provider images declare an ENTRYPOINT (the provider binary); without it,
+// positional args after the image name become arguments to the entrypoint,
+// not a replacement command. The provider image MUST embed its provider.yaml
+// at /provider.yaml — no other location is supported.
 func (d *DockerCmd) ExtractManifest(ctx context.Context, ref string) ([]byte, error) {
-	cctx, cancel := context.WithTimeout(ctx, d.Timeout)
-	defer cancel()
-	out, err := d.Run(cctx, "run", "--rm", ref, "cat", "/provider.yaml")
+	if d.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d.Timeout)
+		defer cancel()
+	}
+	out, err := d.Run(ctx, "run", "--rm", "--entrypoint", "cat", ref, "/provider.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("extract /provider.yaml from %s: %w", ref, err)
 	}

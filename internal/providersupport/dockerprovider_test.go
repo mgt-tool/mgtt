@@ -28,9 +28,9 @@ func TestValidateImageRef(t *testing.T) {
 func TestExtractManifest_HappyPath(t *testing.T) {
 	d := &DockerCmd{
 		Run: func(ctx context.Context, args ...string) ([]byte, error) {
-			// Expect: docker run --rm <ref> cat /provider.yaml
+			// Expect: docker run --rm --entrypoint cat <ref> /provider.yaml
 			joined := strings.Join(args, " ")
-			if !strings.Contains(joined, "run --rm") || !strings.Contains(joined, "cat /provider.yaml") {
+			if !strings.Contains(joined, "--entrypoint cat") || !strings.Contains(joined, "/provider.yaml") {
 				t.Errorf("unexpected args: %s", joined)
 			}
 			return []byte("meta:\n  name: foo\n"), nil
@@ -46,14 +46,21 @@ func TestExtractManifest_HappyPath(t *testing.T) {
 }
 
 func TestExtractManifest_MissingFile(t *testing.T) {
+	underlyingErr := errors.New("cat: /provider.yaml: No such file or directory")
 	d := &DockerCmd{
 		Run: func(ctx context.Context, args ...string) ([]byte, error) {
-			return nil, errors.New("cat: /provider.yaml: No such file or directory")
+			return nil, underlyingErr
 		},
 	}
 	_, err := d.ExtractManifest(context.Background(), "ghcr.io/x@sha256:abc")
-	if err == nil || !strings.Contains(err.Error(), "/provider.yaml") {
-		t.Fatalf("expected error mentioning /provider.yaml, got %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !errors.Is(err, underlyingErr) {
+		t.Fatalf("expected error wrapping underlying docker error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "/provider.yaml") {
+		t.Fatalf("expected error message mentioning /provider.yaml, got %v", err)
 	}
 }
 

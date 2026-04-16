@@ -93,7 +93,7 @@ mgtt plan                          # troubleshoot a live system
 
 TLA+ checks your design. mgtt checks your running system.
 
-Same idea — write the spec, let the tool do the thinking — pointed at a different problem. When the pager goes off, mgtt walks your spec against the live cluster and tells you which component is broken.
+Same idea — write the spec, let the tool do the thinking — pointed at a different problem. When something breaks in production, mgtt walks your spec against the live cluster and tells you which component is actually broken.
 
 ## License
 

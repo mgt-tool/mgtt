@@ -91,10 +91,10 @@ func TestDepGraph_EntryPoint(t *testing.T) {
 	// edge → frontend → api → store (linear chain with edge at top)
 	// edge depends on frontend and api; frontend depends on api; api depends on store
 	components := map[string]*Component{
-		"edge":    {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
+		"edge":     {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
 		"frontend": {Name: "frontend", Type: "workload", Depends: []Dependency{{On: []string{"api"}}}},
 		"api":      {Name: "api", Type: "workload", Depends: []Dependency{{On: []string{"store"}}}},
-		"store":      {Name: "store", Type: "datastore"},
+		"store":    {Name: "store", Type: "datastore"},
 	}
 	order := []string{"edge", "frontend", "api", "store"}
 	g := NewDepGraph(components, order)
@@ -111,7 +111,7 @@ func TestDepGraph_EntryPoint(t *testing.T) {
 
 func TestDepGraph_DependenciesOf(t *testing.T) {
 	components := map[string]*Component{
-		"edge":    {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
+		"edge":     {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
 		"frontend": {Name: "frontend", Type: "workload"},
 		"api":      {Name: "api", Type: "workload"},
 	}

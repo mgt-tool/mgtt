@@ -115,7 +115,7 @@ func TestPlan_RDSUnavailable(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
 		"store": {"available": false, "connection_count": 0},
-		"api": {"ready_replicas": 0, "restart_count": 12, "desired_replicas": 3},
+		"api":   {"ready_replicas": 0, "restart_count": 12, "desired_replicas": 3},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -141,7 +141,7 @@ func TestPlan_RDSUnavailable(t *testing.T) {
 func TestPlan_APICrashLoop(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"api": {"ready_replicas": 0, "restart_count": 24, "desired_replicas": 3},
+		"api":   {"ready_replicas": 0, "restart_count": 24, "desired_replicas": 3},
 		"store": {"available": true, "connection_count": 120},
 	})
 
@@ -170,7 +170,7 @@ func TestPlan_FrontendDegraded(t *testing.T) {
 	store := newStore(map[string]map[string]any{
 		"frontend": {"ready_replicas": 0, "restart_count": 8, "desired_replicas": 2},
 		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
-		"store":      {"available": true, "connection_count": 98},
+		"store":    {"available": true, "connection_count": 98},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -196,10 +196,10 @@ func TestPlan_FrontendDegraded(t *testing.T) {
 func TestPlan_AllHealthy(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"edge":    {"upstream_count": 4},
+		"edge":     {"upstream_count": 4},
 		"frontend": {"ready_replicas": 2, "desired_replicas": 2, "endpoints": 2},
 		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
-		"store":      {"available": true, "connection_count": 87},
+		"store":    {"available": true, "connection_count": 87},
 	})
 
 	tree := Plan(m, reg, store, "")

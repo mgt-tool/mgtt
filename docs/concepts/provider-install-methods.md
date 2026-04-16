@@ -67,7 +67,7 @@ Notice the `@sha256:` digest. It's required — tags can be silently re-rolled, 
 
 When you install from a Docker image, you *must* pin by digest: `@sha256:abc123...`. Why?
 
-Tags like `:0.2.0` or `:latest` can be re-rolled without warning. Today's `ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0` could be rebuilt tomorrow with a security fix or breaking change, and you'd get a silent upgrade on your next install or Docker pull. That's a problem for reproducibility and audit trails.
+Tags like `:0.2.0` or `:latest` can be re-rolled without warning. Today's `ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0` could be rebuilt tomorrow with a security fix or breaking change, and you'd get a silent upgrade on your next install or Docker pull. That's a problem for reproducibility and audit trails. This isn't hypothetical — the `grafana/tempo:2.6.0` image tag was rebuilt in place and broke mgtt-provider-tempo's existing deployments. See the discussion in the CHANGELOG.md of that provider.
 
 Digests never move. `@sha256:abc123` always points to the same image layers, byte-for-byte. If a new version ships, you get a new digest — then you upgrade explicitly, on your schedule, after reviewing the changes.
 
@@ -90,10 +90,10 @@ The `.mgtt-install.json` file records:
 
 ```json
 {
-  "name": "tempo",
   "method": "image",
-  "image_ref": "ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...",
-  "installed_at": "2025-04-16T10:30:00Z"
+  "source": "ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abcdef...",
+  "installed_at": "2026-04-17T10:30:00Z",
+  "version": "0.2.0"
 }
 ```
 
@@ -101,11 +101,10 @@ Or for git:
 
 ```json
 {
-  "name": "tempo",
   "method": "git",
-  "url": "https://github.com/mgt-tool/mgtt-provider-tempo",
-  "commit": "a1b2c3d...",
-  "installed_at": "2025-04-16T10:30:00Z"
+  "source": "https://github.com/mgt-tool/mgtt-provider-tempo",
+  "installed_at": "2026-04-17T10:30:00Z",
+  "version": "0.2.0"
 }
 ```
 
@@ -113,8 +112,8 @@ The `mgtt provider list` command surfaces this:
 
 ```bash
 $ mgtt provider list
-tempo    0.2.0    git     https://github.com/mgt-tool/mgtt-provider-tempo#a1b2c3d
-quickwit 0.1.5    image   ghcr.io/mgt-tool/mgtt-provider-quickwit:0.1.5@sha256:def456
+✓ tempo    v0.2.0    git     Per-span SLO checks against Grafana Tempo
+✓ quickwit v0.1.5    image   Cross-span tracing checks against Quickwit
 ```
 
 ---
@@ -159,14 +158,12 @@ tempo:
     - otel
 ```
 
-When you run `mgtt provider install tempo`, it uses the git URL by default. If you pass `--image`, the image field takes priority:
+When you run `mgtt provider install tempo`, it uses the git URL by default. The `image:` field in the registry is a placeholder for future enhancements — today `--image` requires an explicit, fully-qualified image ref with a digest:
 
 ```bash
-mgtt provider install tempo           # uses url:
-mgtt provider install --image tempo   # uses image: (if present in registry)
+mgtt provider install tempo           # uses url: (git clone and build)
+mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...   # requires full ref with @sha256: digest
 ```
-
-(Note: auto-preferring the image when the registry has both is a future enhancement. Today `--image` must be passed explicitly.)
 
 ---
 

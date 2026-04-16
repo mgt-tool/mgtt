@@ -1,38 +1,39 @@
 meta:
-  name: kubernetes
+  name: compute
   version: 1.0.0
-  description: Kubernetes workload and networking components
+  description: Fictional compute provider — workloads and edge routing. Used to exercise provider-agnostic core machinery in tests; does NOT represent any real backend.
   requires:
-    mgtt: ">=1.0"
-  command: "$MGTT_PROVIDER_DIR/bin/mgtt-provider-kubernetes"
+    mgtt: ">=0.1.0"
+  command: "$MGTT_PROVIDER_DIR/bin/mgtt-provider-compute"
 
 hooks:
   install: hooks/install.sh
+  uninstall: hooks/uninstall.sh
 
 variables:
   namespace:
-    description: kubernetes namespace
+    description: logical grouping name
     required: false
     default: default
 
 auth:
   strategy: environment
-  reads_from: [KUBECONFIG, ~/.kube/config, in-cluster service account]
+  reads_from: [COMPUTE_CONFIG, ~/.compute/config]
   access:
-    probes: kubectl read-only
+    probes: read-only
     writes: none
 
 types:
-  ingress:
+  gateway:
     facts:
       upstream_count:
         type: mgtt.int
         ttl: 30s
         probe:
-          cmd: kubectl -n {namespace} get endpoints {name} -o json
+          cmd: "compute-cli -n {namespace} get endpoints {name} -o json"
           parse: "json:.subsets.0.addresses|length"
           cost: low
-          access: kubectl read-only
+          access: read-only
     healthy: [upstream_count > 0]
     states:
       live:
@@ -46,35 +47,35 @@ types:
       draining:
         can_cause: [upstream_failure, 5xx_errors]
 
-  deployment:
+  workload:
     facts:
       ready_replicas:
         type: mgtt.int
         ttl: 30s
         probe:
-          cmd: "kubectl -n {namespace} get deploy {name} -o jsonpath={.status.readyReplicas}"
+          cmd: "compute-cli -n {namespace} get workload {name} -o jsonpath={.status.readyReplicas}"
           parse: int
           cost: low
-          access: kubectl read-only
+          access: read-only
       desired_replicas:
         type: mgtt.int
         ttl: 30s
         probe:
-          cmd: "kubectl -n {namespace} get deploy {name} -o jsonpath={.spec.replicas}"
+          cmd: "compute-cli -n {namespace} get workload {name} -o jsonpath={.spec.replicas}"
           parse: int
           cost: low
       restart_count:
         type: mgtt.int
         ttl: 30s
         probe:
-          cmd: "kubectl -n {namespace} get pods -l app={name} -o jsonpath={.items[*].status.containerStatuses[0].restartCount}"
+          cmd: "compute-cli -n {namespace} get instances -l app={name} -o jsonpath={.items[*].status.restartCount}"
           parse: "regex:(\\d+)"
           cost: low
       endpoints:
         type: mgtt.int
         ttl: 30s
         probe:
-          cmd: "kubectl -n {namespace} get endpoints {name} -o jsonpath={.subsets[0].addresses[*].ip}"
+          cmd: "compute-cli -n {namespace} get endpoints {name}"
           parse: "lines:1"
           cost: low
     healthy:
@@ -90,10 +91,10 @@ types:
         description: scaled to zero
       starting:
         when: "ready_replicas < desired_replicas"
-        description: pods initialising
+        description: instances initialising
       live:
         when: "ready_replicas == desired_replicas"
-        description: all replicas ready
+        description: all instances ready
     default_active_state: live
     failure_modes:
       degraded:

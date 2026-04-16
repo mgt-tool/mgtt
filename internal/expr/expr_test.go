@@ -289,9 +289,9 @@ func TestEvalBoolFact(t *testing.T) {
 }
 
 func TestEvalCrossComponentRef(t *testing.T) {
-	// Evaluating "api.ready_replicas == 0" from the nginx component context.
+	// Evaluating "api.ready_replicas == 0" from the edge component context.
 	node, _ := expr.Parse("api.ready_replicas == 0")
-	ctx := makeCtx("nginx", map[string]map[string]any{
+	ctx := makeCtx("edge", map[string]map[string]any{
 		"api": {"ready_replicas": 0},
 	}, nil)
 	result, err := node.Eval(ctx)

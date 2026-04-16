@@ -36,8 +36,8 @@ func loadStorefront(t *testing.T) (*model.Model, *providersupport.Registry) {
 
 	reg := providersupport.NewRegistry()
 	for _, pair := range []struct{ name, file string }{
-		{"kubernetes", "testdata/kubernetes-provider.yaml"},
-		{"aws", "testdata/aws-provider.yaml"},
+		{"compute", "../../testdata/providers/compute.yaml"},
+		{"datalayer", "../../testdata/providers/datalayer.yaml"},
 	} {
 		p, err := providersupport.LoadFromFile(pair.file)
 		if err != nil {
@@ -153,15 +153,15 @@ func TestDerive_APILive(t *testing.T) {
 func TestDerive_RDSLive(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"rds": {
+		"store": {
 			"available": true,
 		},
 	})
 
 	d := Derive(m, reg, store)
 
-	if got := d.ComponentStates["rds"]; got != "live" {
-		t.Errorf("rds state = %q, want %q", got, "live")
+	if got := d.ComponentStates["store"]; got != "live" {
+		t.Errorf("store state = %q, want %q", got, "live")
 	}
 }
 
@@ -169,15 +169,15 @@ func TestDerive_RDSLive(t *testing.T) {
 func TestDerive_RDSStopped(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"rds": {
+		"store": {
 			"available": false,
 		},
 	})
 
 	d := Derive(m, reg, store)
 
-	if got := d.ComponentStates["rds"]; got != "stopped" {
-		t.Errorf("rds state = %q, want %q", got, "stopped")
+	if got := d.ComponentStates["store"]; got != "stopped" {
+		t.Errorf("store state = %q, want %q", got, "stopped")
 	}
 }
 
@@ -195,18 +195,18 @@ func TestDerive_NoFacts_AllUnknown(t *testing.T) {
 	}
 }
 
-// Test 7: nginx draining — upstream_count=0 → state="draining"
+// Test 7: edge draining — upstream_count=0 → state="draining"
 func TestDerive_NginxDraining(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"nginx": {
+		"edge": {
 			"upstream_count": int(0),
 		},
 	})
 
 	d := Derive(m, reg, store)
 
-	if got := d.ComponentStates["nginx"]; got != "draining" {
-		t.Errorf("nginx state = %q, want %q", got, "draining")
+	if got := d.ComponentStates["edge"]; got != "draining" {
+		t.Errorf("edge state = %q, want %q", got, "draining")
 	}
 }

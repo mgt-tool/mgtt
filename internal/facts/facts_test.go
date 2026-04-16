@@ -132,7 +132,7 @@ func TestAppendAndSave(t *testing.T) {
 	meta := facts.StoreMeta{Model: "test", Version: "1.0", Incident: "inc-001", Started: time.Now()}
 	s := facts.NewDiskBacked(path, meta)
 
-	err := s.AppendAndSave("rds", facts.Fact{Key: "available", Value: true, Collector: "aws", At: time.Now()})
+	err := s.AppendAndSave("store", facts.Fact{Key: "available", Value: true, Collector: "datalayer", At: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}

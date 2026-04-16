@@ -2,18 +2,18 @@ meta:
   name: test-circular
   version: "1.0"
   providers:
-    - kubernetes
+    - compute
 
 components:
   a:
-    type: deployment
+    type: workload
     depends:
       - on: b
   b:
-    type: deployment
+    type: workload
     depends:
       - on: c
   c:
-    type: deployment
+    type: workload
     depends:
       - on: a

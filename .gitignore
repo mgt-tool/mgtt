@@ -43,3 +43,4 @@ docs/superpowers/
 
 .claude
 .log
+docs/_hooks/__pycache__/

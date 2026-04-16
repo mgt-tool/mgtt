@@ -8,6 +8,17 @@ what it doesn't:   whether the system will actually fail this way
 scope:             same as a unit test — tests the thing it tests, nothing more
 ```
 
+## On this page
+
+- [The system](#the-system) — example shape used through the page
+- [Step 1 — Write the model](#step-1-write-the-model)
+- [Step 2 — Write failure scenarios](#step-2-write-failure-scenarios)
+- [Step 3 — Run simulations](#step-3-run-simulations)
+- [What a failing scenario teaches you](#what-a-failing-scenario-teaches-you)
+- [Add to CI](#add-to-ci)
+- [Design time / runtime duality](#design-time-runtime-duality)
+- [Reference](#reference)
+
 ---
 
 ## The system

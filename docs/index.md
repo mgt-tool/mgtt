@@ -12,6 +12,15 @@ Something stops working. You check the logs. Nothing obvious. You check the data
 
 An SRE can drive the loop manually (press Y at each step). An AI agent can drive it autonomously via the same interface — mgtt is designed to be equally useful to humans and LLMs. The engine reasons; whoever's on call executes.
 
+## On this page
+
+- [See it in action](#see-it-in-action) — simulation + troubleshooting demos
+- [What mgtt gives you](#what-mgtt-gives-you)
+- [Get started](#get-started) — install + quickstart
+- [Learn](#learn) — concepts + simulation + troubleshooting walkthroughs
+- [Reference](#reference) — schemas, CLI, configuration, registry
+- [Extend](#extend) — write your own provider
+
 ## See it in action
 
 ### Simulation: catch model gaps in CI

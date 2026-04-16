@@ -2,6 +2,17 @@
 
 A complete end-to-end example: write a model, write a scenario, validate, simulate. Everything on this page is copy-pasteable — you can have a working mgtt setup in 5 minutes.
 
+## On this page
+
+1. [Install](#1-install)
+2. [Scaffold the model](#2-scaffold-the-model)
+3. [Validate the model](#3-validate-the-model)
+4. [Write failure scenarios](#4-write-failure-scenarios)
+5. [Simulate](#5-simulate)
+6. [Troubleshoot a live system](#6-troubleshoot-a-live-system)
+- [What you have now](#what-you-have-now)
+- [Next steps](#next-steps)
+
 ---
 
 ## 1. Install

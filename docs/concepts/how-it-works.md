@@ -4,6 +4,14 @@ mgtt encodes your system's dependency graph in a YAML model. A constraint engine
 
 The same model and engine serve two phases — the only difference is where facts come from.
 
+## On this page
+
+- [The three artifacts](#the-three-artifacts) — model, facts, providers
+- [The constraint engine](#the-constraint-engine) — how reasoning narrows the search
+- [Two modes, same model](#two-modes-same-model) — design-time vs runtime
+- [Probe ranking](#probe-ranking) — what to check next, and why
+- [Providers](#providers) — where backend knowledge lives
+
 ---
 
 ## The three artifacts

@@ -2,6 +2,16 @@
 
 This walkthrough shows mgtt in action against a real incident. Two phases: setup (done once, calmly) and incident response (done at 3am, pressing Y).
 
+## On this page
+
+- [The system](#the-system)
+- [Setup (done once)](#setup-done-once)
+- [The incident](#the-incident) — the actual run
+- [Summary](#summary)
+- [Alternative entry points](#alternative-entry-points)
+- [Before the incident](#before-the-incident) — what to have ready
+- [Reference](#reference)
+
 ---
 
 ## The system

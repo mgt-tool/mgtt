@@ -1,5 +1,16 @@
 # Install
 
+## On this page
+
+- [One-liner](#one-liner) — fastest path
+- [Go Install](#go-install)
+- [Docker](#docker)
+- [From Source](#from-source)
+- [Uninstall](#uninstall)
+- [Install Providers](#install-providers)
+
+---
+
 ## One-liner
 
 ```bash

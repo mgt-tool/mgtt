@@ -4,6 +4,29 @@ All notable changes to mgtt are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] — 2026-04-16
+
+Configuration story for corporate operators. No new config file — env vars and one CLI flag.
+
+### Added
+
+- **`MGTT_REGISTRY_URL=disabled` / `none` / `off`** (case-insensitive) — skips registry resolution entirely. `mgtt provider install` accepts only git URLs / local paths; bare names produce a clear actionable error wrapped around `registry.ErrRegistryDisabled` so callers can `errors.Is` it.
+- **`MGTT_REGISTRY_URL=file:///path/to/registry.yaml`** — load the registry from a local file (RFC 8089 form: absolute path or `localhost` host; percent-decoding honored). For air-gapped installs that ship the index alongside.
+- **`--registry <url>` flag** on `mgtt provider install` overrides the env var per-invocation. Precedence: flag > env > default.
+- **`MGTT_PROBE_TIMEOUT=60s`** is now actually wired (was documented but not read by any code). Unparseable values emit a one-time stderr warning rather than silently using the default.
+- **`docs/reference/configuration.md`** — single canonical reference for every `MGTT_*` env var, with corporate scenarios (air-gap, internal mirror, k8s deployment env block) and an explicit "no telemetry / no auto-update" security-review section.
+
+### Fixed (review-driven, before tag)
+
+- **Cache poisoning across registry sources.** The registry cache is now keyed on `sha256(URL)[:8]` and lives at `$MGTT_HOME/cache/registry/<hash>.yaml`. Switching `MGTT_REGISTRY_URL` no longer serves content fetched against a different URL identity. Critical for shared `MGTT_HOME` multi-tenant installs.
+- **Cache root** now honors `MGTT_HOME` (was hardcoded to `$HOME/.mgtt/cache/`).
+- **`file://` URL parsing** uses `net/url.Parse` instead of `strings.TrimPrefix` — supports `file:///path` and `file://localhost/path`, rejects other authorities, percent-decodes paths.
+- **CLI errors wrap `registry.ErrRegistryDisabled` with `%w`** so the sentinel survives the full error chain.
+
+### Internal
+
+- `registry.Fetch` signature changed from `Fetch(noCache bool)` to `Fetch(Source{URL, NoCache})`. Internal-only; SDK and external providers unaffected.
+
 ## [0.1.3] — 2026-04-16
 
 ### Added

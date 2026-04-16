@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,6 +173,76 @@ func TestInstallFromImage_NameHintOverride(t *testing.T) {
 	defaultDir := filepath.Join(home, "providers", "test-provider")
 	if _, err := os.Stat(defaultDir); !os.IsNotExist(err) {
 		t.Errorf("expected no dir at manifest name %q, but found one", defaultDir)
+	}
+}
+
+// TestInstallFromImage_RejectsMalformedManifest verifies that a malformed
+// provider.yaml extracted from an image is rejected before any files are written.
+func TestInstallFromImage_RejectsMalformedManifest(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MGTT_HOME", root)
+
+	fakeDocker := &providersupport.DockerCmd{
+		Run: func(_ context.Context, args ...string) ([]byte, error) {
+			// Pull succeeds; extract returns garbage YAML.
+			if args[0] == "run" {
+				return []byte("not: [valid yaml"), nil
+			}
+			return nil, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	err := installFromImage(
+		context.Background(),
+		&buf,
+		"ghcr.io/x/provider@sha256:deadbeefdeadbeefdeadbeefdeadbeef",
+		"",
+		fakeDocker,
+	)
+	if err == nil {
+		t.Fatal("expected error on malformed manifest, got nil")
+	}
+	// Error should mention parsing.
+	if !strings.Contains(err.Error(), "parse") {
+		t.Errorf("error should mention parse failure; got %v", err)
+	}
+	// No install dir should have been created.
+	if entries, _ := os.ReadDir(filepath.Join(root, "providers")); len(entries) != 0 {
+		t.Errorf("no dir should be created on manifest parse failure; got %d entries", len(entries))
+	}
+}
+
+// TestInstallFromImage_PullFailurePropagates verifies that a docker pull failure
+// is returned immediately and no install directory is created.
+func TestInstallFromImage_PullFailurePropagates(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MGTT_HOME", root)
+
+	fakeDocker := &providersupport.DockerCmd{
+		Run: func(_ context.Context, args ...string) ([]byte, error) {
+			if args[0] == "pull" {
+				return []byte("Error response from daemon: unauthorized"), fmt.Errorf("exit status 1")
+			}
+			t.Fatalf("extract should not be called after pull failure; got args %v", args)
+			return nil, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	err := installFromImage(
+		context.Background(),
+		&buf,
+		"ghcr.io/private/provider@sha256:deadbeefdeadbeefdeadbeefdeadbeef",
+		"",
+		fakeDocker,
+	)
+	if err == nil {
+		t.Fatal("expected error on pull failure, got nil")
+	}
+	// No install dir should have been created.
+	if entries, _ := os.ReadDir(filepath.Join(root, "providers")); len(entries) != 0 {
+		t.Errorf("no dir should be created on pull failure; got %d entries", len(entries))
 	}
 }
 

@@ -6,6 +6,22 @@ import (
 	"path/filepath"
 )
 
+// InstallRoot returns the directory where `mgtt provider install` writes
+// newly-installed providers. Honors MGTT_HOME when set (matching the
+// precedence used by SearchDirs), else falls back to ~/.mgtt/providers.
+// This is the single source of truth for the install-write path; callers
+// that only READ providers should use SearchDirs or ProviderDir instead.
+func InstallRoot() (string, error) {
+	if home := os.Getenv("MGTT_HOME"); home != "" {
+		return filepath.Join(home, "providers"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".mgtt", "providers"), nil
+}
+
 // SearchDirs returns the provider search directories in priority order:
 //  1. $MGTT_HOME/providers/
 //  2. ~/.mgtt/providers/

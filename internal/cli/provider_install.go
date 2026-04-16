@@ -55,7 +55,7 @@ Image install:
 			if len(args) > 0 {
 				nameHint = args[0]
 			}
-			return installFromImage(context.Background(), w, providerInstallImage, nameHint, providersupport.NewDockerCmd())
+			return installFromImage(cmd.Context(), w, providerInstallImage, nameHint, providersupport.NewDockerCmd())
 		}
 
 		// Without --image, the existing resolution chain requires at least one name.
@@ -115,15 +115,9 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 		name = p.Meta.Name
 	}
 
-	var providersRoot string
-	if mgttHome := os.Getenv("MGTT_HOME"); mgttHome != "" {
-		providersRoot = filepath.Join(mgttHome, "providers")
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("get home dir: %w", err)
-		}
-		providersRoot = filepath.Join(home, ".mgtt", "providers")
+	providersRoot, err := providersupport.InstallRoot()
+	if err != nil {
+		return fmt.Errorf("get install root: %w", err)
 	}
 	destDir := filepath.Join(providersRoot, name)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -231,12 +225,12 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		return fmt.Errorf("load provider.yaml: %w", err)
 	}
 
-	// Copy to ~/.mgtt/providers/<name>/
-	homeDir, err := os.UserHomeDir()
+	// Copy to the canonical install root (honoring MGTT_HOME).
+	providersRoot, err := providersupport.InstallRoot()
 	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
+		return fmt.Errorf("get install root: %w", err)
 	}
-	destDir := filepath.Join(homeDir, ".mgtt", "providers", p.Meta.Name)
+	destDir := filepath.Join(providersRoot, p.Meta.Name)
 	if err := copyDir(srcDir, destDir); err != nil {
 		return fmt.Errorf("copy provider: %w", err)
 	}

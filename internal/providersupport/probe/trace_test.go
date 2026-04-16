@@ -13,14 +13,14 @@ func TestTracer_WritesInvocationAndEnd(t *testing.T) {
 	tr := &Tracer{Enabled: true, W: &buf}
 	ctx := WithTracer(context.Background(), tr)
 
-	TraceStart(ctx, "fakebin", Command{Component: "c", Fact: "f", Type: "deployment"})
+	TraceStart(ctx, "fakebin", Command{Component: "c", Fact: "f", Type: "workload"})
 	TraceEnd(ctx, "fakebin", Result{Status: StatusOk, Parsed: 3}, nil)
 
 	out := buf.String()
 	if !strings.Contains(out, "c.f") {
 		t.Fatalf("trace missing component.fact: %q", out)
 	}
-	if !strings.Contains(out, "type=deployment") {
+	if !strings.Contains(out, "type=workload") {
 		t.Fatalf("trace missing type: %q", out)
 	}
 	if !strings.Contains(out, "status=ok") {

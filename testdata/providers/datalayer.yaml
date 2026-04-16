@@ -1,0 +1,51 @@
+meta:
+  name: datalayer
+  version: 0.1.0
+  description: Fictional datalayer provider — persistent-storage primitives. Used to exercise provider-agnostic core machinery in tests; does NOT represent any real backend.
+  requires:
+    mgtt: ">=0.1.0"
+  command: ""
+
+hooks:
+  install: ""
+  uninstall: ""
+
+auth:
+  strategy: environment
+  reads_from: [DATALAYER_PROFILE, ~/.datalayer/credentials]
+  access:
+    probes: datalayer API read-only
+    writes: none
+
+types:
+  datastore:
+    facts:
+      available:
+        type: mgtt.bool
+        ttl: 60s
+        probe:
+          cmd: "datalayer-cli describe {name} --query status"
+          parse: bool
+          cost: low
+          access: datalayer API read-only
+      connection_count:
+        type: mgtt.int
+        ttl: 60s
+        probe:
+          cmd: "datalayer-cli metrics {name} --metric connections"
+          parse: float
+          cost: low
+    healthy:
+      - available == true
+      - connection_count < 500
+    states:
+      live:
+        when: "available == true"
+        description: accepting connections
+      stopped:
+        when: "available == false"
+        description: not accepting connections
+    default_active_state: live
+    failure_modes:
+      stopped:
+        can_cause: [upstream_failure, connection_refused, query_timeout]

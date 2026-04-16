@@ -134,13 +134,13 @@ func TestExternalRunner_RejectsUnknownStatus(t *testing.T) {
 
 func TestBuildArgs_AlphabeticalAndNoNamespacePrivilege(t *testing.T) {
 	args, err := buildArgs(Command{
-		Component: "web", Fact: "ready", Type: "deployment",
+		Component: "web", Fact: "ready", Type: "workload",
 		Vars: map[string]string{"namespace": "prod", "cluster": "east"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"probe", "web", "ready", "--type", "deployment",
+	want := []string{"probe", "web", "ready", "--type", "workload",
 		"--cluster", "east", "--namespace", "prod"}
 	if len(args) != len(want) {
 		t.Fatalf("len mismatch: got %v want %v", args, want)

@@ -2,10 +2,10 @@ meta:
   name: test-missing-dep
   version: "1.0"
   providers:
-    - kubernetes
+    - compute
 
 components:
-  nginx:
-    type: ingress
+  edge:
+    type: gateway
     depends:
       - on: nonexistent

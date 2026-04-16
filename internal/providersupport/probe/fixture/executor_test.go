@@ -21,7 +21,7 @@ func writeFixture(t *testing.T, body string) string {
 
 func TestFixtureExecutor_DefaultsStatusOkOnSuccess(t *testing.T) {
 	p := writeFixture(t, `
-kubernetes:
+compute:
   api:
     ready_replicas:
       stdout: "3\n"
@@ -32,7 +32,7 @@ kubernetes:
 		t.Fatal(err)
 	}
 	res, err := ex.Run(context.Background(), probe.Command{
-		Provider: "kubernetes", Component: "api", Fact: "ready_replicas", Parse: "int",
+		Provider: "compute", Component: "api", Fact: "ready_replicas", Parse: "int",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ kubernetes:
 
 func TestFixtureExecutor_NotFoundStatus(t *testing.T) {
 	p := writeFixture(t, `
-kubernetes:
+compute:
   api:
     ready_replicas:
       status: not_found
@@ -54,7 +54,7 @@ kubernetes:
 		t.Fatal(err)
 	}
 	res, err := ex.Run(context.Background(), probe.Command{
-		Provider: "kubernetes", Component: "api", Fact: "ready_replicas", Parse: "int",
+		Provider: "compute", Component: "api", Fact: "ready_replicas", Parse: "int",
 	})
 	if err != nil {
 		t.Fatalf("not_found should not be an error: %v", err)

@@ -27,13 +27,13 @@ func TestModelTypes(t *testing.T) {
 		Meta: Meta{
 			Name:      "testapp",
 			Version:   "2.0",
-			Providers: []string{"kubernetes"},
+			Providers: []string{"compute"},
 			Vars:      map[string]string{"ns": "default"},
 		},
 		Components: map[string]*Component{
 			"svc": {
 				Name:         "svc",
-				Type:         "deployment",
+				Type:         "workload",
 				Providers:    nil,
 				Depends:      []Dependency{{On: []string{"db"}, WhileRaw: "load > 0"}},
 				HealthyRaw:   []string{"cpu < 80"},
@@ -49,8 +49,8 @@ func TestModelTypes(t *testing.T) {
 	if m.Meta.Version != "2.0" {
 		t.Errorf("Meta.Version = %q, want %q", m.Meta.Version, "2.0")
 	}
-	if len(m.Meta.Providers) != 1 || m.Meta.Providers[0] != "kubernetes" {
-		t.Errorf("Meta.Providers = %v, want [kubernetes]", m.Meta.Providers)
+	if len(m.Meta.Providers) != 1 || m.Meta.Providers[0] != "compute" {
+		t.Errorf("Meta.Providers = %v, want [compute]", m.Meta.Providers)
 	}
 	if m.Meta.Vars["ns"] != "default" {
 		t.Errorf("Meta.Vars[ns] = %q, want %q", m.Meta.Vars["ns"], "default")
@@ -60,8 +60,8 @@ func TestModelTypes(t *testing.T) {
 	if !ok {
 		t.Fatal("Components[svc] missing")
 	}
-	if svc.Type != "deployment" {
-		t.Errorf("svc.Type = %q, want %q", svc.Type, "deployment")
+	if svc.Type != "workload" {
+		t.Errorf("svc.Type = %q, want %q", svc.Type, "workload")
 	}
 	if len(svc.Depends) != 1 || svc.Depends[0].On[0] != "db" {
 		t.Errorf("svc.Depends = %v, want dep on db", svc.Depends)
@@ -88,20 +88,20 @@ func TestModelTypes(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDepGraph_EntryPoint(t *testing.T) {
-	// nginx → frontend → api → rds (linear chain with nginx at top)
-	// nginx depends on frontend and api; frontend depends on api; api depends on rds
+	// edge → frontend → api → store (linear chain with edge at top)
+	// edge depends on frontend and api; frontend depends on api; api depends on store
 	components := map[string]*Component{
-		"nginx":    {Name: "nginx", Type: "ingress", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
-		"frontend": {Name: "frontend", Type: "deployment", Depends: []Dependency{{On: []string{"api"}}}},
-		"api":      {Name: "api", Type: "deployment", Depends: []Dependency{{On: []string{"rds"}}}},
-		"rds":      {Name: "rds", Type: "rds_instance"},
+		"edge":    {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
+		"frontend": {Name: "frontend", Type: "workload", Depends: []Dependency{{On: []string{"api"}}}},
+		"api":      {Name: "api", Type: "workload", Depends: []Dependency{{On: []string{"store"}}}},
+		"store":      {Name: "store", Type: "datastore"},
 	}
-	order := []string{"nginx", "frontend", "api", "rds"}
+	order := []string{"edge", "frontend", "api", "store"}
 	g := NewDepGraph(components, order)
 
 	ep := g.EntryPoint()
-	if ep != "nginx" {
-		t.Errorf("EntryPoint() = %q, want %q", ep, "nginx")
+	if ep != "edge" {
+		t.Errorf("EntryPoint() = %q, want %q", ep, "edge")
 	}
 }
 
@@ -111,23 +111,23 @@ func TestDepGraph_EntryPoint(t *testing.T) {
 
 func TestDepGraph_DependenciesOf(t *testing.T) {
 	components := map[string]*Component{
-		"nginx":    {Name: "nginx", Type: "ingress", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
-		"frontend": {Name: "frontend", Type: "deployment"},
-		"api":      {Name: "api", Type: "deployment"},
+		"edge":    {Name: "edge", Type: "gateway", Depends: []Dependency{{On: []string{"frontend"}}, {On: []string{"api"}}}},
+		"frontend": {Name: "frontend", Type: "workload"},
+		"api":      {Name: "api", Type: "workload"},
 	}
-	order := []string{"nginx", "frontend", "api"}
+	order := []string{"edge", "frontend", "api"}
 	g := NewDepGraph(components, order)
 
-	deps := g.DependenciesOf("nginx")
+	deps := g.DependenciesOf("edge")
 	if len(deps) != 2 {
-		t.Errorf("DependenciesOf(nginx) len = %d, want 2", len(deps))
+		t.Errorf("DependenciesOf(edge) len = %d, want 2", len(deps))
 	}
 	depSet := map[string]bool{}
 	for _, d := range deps {
 		depSet[d] = true
 	}
 	if !depSet["frontend"] || !depSet["api"] {
-		t.Errorf("DependenciesOf(nginx) = %v, want [frontend api]", deps)
+		t.Errorf("DependenciesOf(edge) = %v, want [frontend api]", deps)
 	}
 }
 
@@ -138,9 +138,9 @@ func TestDepGraph_DependenciesOf(t *testing.T) {
 func TestDepGraph_DetectCycle(t *testing.T) {
 	// a → b → c → a
 	components := map[string]*Component{
-		"a": {Name: "a", Type: "deployment", Depends: []Dependency{{On: []string{"b"}}}},
-		"b": {Name: "b", Type: "deployment", Depends: []Dependency{{On: []string{"c"}}}},
-		"c": {Name: "c", Type: "deployment", Depends: []Dependency{{On: []string{"a"}}}},
+		"a": {Name: "a", Type: "workload", Depends: []Dependency{{On: []string{"b"}}}},
+		"b": {Name: "b", Type: "workload", Depends: []Dependency{{On: []string{"c"}}}},
+		"c": {Name: "c", Type: "workload", Depends: []Dependency{{On: []string{"a"}}}},
 	}
 	order := []string{"a", "b", "c"}
 	g := NewDepGraph(components, order)
@@ -159,9 +159,9 @@ func TestDepGraph_DetectCycle(t *testing.T) {
 func TestDepGraph_NoCycle(t *testing.T) {
 	// a → b → c (linear, no cycle)
 	components := map[string]*Component{
-		"a": {Name: "a", Type: "deployment", Depends: []Dependency{{On: []string{"b"}}}},
-		"b": {Name: "b", Type: "deployment", Depends: []Dependency{{On: []string{"c"}}}},
-		"c": {Name: "c", Type: "deployment"},
+		"a": {Name: "a", Type: "workload", Depends: []Dependency{{On: []string{"b"}}}},
+		"b": {Name: "b", Type: "workload", Depends: []Dependency{{On: []string{"c"}}}},
+		"c": {Name: "c", Type: "workload"},
 	}
 	order := []string{"a", "b", "c"}
 	g := NewDepGraph(components, order)
@@ -187,31 +187,31 @@ func TestLoad_StorefrontModel(t *testing.T) {
 		t.Errorf("len(Components) = %d, want 4", len(m.Components))
 	}
 
-	// nginx exists and has 2 deps
-	nginx, ok := m.Components["nginx"]
+	// edge exists and has 2 deps
+	edge, ok := m.Components["edge"]
 	if !ok {
-		t.Fatal("nginx component missing")
+		t.Fatal("edge component missing")
 	}
 	nginxDeps := 0
-	for _, dep := range nginx.Depends {
+	for _, dep := range edge.Depends {
 		nginxDeps += len(dep.On)
 	}
 	if nginxDeps != 2 {
-		t.Errorf("nginx dep count = %d, want 2", nginxDeps)
+		t.Errorf("edge dep count = %d, want 2", nginxDeps)
 	}
 
-	// rds providers=[aws]
-	rds, ok := m.Components["rds"]
+	// store providers=[datalayer]
+	store, ok := m.Components["store"]
 	if !ok {
-		t.Fatal("rds component missing")
+		t.Fatal("store component missing")
 	}
-	if len(rds.Providers) != 1 || rds.Providers[0] != "aws" {
-		t.Errorf("rds.Providers = %v, want [aws]", rds.Providers)
+	if len(store.Providers) != 1 || store.Providers[0] != "datalayer" {
+		t.Errorf("store.Providers = %v, want [datalayer]", store.Providers)
 	}
 
-	// rds healthy=["connection_count < 500"]
-	if len(rds.HealthyRaw) != 1 || rds.HealthyRaw[0] != "connection_count < 500" {
-		t.Errorf("rds.HealthyRaw = %v, want [connection_count < 500]", rds.HealthyRaw)
+	// store healthy=["connection_count < 500"]
+	if len(store.HealthyRaw) != 1 || store.HealthyRaw[0] != "connection_count < 500" {
+		t.Errorf("store.HealthyRaw = %v, want [connection_count < 500]", store.HealthyRaw)
 	}
 
 	// Order has 4 entries
@@ -231,8 +231,8 @@ func TestLoad_EntryPoint(t *testing.T) {
 	}
 
 	ep := m.EntryPoint()
-	if ep != "nginx" {
-		t.Errorf("EntryPoint() = %q, want %q", ep, "nginx")
+	if ep != "edge" {
+		t.Errorf("EntryPoint() = %q, want %q", ep, "edge")
 	}
 }
 
@@ -256,9 +256,9 @@ func TestLoad_HealthyCompiled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rds := m.Components["rds"]
-	if len(rds.Healthy) != 1 {
-		t.Fatalf("expected 1 compiled healthy expression for rds, got %d", len(rds.Healthy))
+	store := m.Components["store"]
+	if len(store.Healthy) != 1 {
+		t.Fatalf("expected 1 compiled healthy expression for store, got %d", len(store.Healthy))
 	}
 }
 
@@ -295,16 +295,16 @@ func TestValidate_MissingDep(t *testing.T) {
 		t.Fatal("expected validation errors for missing dep, got none")
 	}
 
-	// Should have an error mentioning nginx and depends
+	// Should have an error mentioning edge and depends
 	found := false
 	for _, e := range result.Errors {
-		if e.Component == "nginx" && e.Field == "depends" {
+		if e.Component == "edge" && e.Field == "depends" {
 			found = true
 			t.Logf("found expected error: %q suggestion=%q", e.Message, e.Suggestion)
 		}
 	}
 	if !found {
-		t.Errorf("expected error on nginx.depends, errors=%v", result.Errors)
+		t.Errorf("expected error on edge.depends, errors=%v", result.Errors)
 	}
 }
 
@@ -381,8 +381,8 @@ func TestValidate_TypeResolution(t *testing.T) {
 
 	reg := providersupport.NewRegistry()
 	for _, pair := range []struct{ name, file string }{
-		{"kubernetes", "testdata/kubernetes-provider.yaml"},
-		{"aws", "testdata/aws-provider.yaml"},
+		{"compute", "../../testdata/providers/compute.yaml"},
+		{"datalayer", "../../testdata/providers/datalayer.yaml"},
 	} {
 		p, err := providersupport.LoadFromFile(pair.file)
 		if err != nil {
@@ -408,7 +408,7 @@ func TestValidate_UnknownType(t *testing.T) {
 		Meta: Meta{
 			Name:      "test",
 			Version:   "1.0",
-			Providers: []string{"kubernetes"},
+			Providers: []string{"compute"},
 		},
 		Components: map[string]*Component{
 			"svc": {Name: "svc", Type: "nonexistent_type"},
@@ -418,9 +418,9 @@ func TestValidate_UnknownType(t *testing.T) {
 	m.BuildGraph()
 
 	reg := providersupport.NewRegistry()
-	p, err := providersupport.LoadFromFile("testdata/kubernetes-provider.yaml")
+	p, err := providersupport.LoadFromFile("../../testdata/providers/compute.yaml")
 	if err != nil {
-		t.Fatalf("LoadFromFile(kubernetes): %v", err)
+		t.Fatalf("LoadFromFile(compute): %v", err)
 	}
 	reg.Register(p)
 

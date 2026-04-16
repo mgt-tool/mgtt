@@ -191,38 +191,38 @@ func TestLoadProvider_StateOrder(t *testing.T) {
 }
 
 func TestLoadFromFile_Kubernetes(t *testing.T) {
-	p, err := LoadFromFile("testdata/kubernetes.yaml")
+	p, err := LoadFromFile("../../testdata/providers/compute.yaml")
 	if err != nil {
-		t.Fatalf("LoadFromFile kubernetes: %v", err)
+		t.Fatalf("LoadFromFile compute: %v", err)
 	}
 
-	if p.Meta.Name != "kubernetes" {
-		t.Errorf("Meta.Name = %q, want kubernetes", p.Meta.Name)
+	if p.Meta.Name != "compute" {
+		t.Errorf("Meta.Name = %q, want compute", p.Meta.Name)
 	}
 
-	// Check ingress type exists.
-	ingress, ok := p.Types["ingress"]
+	// Check gateway type exists.
+	gateway, ok := p.Types["gateway"]
 	if !ok {
-		t.Fatal("missing type ingress")
+		t.Fatal("missing type gateway")
 	}
-	if _, ok := ingress.Facts["upstream_count"]; !ok {
-		t.Error("ingress missing fact upstream_count")
+	if _, ok := gateway.Facts["upstream_count"]; !ok {
+		t.Error("gateway missing fact upstream_count")
 	}
 
-	// Check deployment type exists.
-	deploy, ok := p.Types["deployment"]
+	// Check workload type exists.
+	deploy, ok := p.Types["workload"]
 	if !ok {
-		t.Fatal("missing type deployment")
+		t.Fatal("missing type workload")
 	}
 
-	// Check 4 deployment states in correct order.
+	// Check 4 workload states in correct order.
 	wantOrder := []string{"degraded", "draining", "starting", "live"}
 	if len(deploy.States) != len(wantOrder) {
-		t.Fatalf("deployment states count = %d, want %d", len(deploy.States), len(wantOrder))
+		t.Fatalf("workload states count = %d, want %d", len(deploy.States), len(wantOrder))
 	}
 	for i, want := range wantOrder {
 		if deploy.States[i].Name != want {
-			t.Errorf("deployment.States[%d].Name = %q, want %q", i, deploy.States[i].Name, want)
+			t.Errorf("workload.States[%d].Name = %q, want %q", i, deploy.States[i].Name, want)
 		}
 	}
 
@@ -241,11 +241,11 @@ func TestLoadFromFile_Kubernetes(t *testing.T) {
 		t.Errorf("degraded (idx %d) must come before starting (idx %d)", degradedIdx, startingIdx)
 	}
 
-	// Verify deployment has 4 facts.
+	// Verify workload has 4 facts.
 	wantFacts := []string{"ready_replicas", "desired_replicas", "restart_count", "endpoints"}
 	for _, fn := range wantFacts {
 		if _, ok := deploy.Facts[fn]; !ok {
-			t.Errorf("deployment missing fact %q", fn)
+			t.Errorf("workload missing fact %q", fn)
 		}
 	}
 
@@ -256,42 +256,42 @@ func TestLoadFromFile_Kubernetes(t *testing.T) {
 }
 
 func TestLoadFromFile_AWS(t *testing.T) {
-	p, err := LoadFromFile("testdata/aws.yaml")
+	p, err := LoadFromFile("../../testdata/providers/datalayer.yaml")
 	if err != nil {
-		t.Fatalf("LoadFromFile aws: %v", err)
+		t.Fatalf("LoadFromFile datalayer: %v", err)
 	}
 
-	if p.Meta.Name != "aws" {
-		t.Errorf("Meta.Name = %q, want aws", p.Meta.Name)
+	if p.Meta.Name != "datalayer" {
+		t.Errorf("Meta.Name = %q, want datalayer", p.Meta.Name)
 	}
 
-	rds, ok := p.Types["rds_instance"]
+	store, ok := p.Types["datastore"]
 	if !ok {
-		t.Fatal("missing type rds_instance")
+		t.Fatal("missing type datastore")
 	}
 
-	if _, ok := rds.Facts["available"]; !ok {
-		t.Error("rds_instance missing fact available")
+	if _, ok := store.Facts["available"]; !ok {
+		t.Error("datastore missing fact available")
 	}
-	if _, ok := rds.Facts["connection_count"]; !ok {
-		t.Error("rds_instance missing fact connection_count")
-	}
-
-	if rds.DefaultActiveState != "live" {
-		t.Errorf("rds_instance.DefaultActiveState = %q, want live", rds.DefaultActiveState)
+	if _, ok := store.Facts["connection_count"]; !ok {
+		t.Error("datastore missing fact connection_count")
 	}
 
-	if len(rds.States) != 2 {
-		t.Errorf("rds_instance.States count = %d, want 2", len(rds.States))
+	if store.DefaultActiveState != "live" {
+		t.Errorf("datastore.DefaultActiveState = %q, want live", store.DefaultActiveState)
 	}
 
-	causes := rds.FailureModes["stopped"]
+	if len(store.States) != 2 {
+		t.Errorf("datastore.States count = %d, want 2", len(store.States))
+	}
+
+	causes := store.FailureModes["stopped"]
 	if len(causes) != 3 {
-		t.Errorf("rds_instance FailureModes[stopped] = %v, want 3 entries", causes)
+		t.Errorf("datastore FailureModes[stopped] = %v, want 3 entries", causes)
 	}
 
-	if rds.Facts["available"].TTL != 60*time.Second {
-		t.Errorf("available.TTL = %v, want 60s", rds.Facts["available"].TTL)
+	if store.Facts["available"].TTL != 60*time.Second {
+		t.Errorf("available.TTL = %v, want 60s", store.Facts["available"].TTL)
 	}
 }
 
@@ -301,66 +301,66 @@ func TestLoadFromFile_AWS(t *testing.T) {
 
 func loadTestProviders(t *testing.T) (*Registry, *Provider, *Provider) {
 	t.Helper()
-	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
+	k8s, err := LoadFromFile("../../testdata/providers/compute.yaml")
 	if err != nil {
-		t.Fatalf("load kubernetes: %v", err)
+		t.Fatalf("load compute: %v", err)
 	}
-	aws, err := LoadFromFile("testdata/aws.yaml")
+	datalayer, err := LoadFromFile("../../testdata/providers/datalayer.yaml")
 	if err != nil {
-		t.Fatalf("load aws: %v", err)
+		t.Fatalf("load datalayer: %v", err)
 	}
 	reg := NewRegistry()
 	reg.Register(k8s)
-	reg.Register(aws)
-	return reg, k8s, aws
+	reg.Register(datalayer)
+	return reg, k8s, datalayer
 }
 
 func TestRegistry_ResolveType(t *testing.T) {
 	reg, _, _ := loadTestProviders(t)
 
-	// Resolve deployment → should come from kubernetes.
-	typ, provName, err := reg.ResolveType([]string{"kubernetes", "aws"}, "deployment")
+	// Resolve workload → should come from compute.
+	typ, provName, err := reg.ResolveType([]string{"compute", "datalayer"}, "workload")
 	if err != nil {
-		t.Fatalf("ResolveType deployment: %v", err)
+		t.Fatalf("ResolveType workload: %v", err)
 	}
-	if provName != "kubernetes" {
-		t.Errorf("provider = %q, want kubernetes", provName)
+	if provName != "compute" {
+		t.Errorf("provider = %q, want compute", provName)
 	}
-	if typ.Name != "deployment" {
-		t.Errorf("type.Name = %q, want deployment", typ.Name)
+	if typ.Name != "workload" {
+		t.Errorf("type.Name = %q, want workload", typ.Name)
 	}
 
-	// Resolve rds_instance → should come from aws.
-	typ, provName, err = reg.ResolveType([]string{"kubernetes", "aws"}, "rds_instance")
+	// Resolve datastore → should come from datalayer.
+	typ, provName, err = reg.ResolveType([]string{"compute", "datalayer"}, "datastore")
 	if err != nil {
-		t.Fatalf("ResolveType rds_instance: %v", err)
+		t.Fatalf("ResolveType datastore: %v", err)
 	}
-	if provName != "aws" {
-		t.Errorf("provider = %q, want aws", provName)
+	if provName != "datalayer" {
+		t.Errorf("provider = %q, want datalayer", provName)
 	}
-	if typ.Name != "rds_instance" {
-		t.Errorf("type.Name = %q, want rds_instance", typ.Name)
+	if typ.Name != "datastore" {
+		t.Errorf("type.Name = %q, want datastore", typ.Name)
 	}
 }
 
 func TestRegistry_ResolveType_NotFound(t *testing.T) {
 	reg, _, _ := loadTestProviders(t)
 
-	_, _, err := reg.ResolveType([]string{"kubernetes", "aws"}, "nonexistent")
+	_, _, err := reg.ResolveType([]string{"compute", "datalayer"}, "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for unknown type, got nil")
 	}
 }
 
 func TestRegistry_PeckingOrder(t *testing.T) {
-	// Both providers declare "ingress" — first one wins.
-	// We'll use a synthetic provider that also declares "ingress".
+	// Both providers declare "gateway" — first one wins.
+	// We'll use a synthetic provider that also declares "gateway".
 	const secondProvYAML = `
 meta:
   name: second
   version: 0.1.0
 types:
-  ingress:
+  gateway:
     facts:
       upstream_count:
         type: mgtt.int
@@ -376,26 +376,26 @@ types:
 		t.Fatalf("load second: %v", err)
 	}
 
-	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
+	k8s, err := LoadFromFile("../../testdata/providers/compute.yaml")
 	if err != nil {
-		t.Fatalf("load kubernetes: %v", err)
+		t.Fatalf("load compute: %v", err)
 	}
 
 	reg := NewRegistry()
 	reg.Register(k8s)    // registered first — higher priority
 	reg.Register(second) // registered second — lower priority
 
-	// kubernetes is listed first in componentProviders → wins.
-	_, provName, err := reg.ResolveType([]string{"kubernetes", "second"}, "ingress")
+	// compute is listed first in componentProviders → wins.
+	_, provName, err := reg.ResolveType([]string{"compute", "second"}, "gateway")
 	if err != nil {
 		t.Fatalf("ResolveType: %v", err)
 	}
-	if provName != "kubernetes" {
-		t.Errorf("provider = %q, want kubernetes (pecking order)", provName)
+	if provName != "compute" {
+		t.Errorf("provider = %q, want compute (pecking order)", provName)
 	}
 
 	// second is listed first → wins.
-	_, provName, err = reg.ResolveType([]string{"second", "kubernetes"}, "ingress")
+	_, provName, err = reg.ResolveType([]string{"second", "compute"}, "gateway")
 	if err != nil {
 		t.Fatalf("ResolveType: %v", err)
 	}
@@ -405,51 +405,51 @@ types:
 }
 
 func TestRegistry_ExplicitNamespace(t *testing.T) {
-	// Even if kubernetes is listed first, explicit "aws.rds_instance" bypasses scan.
+	// Even if compute is listed first, explicit "datalayer.datastore" bypasses scan.
 	reg, _, _ := loadTestProviders(t)
 
-	typ, provName, err := reg.ResolveType([]string{"kubernetes"}, "aws.rds_instance")
+	typ, provName, err := reg.ResolveType([]string{"compute"}, "datalayer.datastore")
 	if err != nil {
-		t.Fatalf("ResolveType aws.rds_instance: %v", err)
+		t.Fatalf("ResolveType datalayer.datastore: %v", err)
 	}
-	if provName != "aws" {
-		t.Errorf("provider = %q, want aws", provName)
+	if provName != "datalayer" {
+		t.Errorf("provider = %q, want datalayer", provName)
 	}
-	if typ.Name != "rds_instance" {
-		t.Errorf("type.Name = %q, want rds_instance", typ.Name)
+	if typ.Name != "datastore" {
+		t.Errorf("type.Name = %q, want datastore", typ.Name)
 	}
 }
 
 func TestLoadProvider_CompiledExpressions(t *testing.T) {
-	k8s, err := LoadFromFile("testdata/kubernetes.yaml")
+	k8s, err := LoadFromFile("../../testdata/providers/compute.yaml")
 	if err != nil {
-		t.Fatalf("LoadFromFile kubernetes: %v", err)
+		t.Fatalf("LoadFromFile compute: %v", err)
 	}
 
-	deploy, ok := k8s.Types["deployment"]
+	deploy, ok := k8s.Types["workload"]
 	if !ok {
-		t.Fatal("missing type deployment")
+		t.Fatal("missing type workload")
 	}
 
-	// Verify deployment.Healthy has 3 compiled nodes (non-nil).
+	// Verify workload.Healthy has 3 compiled nodes (non-nil).
 	if len(deploy.Healthy) != 3 {
-		t.Errorf("deployment.Healthy compiled nodes = %d, want 3", len(deploy.Healthy))
+		t.Errorf("workload.Healthy compiled nodes = %d, want 3", len(deploy.Healthy))
 	}
 	for i, node := range deploy.Healthy {
 		if node == nil {
-			t.Errorf("deployment.Healthy[%d] is nil", i)
+			t.Errorf("workload.Healthy[%d] is nil", i)
 		}
 	}
 
-	// Verify deployment.States[0] is "degraded" and has non-nil When.
+	// Verify workload.States[0] is "degraded" and has non-nil When.
 	if len(deploy.States) == 0 {
-		t.Fatal("deployment has no states")
+		t.Fatal("workload has no states")
 	}
 	if deploy.States[0].Name != "degraded" {
-		t.Errorf("deployment.States[0].Name = %q, want degraded", deploy.States[0].Name)
+		t.Errorf("workload.States[0].Name = %q, want degraded", deploy.States[0].Name)
 	}
 	if deploy.States[0].When == nil {
-		t.Error("deployment.States[0].When (degraded) is nil, want compiled node")
+		t.Error("workload.States[0].When (degraded) is nil, want compiled node")
 	}
 
 	// Verify all states with WhenRaw have compiled When nodes.
@@ -461,23 +461,23 @@ func TestLoadProvider_CompiledExpressions(t *testing.T) {
 
 	// Verify HealthyRaw is still present (for display).
 	if len(deploy.HealthyRaw) != 3 {
-		t.Errorf("deployment.HealthyRaw = %d, want 3 (raw strings must be kept)", len(deploy.HealthyRaw))
+		t.Errorf("workload.HealthyRaw = %d, want 3 (raw strings must be kept)", len(deploy.HealthyRaw))
 	}
 }
 
 func TestRegistry_GetAndAll(t *testing.T) {
-	reg, k8s, aws := loadTestProviders(t)
+	reg, k8s, datalayer := loadTestProviders(t)
 
-	if p, ok := reg.Get("kubernetes"); !ok || p != k8s {
-		t.Error("Get(kubernetes) did not return the registered provider")
+	if p, ok := reg.Get("compute"); !ok || p != k8s {
+		t.Error("Get(compute) did not return the registered provider")
 	}
-	if p, ok := reg.Get("aws"); !ok || p != aws {
-		t.Error("Get(aws) did not return the registered provider")
+	if p, ok := reg.Get("datalayer"); !ok || p != datalayer {
+		t.Error("Get(datalayer) did not return the registered provider")
 	}
 
 	all := reg.All()
-	if len(all) != 2 || all[0] != k8s || all[1] != aws {
-		t.Errorf("All() = %v, want [k8s, aws] in registration order", all)
+	if len(all) != 2 || all[0] != k8s || all[1] != datalayer {
+		t.Errorf("All() = %v, want [k8s, datalayer] in registration order", all)
 	}
 }
 
@@ -531,7 +531,7 @@ func TestLoadFromDir_MultiFile(t *testing.T) {
 
 func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 	dir := t.TempDir()
-	data, err := os.ReadFile("testdata/kubernetes.yaml")
+	data, err := os.ReadFile("../../testdata/providers/compute.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,10 +544,10 @@ func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 		t.Fatalf("LoadFromDir with inline types: %v", err)
 	}
 
-	if p.Meta.Name != "kubernetes" {
-		t.Errorf("Meta.Name = %q, want kubernetes", p.Meta.Name)
+	if p.Meta.Name != "compute" {
+		t.Errorf("Meta.Name = %q, want compute", p.Meta.Name)
 	}
-	if _, ok := p.Types["deployment"]; !ok {
-		t.Fatal("missing type deployment — inline types not loaded")
+	if _, ok := p.Types["workload"]; !ok {
+		t.Fatal("missing type workload — inline types not loaded")
 	}
 }

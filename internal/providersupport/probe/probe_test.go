@@ -214,7 +214,7 @@ func TestParseOutput_Regex_NoGroup(t *testing.T) {
 }
 
 func TestParseOutput_Regex_BoolPattern(t *testing.T) {
-	// The aws rds probe uses regex:^available$ to match "available\n".
+	// The datalayer store probe uses regex:^available$ to match "available\n".
 	v, err := probe.ParseOutput(`regex:^available$`, "available\n", 0)
 	if err != nil {
 		t.Fatal(err)
@@ -400,12 +400,12 @@ func TestSubstitute(t *testing.T) {
 
 func TestSubstitute_ProviderVar(t *testing.T) {
 	result := probe.Substitute(
-		"aws {region} describe {name}",
+		"datalayer {region} describe {name}",
 		"mydb",
 		map[string]string{},
 		map[string]string{"region": "us-east-1"},
 	)
-	expected := "aws us-east-1 describe mydb"
+	expected := "datalayer us-east-1 describe mydb"
 	if result != expected {
 		t.Fatalf("expected %q, got %q", expected, result)
 	}
@@ -482,8 +482,8 @@ func TestValidateCommand_InjectionCommandSub(t *testing.T) {
 
 func TestValidateCommand_TemplateWithPipeIsOK(t *testing.T) {
 	// Template already contains a pipe — rendered having the same count is fine.
-	template := "aws cloudwatch get-metric | jq .value"
-	rendered := "aws cloudwatch get-metric | jq .value"
+	template := "datalayer cloudwatch get-metric | jq .value"
+	rendered := "datalayer cloudwatch get-metric | jq .value"
 	err := probe.ValidateCommand(rendered, template)
 	if err != nil {
 		t.Fatalf("unexpected error when pipe count matches template: %v", err)

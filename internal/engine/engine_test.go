@@ -31,8 +31,8 @@ func loadStorefront(t *testing.T) (*model.Model, *providersupport.Registry) {
 	}
 	reg := providersupport.NewRegistry()
 	for _, pair := range []struct{ name, file string }{
-		{"kubernetes", "testdata/kubernetes-provider.yaml"},
-		{"aws", "testdata/aws-provider.yaml"},
+		{"compute", "../../testdata/providers/compute.yaml"},
+		{"datalayer", "../../testdata/providers/datalayer.yaml"},
 	} {
 		p, err := providersupport.LoadFromFile(pair.file)
 		if err != nil {
@@ -95,8 +95,8 @@ func TestPlan_EntryPoint(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := facts.NewInMemory()
 	tree := Plan(m, reg, store, "")
-	if tree.Entry != "nginx" {
-		t.Errorf("entry = %q, want %q", tree.Entry, "nginx")
+	if tree.Entry != "edge" {
+		t.Errorf("entry = %q, want %q", tree.Entry, "edge")
 	}
 }
 
@@ -109,23 +109,23 @@ func TestPlan_ExplicitEntry(t *testing.T) {
 	}
 }
 
-// Scenario 1: rds unavailable — rds stops, api crash-loops as a result.
-// Engine should trace fault to rds, not api.
+// Scenario 1: store unavailable — store stops, api crash-loops as a result.
+// Engine should trace fault to store, not api.
 func TestPlan_RDSUnavailable(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"rds": {"available": false, "connection_count": 0},
+		"store": {"available": false, "connection_count": 0},
 		"api": {"ready_replicas": 0, "restart_count": 12, "desired_replicas": 3},
 	})
 
 	tree := Plan(m, reg, store, "")
 
-	if tree.RootCause != "rds" {
-		t.Errorf("root_cause = %q, want %q", tree.RootCause, "rds")
+	if tree.RootCause != "store" {
+		t.Errorf("root_cause = %q, want %q", tree.RootCause, "store")
 	}
 
 	path := rootCausePath(tree)
-	wantPath := []string{"nginx", "api", "rds"}
+	wantPath := []string{"edge", "api", "store"}
 	if !sliceEqual(path, wantPath) {
 		t.Errorf("root cause path = %v, want %v", path, wantPath)
 	}
@@ -137,12 +137,12 @@ func TestPlan_RDSUnavailable(t *testing.T) {
 	}
 }
 
-// Scenario 2: api crash-loop independent of rds — rds is healthy.
+// Scenario 2: api crash-loop independent of store — store is healthy.
 func TestPlan_APICrashLoop(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
 		"api": {"ready_replicas": 0, "restart_count": 24, "desired_replicas": 3},
-		"rds": {"available": true, "connection_count": 120},
+		"store": {"available": true, "connection_count": 120},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -152,25 +152,25 @@ func TestPlan_APICrashLoop(t *testing.T) {
 	}
 
 	path := rootCausePath(tree)
-	wantPath := []string{"nginx", "api"}
+	wantPath := []string{"edge", "api"}
 	if !sliceEqual(path, wantPath) {
 		t.Errorf("root cause path = %v, want %v", path, wantPath)
 	}
 
 	elim := eliminatedComponents(tree)
-	wantElim := []string{"frontend", "rds"}
+	wantElim := []string{"frontend", "store"}
 	if !sliceEqual(elim, wantElim) {
 		t.Errorf("eliminated = %v, want %v", elim, wantElim)
 	}
 }
 
-// Scenario 3: frontend crash-looping, api and rds healthy.
+// Scenario 3: frontend crash-looping, api and store healthy.
 func TestPlan_FrontendDegraded(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
 		"frontend": {"ready_replicas": 0, "restart_count": 8, "desired_replicas": 2},
 		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
-		"rds":      {"available": true, "connection_count": 98},
+		"store":      {"available": true, "connection_count": 98},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -180,13 +180,13 @@ func TestPlan_FrontendDegraded(t *testing.T) {
 	}
 
 	path := rootCausePath(tree)
-	wantPath := []string{"nginx", "frontend"}
+	wantPath := []string{"edge", "frontend"}
 	if !sliceEqual(path, wantPath) {
 		t.Errorf("root cause path = %v, want %v", path, wantPath)
 	}
 
 	elim := eliminatedComponents(tree)
-	wantElim := []string{"api", "rds"}
+	wantElim := []string{"api", "store"}
 	if !sliceEqual(elim, wantElim) {
 		t.Errorf("eliminated = %v, want %v", elim, wantElim)
 	}
@@ -196,10 +196,10 @@ func TestPlan_FrontendDegraded(t *testing.T) {
 func TestPlan_AllHealthy(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
-		"nginx":    {"upstream_count": 4},
+		"edge":    {"upstream_count": 4},
 		"frontend": {"ready_replicas": 2, "desired_replicas": 2, "endpoints": 2},
 		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
-		"rds":      {"available": true, "connection_count": 87},
+		"store":      {"available": true, "connection_count": 87},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -213,7 +213,7 @@ func TestPlan_AllHealthy(t *testing.T) {
 	}
 
 	elim := eliminatedComponents(tree)
-	wantElim := []string{"api", "frontend", "nginx", "rds"}
+	wantElim := []string{"api", "edge", "frontend", "store"}
 	if !sliceEqual(elim, wantElim) {
 		t.Errorf("eliminated = %v, want %v", elim, wantElim)
 	}
@@ -237,7 +237,7 @@ func sliceEqual(a, b []string) bool {
 
 // buildWhileGuardModel constructs a model:
 //
-//	nginx → api → rds              (always active)
+//	edge → api → store              (always active)
 //	              api → vault       (while: vault.state == starting)
 //
 // The "test" provider defines a minimal "service" type with fact-based states:
@@ -276,8 +276,8 @@ func buildWhileGuardModel() (*model.Model, *providersupport.Registry) {
 			Providers: []string{"test"},
 		},
 		Components: map[string]*model.Component{
-			"nginx": {
-				Name: "nginx",
+			"edge": {
+				Name: "edge",
 				Type: "service",
 				Depends: []model.Dependency{
 					{On: []string{"api"}},
@@ -287,12 +287,12 @@ func buildWhileGuardModel() (*model.Model, *providersupport.Registry) {
 				Name: "api",
 				Type: "service",
 				Depends: []model.Dependency{
-					{On: []string{"rds"}},
+					{On: []string{"store"}},
 					{On: []string{"vault"}, While: whileExpr},
 				},
 			},
-			"rds": {
-				Name: "rds",
+			"store": {
+				Name: "store",
 				Type: "service",
 			},
 			"vault": {
@@ -300,7 +300,7 @@ func buildWhileGuardModel() (*model.Model, *providersupport.Registry) {
 				Type: "service",
 			},
 		},
-		Order: []string{"nginx", "api", "rds", "vault"},
+		Order: []string{"edge", "api", "store", "vault"},
 	}
 	m.BuildGraph()
 
@@ -351,9 +351,9 @@ func TestPlan_WhileGuard_Inactive(t *testing.T) {
 		}
 	}
 
-	// rds should still be reachable (always-active edge).
-	if !found["rds"] {
-		t.Errorf("rds should appear in paths (always-active dependency), but was not found")
+	// store should still be reachable (always-active edge).
+	if !found["store"] {
+		t.Errorf("store should appear in paths (always-active dependency), but was not found")
 	}
 }
 
@@ -390,8 +390,8 @@ func TestPlan_WhileGuard_Active(t *testing.T) {
 		}
 	}
 
-	if !found["rds"] {
-		t.Errorf("rds should appear in paths (always-active dependency), but was not found")
+	if !found["store"] {
+		t.Errorf("store should appear in paths (always-active dependency), but was not found")
 	}
 }
 
@@ -430,8 +430,8 @@ func TestPlan_WhileGuard_Unresolved(t *testing.T) {
 			Providers: []string{"test"},
 		},
 		Components: map[string]*model.Component{
-			"nginx": {
-				Name: "nginx",
+			"edge": {
+				Name: "edge",
 				Type: "service",
 				Depends: []model.Dependency{
 					{On: []string{"api"}},
@@ -449,7 +449,7 @@ func TestPlan_WhileGuard_Unresolved(t *testing.T) {
 				Type: "service",
 			},
 		},
-		Order: []string{"nginx", "api", "vault"},
+		Order: []string{"edge", "api", "vault"},
 	}
 	m.BuildGraph()
 

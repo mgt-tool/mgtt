@@ -2,30 +2,30 @@ meta:
   name: storefront
   version: "1.0"
   providers:
-    - kubernetes
+    - compute
   vars:
     namespace: production
 
 components:
-  nginx:
-    type: ingress
+  edge:
+    type: gateway
     depends:
       - on: frontend
       - on: api
 
   frontend:
-    type: deployment
+    type: workload
     depends:
       - on: api
 
   api:
-    type: deployment
+    type: workload
     depends:
-      - on: rds
+      - on: store
 
-  rds:
+  store:
     providers:
-      - aws
-    type: rds_instance
+      - datalayer
+    type: datastore
     healthy:
       - connection_count < 500

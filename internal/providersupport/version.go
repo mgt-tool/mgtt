@@ -16,7 +16,7 @@ import (
 //   - major: breaking protocol change
 //
 // Keep in sync with the VERSION file at the repo root.
-const MgttVersion = "0.1.3"
+const MgttVersion = "0.1.4"
 
 // CheckCompatible returns nil if this provider is loadable for use against
 // the running mgtt. Callers about to invoke the runner (probe, status,

@@ -59,6 +59,11 @@ func runPlan(cmd *cobra.Command, args []string) error {
 
 	reg := providersupport.LoadAllForUse()
 
+	// 2. Resolve model's provider refs against installed providers.
+	if err := resolveModelProviders(m, os.Stderr); err != nil {
+		return err
+	}
+
 	executor, err := buildExecutor(reg)
 	if err != nil {
 		return err
@@ -182,6 +187,63 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resolveModelProviders parses and resolves the model's providers: list against
+// the locally-installed set. Warnings (legacy bare-name refs) are printed to
+// errW. Returns an error if any ref cannot be resolved.
+func resolveModelProviders(m *model.Model, errW io.Writer) error {
+	if len(m.Meta.Providers) == 0 {
+		return nil
+	}
+
+	// Parse each provider ref string.
+	refs := make([]model.ProviderRef, 0, len(m.Meta.Providers))
+	for _, entry := range m.Meta.Providers {
+		ref, err := model.ParseProviderRef(entry)
+		if err != nil {
+			return fmt.Errorf("model provider ref %q: %w", entry, err)
+		}
+		refs = append(refs, ref)
+	}
+
+	// Build InstalledProvider list from disk.
+	installed := buildInstalledList()
+
+	// Resolve.
+	_, warnings, err := model.Resolve(refs, installed)
+
+	// Print warnings (legacy bare-name refs) to stderr.
+	for _, w := range warnings {
+		fmt.Fprintf(errW, "⚠ %s\n", w.Message)
+	}
+
+	return err
+}
+
+// buildInstalledList constructs the model.InstalledProvider list from all
+// providers found on disk via ListEmbedded.
+func buildInstalledList() []model.InstalledProvider {
+	names := providersupport.ListEmbedded()
+	var installed []model.InstalledProvider
+	for _, name := range names {
+		dir := providersupport.ProviderDir(name)
+		if dir == "" {
+			continue
+		}
+		meta, _ := providersupport.ReadInstallMeta(dir)
+		p, err := providersupport.LoadFromDir(dir)
+		if err != nil {
+			continue
+		}
+		installed = append(installed, model.InstalledProvider{
+			Name:      name,
+			Namespace: meta.Namespace,
+			Version:   p.Meta.Version,
+			Dir:       dir,
+		})
+	}
+	return installed
 }
 
 // probeTimeout reads MGTT_PROBE_TIMEOUT (e.g. "60s", "2m") and returns it

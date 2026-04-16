@@ -246,6 +246,72 @@ func TestInstallFromImage_PullFailurePropagates(t *testing.T) {
 	}
 }
 
+// TestDeriveNamespace covers all supported input forms for deriveNamespace.
+func TestDeriveNamespace(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		// Image refs with digest
+		{
+			input: "ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123",
+			want:  "mgt-tool",
+		},
+		{
+			input: "ghcr.io/mgt-tool/mgtt-provider-kubernetes:1.0.0@sha256:deadbeef",
+			want:  "mgt-tool",
+		},
+		// Image ref with only digest (no tag)
+		{
+			input: "ghcr.io/mgt-tool/mgtt-provider-docker@sha256:deadbeef",
+			want:  "mgt-tool",
+		},
+		// Git HTTPS URLs
+		{
+			input: "https://github.com/mgt-tool/mgtt-provider-tempo",
+			want:  "mgt-tool",
+		},
+		{
+			input: "https://github.com/org-name/some-provider",
+			want:  "org-name",
+		},
+		// Git SSH URL
+		{
+			input: "git@github.com:mgt-tool/mgtt-provider-tempo.git",
+			want:  "mgt-tool",
+		},
+		// HTTP URL
+		{
+			input: "http://internal.host/myorg/myprovider",
+			want:  "myorg",
+		},
+		// Bare name — no namespace
+		{
+			input: "kubernetes",
+			want:  "",
+		},
+		// Registry with no path segments after host — no namespace
+		{
+			input: "ghcr.io/standalone",
+			want:  "",
+		},
+		// Empty string
+		{
+			input: "",
+			want:  "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := deriveNamespace(tc.input)
+			if got != tc.want {
+				t.Errorf("deriveNamespace(%q) = %q; want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestInstallFromImage_RejectsBareTag verifies that refs without @sha256: are rejected.
 func TestInstallFromImage_RejectsBareTag(t *testing.T) {
 	fakeDocker := &providersupport.DockerCmd{

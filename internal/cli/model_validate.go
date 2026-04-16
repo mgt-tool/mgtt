@@ -34,6 +34,19 @@ var modelValidateCmd = &cobra.Command{
 
 		reg := providersupport.LoadAllForUse()
 
+		// Warn on legacy bare-name provider refs before running validation.
+		for _, entry := range m.Meta.Providers {
+			ref, parseErr := model.ParseProviderRef(entry)
+			if parseErr != nil {
+				continue // malformed refs are caught by model.Validate
+			}
+			if ref.LegacyBareName {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"⚠ model uses bare provider name %q; consider %q\n",
+					ref.Name, ref.Name+"@<version>")
+			}
+		}
+
 		result := model.Validate(m, reg)
 
 		// Build depCounts: map component name → number of direct dependencies.

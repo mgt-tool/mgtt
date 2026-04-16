@@ -129,6 +129,7 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 
 	meta := providersupport.InstallMeta{
 		Method:      providersupport.InstallMethodImage,
+		Namespace:   deriveNamespace(ref),
 		Source:      ref,
 		InstalledAt: time.Now().UTC(),
 		Version:     p.Meta.Version,
@@ -248,9 +249,74 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		}
 	}
 
+	// Write install metadata so `mgtt provider list` and resolver can use it.
+	gitMeta := providersupport.InstallMeta{
+		Method:      providersupport.InstallMethodGit,
+		Namespace:   deriveNamespace(nameOrPath),
+		Source:      nameOrPath,
+		InstalledAt: time.Now().UTC(),
+		Version:     p.Meta.Version,
+	}
+	// Non-fatal: list and resolve degrade gracefully when the file is absent.
+	_ = providersupport.WriteInstallMeta(destDir, gitMeta)
+
 	fmt.Fprintf(w, "  %s %-12s  v%s  auth: %s  access: %s\n",
 		checkmark(true), p.Meta.Name, p.Meta.Version, p.Auth.Strategy, p.Auth.Access.Probes)
 	return nil
+}
+
+// deriveNamespace extracts the namespace (org/user) from a git URL or image
+// reference. For git URLs like "https://github.com/mgt-tool/mgtt-provider-tempo"
+// or image refs like "ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:...",
+// the first path segment after the host is the namespace.
+// Returns "" if the namespace cannot be determined.
+func deriveNamespace(urlOrRef string) string {
+	// Strip common git/image prefixes to get the path component.
+	var path string
+	for _, prefix := range []string{
+		"https://", "http://", "git://", "git@",
+	} {
+		if strings.HasPrefix(urlOrRef, prefix) {
+			// After stripping prefix: host/path... — find next slash.
+			rest := strings.TrimPrefix(urlOrRef, prefix)
+			// For git@: host:path — replace colon with slash.
+			rest = strings.Replace(rest, ":", "/", 1)
+			if idx := strings.Index(rest, "/"); idx >= 0 {
+				path = rest[idx+1:]
+			}
+			break
+		}
+	}
+
+	// For image refs (no http/git prefix): strip digest first, then host/path.
+	if path == "" {
+		// Strip @sha256:... digest if present.
+		ref := urlOrRef
+		if idx := strings.Index(ref, "@"); idx >= 0 {
+			ref = ref[:idx]
+		}
+		// Strip tag.
+		if idx := strings.LastIndex(ref, ":"); idx >= 0 {
+			ref = ref[:idx]
+		}
+		// Now ref is something like "ghcr.io/mgt-tool/mgtt-provider-tempo".
+		// The host is the first segment; path follows.
+		if idx := strings.Index(ref, "/"); idx >= 0 {
+			path = ref[idx+1:]
+		}
+	}
+
+	if path == "" {
+		return ""
+	}
+
+	// The first segment of the path is the namespace.
+	segments := strings.SplitN(path, "/", 2)
+	if len(segments) < 2 || segments[0] == "" {
+		// Only one segment — this is a bare name, no namespace.
+		return ""
+	}
+	return segments[0]
 }
 
 // cloneRepo clones a git repo to a temp dir and returns the path.

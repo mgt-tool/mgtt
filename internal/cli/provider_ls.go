@@ -41,40 +41,56 @@ func renderProviderLs(w io.Writer, providers []*providersupport.Provider) {
 		return
 	}
 
-	// Determine column widths.
-	maxName := 0
-	maxVersion := 0
-	maxMethod := len("image") // "git" (3) or "image" (5); "image" is wider
-	for _, p := range providers {
-		if n := len(p.Meta.Name); n > maxName {
-			maxName = n
-		}
-		v := "v" + p.Meta.Version
-		if n := len(v); n > maxVersion {
-			maxVersion = n
-		}
+	// Load install metadata for all providers first so we can compute column widths.
+	type providerRow struct {
+		displayName string
+		ver         string
+		method      string
+		description string
 	}
-
+	rows := make([]providerRow, 0, len(providers))
 	for _, p := range providers {
-		ver := "v" + p.Meta.Version
-
-		// Load install metadata to determine the install method.
+		displayName := p.Meta.Name
 		providerDir := providersupport.ProviderDir(p.Meta.Name)
 		method := "?"
 		if providerDir != "" {
 			meta, err := providersupport.ReadInstallMeta(providerDir)
 			if err == nil {
 				method = string(meta.Method)
+				if meta.Namespace != "" {
+					displayName = meta.Namespace + "/" + p.Meta.Name
+				}
 			}
 			// On error: show "?" and continue (don't abort the listing)
 		}
+		rows = append(rows, providerRow{
+			displayName: displayName,
+			ver:         "v" + p.Meta.Version,
+			method:      method,
+			description: p.Meta.Description,
+		})
+	}
 
+	// Determine column widths.
+	maxName := 0
+	maxVersion := 0
+	maxMethod := len("image") // "git" (3) or "image" (5); "image" is wider
+	for _, r := range rows {
+		if n := len(r.displayName); n > maxName {
+			maxName = n
+		}
+		if n := len(r.ver); n > maxVersion {
+			maxVersion = n
+		}
+	}
+
+	for _, r := range rows {
 		fmt.Fprintf(w, "  %s %-*s  %-*s  %-*s  %s\n",
 			checkmark(true),
-			maxName, p.Meta.Name,
-			maxVersion, ver,
-			maxMethod, method,
-			p.Meta.Description,
+			maxName, r.displayName,
+			maxVersion, r.ver,
+			maxMethod, r.method,
+			r.description,
 		)
 	}
 }

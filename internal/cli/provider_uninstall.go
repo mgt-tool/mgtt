@@ -39,6 +39,15 @@ func uninstallProvider(w io.Writer, name string) error {
 		return fmt.Errorf("provider %q is not installed", name)
 	}
 
+	// Load install metadata to determine how the provider was installed.
+	meta, err := providersupport.ReadInstallMeta(dir)
+	if err != nil {
+		// Metadata read failed, but still try to uninstall. Warn the operator.
+		fmt.Fprintf(w, "  warning: could not read install metadata: %v\n", err)
+		// Treat it as a git install (pre-metadata backward-compatible default)
+		// and continue uninstall.
+	}
+
 	// Load provider.yaml to discover the uninstall hook. This uses the
 	// un-gated LoadEmbedded (not LoadForUse) because uninstall must work
 	// even when the provider is version-incompatible with the running mgtt.
@@ -51,8 +60,9 @@ func uninstallProvider(w io.Writer, name string) error {
 		return os.RemoveAll(dir)
 	}
 
-	// Run uninstall hook if declared.
-	if p.Hooks.Uninstall != "" {
+	// Run uninstall hook if declared, but only for git-installed providers.
+	// Image-installed providers don't have hooks on disk — skip the hook entirely.
+	if p.Hooks.Uninstall != "" && meta.Method != providersupport.InstallMethodImage {
 		hookPath := filepath.Join(dir, p.Hooks.Uninstall)
 		if _, err := os.Stat(hookPath); err == nil {
 			fmt.Fprintf(w, "  running uninstall hook: %s\n", hookPath)
@@ -74,6 +84,13 @@ func uninstallProvider(w io.Writer, name string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove provider directory: %w", err)
 	}
+
+	// For image-installed providers, inform the user about the Docker image cache.
+	if meta.Method == providersupport.InstallMethodImage && meta.Source != "" {
+		fmt.Fprintf(w, "  ℹ image %s remains in your local Docker cache; remove with:\n", meta.Source)
+		fmt.Fprintf(w, "    docker rmi %s\n", meta.Source)
+	}
+
 	fmt.Fprintf(w, "  %s uninstalled %s\n", checkmark(true), name)
 	return nil
 }

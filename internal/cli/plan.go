@@ -223,12 +223,20 @@ func buildExecutor(reg *providersupport.Registry) (probe.Executor, error) {
 
 	runners := map[string]probe.Executor{}
 	for _, p := range reg.All() {
-		if p.Meta.Command == "" {
-			continue
-		}
 		// Registry was built via LoadAllForUse at the call site, so
 		// CheckCompatible has already been run. No need to re-gate here.
-		runners[p.Meta.Name] = probe.NewExternalRunner(resolveCommand(p.Meta.Command, p.Meta.Name))
+		dir := providersupport.ProviderDir(p.Meta.Name)
+		meta, _ := providersupport.ReadInstallMeta(dir) // absent file → Method:git (backward-compat)
+		switch meta.Method {
+		case providersupport.InstallMethodImage:
+			runners[p.Meta.Name] = probe.NewImageRunner(meta.Source)
+		default:
+			// git-installed (or legacy installs without metadata file)
+			if p.Meta.Command != "" {
+				runners[p.Meta.Name] = probe.NewExternalRunner(
+					resolveCommand(p.Meta.Command, p.Meta.Name))
+			}
+		}
 	}
 	if len(runners) == 0 {
 		return probeexec.Default(), nil

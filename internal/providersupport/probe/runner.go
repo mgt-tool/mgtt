@@ -19,8 +19,16 @@ const (
 
 // ExternalRunner invokes a provider's runner binary and parses its JSON
 // result. It implements Executor so it can be composed in a Mux.
+//
+// When ArgPrefix is non-empty, every exec.Command is built as:
+//
+//	Binary ArgPrefix[0] ArgPrefix[1] … <probe-args>
+//
+// This is used by NewImageRunner to wrap the provider binary in
+// "docker run --rm <imageRef>".
 type ExternalRunner struct {
-	Binary string
+	Binary    string
+	ArgPrefix []string
 }
 
 // NewExternalRunner returns an Executor that shells out to the given
@@ -30,12 +38,37 @@ func NewExternalRunner(binary string) Executor {
 	return &ExternalRunner{Binary: binary}
 }
 
+// NewImageRunner returns an Executor that runs the provider via
+//
+//	docker run --rm <imageRef> <probe-args…>
+//
+// The image's ENTRYPOINT must be the provider binary; args are passed
+// through unchanged per the standard probe protocol.
+func NewImageRunner(imageRef string) Executor {
+	return &ExternalRunner{
+		Binary:    "docker",
+		ArgPrefix: []string{"run", "--rm", imageRef},
+	}
+}
+
+// buildFullArgv returns the complete argument list passed to exec.Command:
+// ArgPrefix (if any) followed by the probe protocol args derived from cmd.
+// It is the single authoritative place that constructs the full argv and is
+// extracted so tests can verify the shape without forking a process.
+func (r *ExternalRunner) buildFullArgv(cmd Command) ([]string, error) {
+	args, err := buildArgs(cmd)
+	if err != nil {
+		return nil, err
+	}
+	return append(append([]string(nil), r.ArgPrefix...), args...), nil
+}
+
 // Run implements Executor.
 func (r *ExternalRunner) Run(ctx context.Context, cmd Command) (res Result, err error) {
 	TraceStart(ctx, r.Binary, cmd)
 	defer func() { TraceEnd(ctx, r.Binary, res, err) }()
 
-	args, err := buildArgs(cmd)
+	argv, err := r.buildFullArgv(cmd)
 	if err != nil {
 		return Result{}, err
 	}
@@ -47,7 +80,7 @@ func (r *ExternalRunner) Run(ctx context.Context, cmd Command) (res Result, err 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	c := exec.CommandContext(ctx, r.Binary, args...)
+	c := exec.CommandContext(ctx, r.Binary, argv...)
 	// Put the child in its own process group so we can kill the entire
 	// subtree on timeout. exec.CommandContext only kills the direct child;
 	// real provider runners fork kubectl/aws/etc., which would orphan.

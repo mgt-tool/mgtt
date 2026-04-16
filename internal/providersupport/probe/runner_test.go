@@ -201,6 +201,66 @@ func TestMux_DispatchesViaInterface(t *testing.T) {
 	}
 }
 
+// TestImageRunner_PrependsDockerRunArgs verifies that NewImageRunner builds
+// argv as ["run", "--rm", imageRef, "probe", component, fact, ...].
+// We exercise buildFullArgv directly so no docker daemon is needed.
+func TestImageRunner_PrependsDockerRunArgs(t *testing.T) {
+	imageRef := "ghcr.io/x@sha256:abc"
+	r := NewImageRunner(imageRef).(*ExternalRunner)
+
+	if r.Binary != "docker" {
+		t.Fatalf("want Binary=docker, got %q", r.Binary)
+	}
+
+	argv, err := r.buildFullArgv(Command{
+		Component: "comp",
+		Fact:      "running",
+		Type:      "container",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"run", "--rm", imageRef, "probe", "comp", "running", "--type", "container"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv length mismatch:\n got  %v\n want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv mismatch at [%d]: got %q want %q\nfull argv: %v", i, argv[i], want[i], argv)
+		}
+	}
+}
+
+// TestExternalRunner_NilArgPrefix_BackwardCompat verifies that the original
+// NewExternalRunner path produces no extra prefix — only the probe protocol args.
+func TestExternalRunner_NilArgPrefix_BackwardCompat(t *testing.T) {
+	r := NewExternalRunner("/usr/local/bin/mgtt-provider-k8s").(*ExternalRunner)
+
+	if len(r.ArgPrefix) != 0 {
+		t.Fatalf("expected empty ArgPrefix, got %v", r.ArgPrefix)
+	}
+
+	argv, err := r.buildFullArgv(Command{
+		Component: "web",
+		Fact:      "ready",
+		Type:      "workload",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"probe", "web", "ready", "--type", "workload"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv length mismatch:\n got  %v\n want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv mismatch at [%d]: got %q want %q\nfull argv: %v", i, argv[i], want[i], argv)
+		}
+	}
+}
+
 type executorFunc func(ctx context.Context, cmd Command) (Result, error)
 
 func (f executorFunc) Run(ctx context.Context, cmd Command) (Result, error) {

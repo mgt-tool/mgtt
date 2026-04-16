@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/registry"
@@ -23,6 +25,7 @@ var providerCmd = &cobra.Command{
 var (
 	providerInstallNoCache  bool
 	providerInstallRegistry string
+	providerInstallImage    string
 )
 
 var providerInstallCmd = &cobra.Command{
@@ -36,11 +39,31 @@ Registry resolution:
   --registry file://<path>   Load the registry from a local file (mirrored).
 
 The MGTT_REGISTRY_URL env var sets the same value persistently;
---registry overrides it per-invocation.`,
-	Args: cobra.MinimumNArgs(1),
+--registry overrides it per-invocation.
+
+Image install:
+  --image <ref>              Pull a provider image and register it locally.
+                             The ref MUST include a @sha256: digest.
+                             An optional positional arg overrides the install name.`,
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		w := cmd.OutOrStdout()
+
+		// --image takes full priority; skip all git/local/registry resolution.
+		if providerInstallImage != "" {
+			var nameHint string
+			if len(args) > 0 {
+				nameHint = args[0]
+			}
+			return installFromImage(context.Background(), w, providerInstallImage, nameHint, providersupport.NewDockerCmd())
+		}
+
+		// Without --image, the existing resolution chain requires at least one name.
+		if len(args) == 0 {
+			return fmt.Errorf("requires at least 1 arg(s), only received 0")
+		}
 		for _, name := range args {
-			if err := installProvider(cmd.OutOrStdout(), name); err != nil {
+			if err := installProvider(w, name); err != nil {
 				return fmt.Errorf("provider %q: %w", name, err)
 			}
 		}
@@ -52,8 +75,76 @@ func init() {
 	providerInstallCmd.Flags().BoolVar(&providerInstallNoCache, "no-cache", false, "bypass registry cache")
 	providerInstallCmd.Flags().StringVar(&providerInstallRegistry, "registry", "",
 		"registry URL override (use 'disabled' / 'none' / 'off' to skip registry resolution; or 'file://<path>' for local index)")
+	providerInstallCmd.Flags().StringVar(&providerInstallImage, "image", "",
+		"install provider from a Docker image ref (must include @sha256: digest); optional positional arg overrides install name")
 	providerCmd.AddCommand(providerInstallCmd)
 	rootCmd.AddCommand(providerCmd)
+}
+
+// installFromImage pulls a provider image, extracts /provider.yaml from it,
+// and registers the provider locally without cloning any git source.
+// The ref must include a @sha256: digest (enforced by ValidateImageRef).
+// nameHint, if non-empty, overrides the name from the manifest.
+// docker is the DockerCmd to use; callers pass providersupport.NewDockerCmd() in production.
+func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, docker *providersupport.DockerCmd) error {
+	if err := providersupport.ValidateImageRef(ref); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "→ pulling %s\n", ref)
+	if err := docker.PullImage(ctx, ref); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "→ extracting /provider.yaml\n")
+	manifestBytes, err := docker.ExtractManifest(ctx, ref)
+	if err != nil {
+		return err
+	}
+
+	p, err := providersupport.LoadFromBytes(manifestBytes)
+	if err != nil {
+		return fmt.Errorf("parse provider.yaml from image: %w", err)
+	}
+	if p.Meta.Name == "" {
+		return fmt.Errorf("provider.yaml from image is missing meta.name")
+	}
+
+	name := nameHint
+	if name == "" {
+		name = p.Meta.Name
+	}
+
+	var providersRoot string
+	if mgttHome := os.Getenv("MGTT_HOME"); mgttHome != "" {
+		providersRoot = filepath.Join(mgttHome, "providers")
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("get home dir: %w", err)
+		}
+		providersRoot = filepath.Join(home, ".mgtt", "providers")
+	}
+	destDir := filepath.Join(providersRoot, name)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("create provider dir: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(destDir, "provider.yaml"), manifestBytes, 0o644); err != nil {
+		return fmt.Errorf("write provider.yaml: %w", err)
+	}
+
+	meta := providersupport.InstallMeta{
+		Method:      providersupport.InstallMethodImage,
+		Source:      ref,
+		InstalledAt: time.Now().UTC(),
+		Version:     p.Meta.Version,
+	}
+	if err := providersupport.WriteInstallMeta(destDir, meta); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "✓ installed %s %s (image)\n", name, p.Meta.Version)
+	return nil
 }
 
 // installProvider installs a provider by name, path, or git URL.

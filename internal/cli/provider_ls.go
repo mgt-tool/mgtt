@@ -44,7 +44,7 @@ func renderProviderLs(w io.Writer, providers []*providersupport.Provider) {
 	// Determine column widths.
 	maxName := 0
 	maxVersion := 0
-	maxMethod := len("git") // "git" or "image"
+	maxMethod := len("image") // "git" (3) or "image" (5); "image" is wider
 	for _, p := range providers {
 		if n := len(p.Meta.Name); n > maxName {
 			maxName = n

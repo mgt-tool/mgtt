@@ -117,6 +117,15 @@ auth:
 	if !strings.Contains(imageLine, "image") {
 		t.Errorf("image-provider line should contain 'image'; got:\n%s", imageLine)
 	}
+
+	// Verify column alignment: both lines should have their description text
+	// starting at the same column position.
+	gitDescStart := strings.Index(gitLine, "A git-installed")
+	imageDescStart := strings.Index(imageLine, "An image-installed")
+	if gitDescStart != imageDescStart {
+		t.Errorf("description columns misaligned: git at col %d, image at col %d\ngit:   %s\nimage: %s",
+			gitDescStart, imageDescStart, gitLine, imageLine)
+	}
 }
 
 // TestProviderLs_EmptyList verifies that an empty provider list renders

@@ -41,6 +41,7 @@ nav:
     - How It Works: concepts/how-it-works.md
     - Simulation: concepts/simulation.md
     - Troubleshooting: concepts/troubleshooting.md
+    - Multi-File Models: concepts/multi-file-models.md
   - Writing Providers:
     - Overview: providers/overview.md
     - Vocabulary: providers/vocabulary.md

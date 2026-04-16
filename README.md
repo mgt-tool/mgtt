@@ -80,6 +80,7 @@ mgtt plan                          # troubleshoot a live system
 - [How It Works](./docs/concepts/how-it-works.md) — the constraint engine and dependency graph
 - [Simulation](./docs/concepts/simulation.md) — design-time model validation
 - [Troubleshooting](./docs/concepts/troubleshooting.md) — runtime incident response
+- [Multi-File Models](./docs/concepts/multi-file-models.md) — when one system needs more than one model file (steady-state vs deploy-moment, etc.)
 - [Model Schema](./docs/reference/model-schema.md) — every field in `system.model.yaml`
 - [Scenario Schema](./docs/reference/scenario-schema.md) — every field in scenario files
 - [Type Catalog](./docs/reference/type-catalog.md) — all provider types, facts, and states

@@ -1,6 +1,25 @@
 # `mgtt` — **m**odel **g**uided **t**roubleshooting **t**ool
 ## Specification v{{ MGTT_VERSION }}
 
+## On this page
+
+1. [What `mgtt` Is](#1-what-mgtt-is)
+2. [Core Concepts](#2-core-concepts)
+3. [The Three Artifacts](#3-the-three-artifacts) — model, facts, providers
+4. [The Stdlib](#4-the-stdlib) — primitive types and units
+5. [The Constraint Engine](#5-the-constraint-engine) — how reasoning works
+6. [Model Format](#6-model-format) — `system.model.yaml`
+7. [Fact Store Format](#7-fact-store-format) — observation log
+8. [Provider Format](#8-provider-format) — `provider.yaml` schema
+9. [Complete Provider Example](#9-complete-provider-example)
+10. [Provider Authoring Toolchain](#10-provider-authoring-toolchain)
+11. [Authentication and Probe Execution](#11-authentication-and-probe-execution)
+12. [State Machine](#12-state-machine)
+13. [MCP Service](#13-mcp-service)
+14. [CLI](#14-cli)
+15. [Simulation](#15-simulation)
+16. [Design Principles](#16-design-principles)
+
 ---
 
 ## 1. What `mgtt` Is

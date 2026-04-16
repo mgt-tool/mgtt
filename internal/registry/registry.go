@@ -50,6 +50,7 @@ var ErrRegistryDisabled = errors.New("registry: disabled by configuration")
 // the provider's own provider.yaml.
 type Entry struct {
 	URL         string   `yaml:"url"`
+	Image       string   `yaml:"image,omitempty"`
 	Description string   `yaml:"description"`
 	Tags        []string `yaml:"tags"`
 }

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestFetch_DisabledSentinel(t *testing.T) {
@@ -149,5 +151,42 @@ func TestResolveURL_Priority(t *testing.T) {
 	t.Setenv("MGTT_REGISTRY_URL", "")
 	if got := resolveURL(""); got != DefaultRegistryURL {
 		t.Errorf("default fallback failed, got %q", got)
+	}
+}
+
+func TestEntry_DecodesOptionalImage(t *testing.T) {
+	data := `providers:
+  foo:
+    url: https://github.com/example/foo
+    image: ghcr.io/example/foo@sha256:abc
+    description: test
+`
+	var reg Registry
+	err := yaml.Unmarshal([]byte(data), &reg)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	got := reg.Providers["foo"]
+	if got.URL != "https://github.com/example/foo" {
+		t.Errorf("URL: got %q", got.URL)
+	}
+	if got.Image != "ghcr.io/example/foo@sha256:abc" {
+		t.Errorf("Image: got %q", got.Image)
+	}
+}
+
+func TestEntry_ImageIsOptional(t *testing.T) {
+	data := `providers:
+  foo:
+    url: https://github.com/example/foo
+    description: test
+`
+	var reg Registry
+	err := yaml.Unmarshal([]byte(data), &reg)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if reg.Providers["foo"].Image != "" {
+		t.Errorf("expected empty Image when omitted, got %q", reg.Providers["foo"].Image)
 	}
 }

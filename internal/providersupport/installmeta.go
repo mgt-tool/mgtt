@@ -27,6 +27,9 @@ const installMetaFilename = ".mgtt-install.json"
 type InstallMeta struct {
 	// Method is "git" or "image".
 	Method InstallMethod `json:"method"`
+	// Namespace is the registry namespace the provider was pulled from
+	// (e.g. "mgt-tool"). Empty for legacy git-installed providers.
+	Namespace string `json:"namespace,omitempty"`
 	// Source is the git URL (for git installs) or image ref including digest
 	// (for image installs). For image installs, callers MUST include @sha256:
 	// — the install command rejects bare tags.

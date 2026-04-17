@@ -129,3 +129,5 @@ mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-quickwit:0.2.0@sha2
 ```
 
 ---
+
+<!-- trigger-rebuild: 2026-04-17 provider tags bumped post-manifest.yaml rename -->

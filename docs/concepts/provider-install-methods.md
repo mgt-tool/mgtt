@@ -8,6 +8,7 @@ Two ways to install a provider — git clone and build, or pull a Docker image. 
 - [Comparison: when to use which](#comparison-when-to-use-which)
 - [Digest pinning: why it matters](#digest-pinning-why-it-matters)
 - [What gets stored locally](#what-gets-stored-locally)
+- [How image-installed providers reach the host — capabilities](#how-image-installed-providers-reach-the-host-capabilities)
 - [Switching install method](#switching-install-method-for-the-same-provider)
 - [Registry entries with both](#registry-entries-can-declare-both)
 
@@ -126,18 +127,99 @@ $ mgtt provider list
 
 ---
 
-## What the image gets at runtime
+## How image-installed providers reach the host — capabilities
 
-`mgtt plan` invokes image-installed providers with `docker run --rm`. The container doesn't inherit your shell environment by default — mgtt injects bind mounts and env forwards based on **capabilities** the provider declared in its `provider.yaml`:
+### The problem
+
+A git-installed provider is a native process. It inherits the operator's entire environment for free: `KUBECONFIG` is set, `~/.aws/credentials` is readable, `$PWD` is the Terraform workdir, `/var/run/docker.sock` is right there.
+
+An image-installed provider is a container. `docker run --rm <image>` inherits **none** of that by default. A Kubernetes provider launched this way can't reach the cluster; a Terraform provider can't see its state directory; a Docker provider can't talk to the daemon. The image ships with `kubectl` / `terraform` / `docker` on `PATH`, but the *context* those binaries need is on the host side of the boundary.
+
+### The rejected fixes
+
+Two obvious approaches — both wrong:
+
+- **Inherit everything.** `docker run --network host -v $HOME:$HOME:ro -e ...`. Simple and it works, but you've just mounted `~/.ssh/`, `~/.gnupg/`, and every token you own into a container whose binary was pulled from a third-party registry. Digest pinning is not a strong enough trust anchor to justify that.
+- **Per-provider `env: [...] mounts: [...]` schema.** Precise but verbose; every provider author re-types the same `~/.kube:/root/.kube:ro` incantations; drift between `mgtt-provider-kubernetes` and `mgtt-provider-quickwit`'s YAML re-introduces bugs that should be fixed in one place.
+
+### The design — named capabilities
+
+Providers declare **semantic labels** in `provider.yaml`:
 
 ```yaml
 image:
   needs: [kubectl, network]
 ```
 
-Each label expands into the matching `docker run` flags at probe time. Built-in labels cover the common backends (`kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`, `network`). Operators override the defaults or add custom labels via `$MGTT_HOME/capabilities.yaml`; `MGTT_IMAGE_CAPS_DENY=…` refuses specific capabilities for locked-down environments.
+mgtt owns the vocabulary — the mapping from label to `docker run` flags:
 
-See the [Image Capabilities reference](../reference/image-capabilities.md) for the full list and the override mechanics.
+| Label | Expands to |
+|---|---|
+| `kubectl` | `-v $HOME/.kube:/root/.kube:ro -e KUBECONFIG=…` |
+| `aws` | `-v $HOME/.aws:/root/.aws:ro -e AWS_PROFILE -e AWS_ACCESS_KEY_ID …` |
+| `docker` | `-v /var/run/docker.sock:/var/run/docker.sock` |
+| `terraform` | `-v $PWD:/workspace -w /workspace -e TF_VAR_* …` |
+| `network` | `--network host` |
+| `gcloud` | `-v $HOME/.config/gcloud:/root/.config/gcloud:ro …` |
+| `azure` | `-v $HOME/.azure:/root/.azure:ro …` |
+
+This is the same pattern snap (`plugs: [docker-support]`) and flatpak (`--socket=docker`) use: the application names a capability, the packaging system maps it to syscalls. Three properties fall out that the alternatives don't get:
+
+1. **Scannable.** `needs: [docker]` is one word an operator reads in a second. A list of `-v`/`-e` flags is not. Open `provider.yaml` on GitHub, see the caps at the top.
+2. **Consistent.** Every kubectl-wrapping provider forwards the same files. No drift between provider authors re-implementing the same mount string.
+3. **Bounded.** The socket mount only happens when `docker` is declared. A provider can't silently mount your `~/.ssh/`.
+
+### What the operator sees
+
+Every surface that lists providers now shows capabilities:
+
+- `provider.yaml` — `image:` block at the top, right after `meta:`.
+- [`docs/registry.yaml`](../reference/registry.md) — `capabilities: [...]` per registry entry.
+- `mgtt provider install --image …` prints `→ capabilities: kubectl, network` before the install completes.
+- `mgtt provider ls` shows a bracketed cap column per installed provider.
+
+### Extending the vocabulary
+
+The built-in set is deliberately small — the seven caps above cover every provider mgtt ships with. Operators with non-default paths, air-gapped setups, or internal providers extend it locally without a mgtt change.
+
+**Override a built-in.** Drop a file at `$MGTT_HOME/capabilities.yaml`:
+
+```yaml
+capabilities:
+  # Non-default kubeconfig location on our bastion hosts
+  kubectl:
+    - "-v"
+    - "/etc/kubernetes/admin.conf:/root/.kube/config:ro"
+    - "-e"
+    - "KUBECONFIG=/root/.kube/config"
+```
+
+**Define a custom cap.** Same file:
+
+```yaml
+capabilities:
+  tibco:
+    - "-v"
+    - "/etc/tibco/cert.pem:/root/cert.pem:ro"
+    - "-e"
+    - "TIBCO_BROKER_URL"
+```
+
+A provider that declares `needs: [tibco]` will now resolve against the operator's file. Precedence (highest wins): `MGTT_IMAGE_CAP_<NAME>` env var → operator file → built-in.
+
+**Refuse a cap.** For locked-down environments:
+
+```
+MGTT_IMAGE_CAPS_DENY=docker,aws
+```
+
+mgtt skips those caps at probe time regardless of what the provider declared; the probe runs without them and fails with an honest error. This is the right knob for a CI where you don't want `mgtt plan` to wield the Docker socket even if a provider asks.
+
+### When does a cap become a built-in?
+
+Operator-local definitions are perfect for one-off infrastructure. But if a capability generalizes — a new cloud, a new observability backend, a new secret store that many providers will want — it's worth upstreaming into mgtt's built-in map so every provider author picks it up for free. The criterion is usage, not novelty: two providers needing the same forward is enough to justify a built-in.
+
+See the [Image Capabilities reference](../reference/image-capabilities.md) for the full vocabulary, the YAML schema, env-var shortcuts, and failure modes.
 
 ---
 

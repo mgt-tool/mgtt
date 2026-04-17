@@ -25,7 +25,7 @@ providers:
       - messaging
       - storage
   docker:
-    url: https://github.com/sajonaro/mgtt-provider-docker
+    url: https://github.com/mgt-tool/mgtt-provider-docker
     description: Docker containers via docker inspect
     capabilities: [docker]
     # network omitted — defaults to bridge

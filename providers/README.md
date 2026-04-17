@@ -593,7 +593,7 @@ mgtt plan --component myserver
 Providers live in their own repositories, not under this directory. Study these for a complete working example:
 
 - [mgtt-provider-kubernetes](https://github.com/mgt-tool/mgtt-provider-kubernetes) — 37-type vocabulary (multi-file `types/`), Go binary using kubectl
-- [mgtt-provider-docker](https://github.com/sajonaro/mgtt-provider-docker) — Docker provider
+- [mgtt-provider-docker](https://github.com/mgt-tool/mgtt-provider-docker) — Docker provider
 
 Each repo shows `provider.yaml` vocabulary, `main.go` runner, and `hooks/install.sh`.
 

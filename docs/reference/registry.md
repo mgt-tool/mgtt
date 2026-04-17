@@ -57,15 +57,15 @@ mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-aws:0.2.0@sha256:<d
 
 Docker containers via docker inspect.
 
-- **FQN**: `sajonaro/docker@0.2.0`
+- **FQN**: `mgt-tool/docker@0.2.0`
 - **Capabilities**: `docker` · **Network**: — (default bridge)
 - **Tags**: containers
 
 ```bash
 mgtt provider install docker
-mgtt provider install sajonaro/docker@0.2.0
-mgtt provider install https://github.com/sajonaro/mgtt-provider-docker
-mgtt provider install --image ghcr.io/sajonaro/mgtt-provider-docker:0.2.0@sha256:<digest>
+mgtt provider install mgt-tool/docker@0.2.0
+mgtt provider install https://github.com/mgt-tool/mgtt-provider-docker
+mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-docker:0.2.0@sha256:<digest>
 ```
 
 ---

@@ -295,16 +295,20 @@ def fetch_image_digest(image_ref: str, tag: str) -> str:
     owner_repo = path.replace("/", "-")
 
     def _fetch() -> str:
-        # GHCR requires a bearer token on /v2/ even for public packages,
-        # and the workflow's GITHUB_TOKEN is scoped to its own repo — it
-        # can't pull packages published by other repos' workflows (403).
-        # Use the token-exchange endpoint to mint an anonymous read-only
-        # token for the specific package; this is what `docker pull`
-        # does under the hood for public images.
+        # GHCR requires a bearer token on /v2/ even for public packages.
+        # Using GITHUB_TOKEN directly as Bearer only works for packages
+        # owned by the workflow's own repo (cross-repo is 403). The
+        # token-exchange endpoint, however, accepts GITHUB_TOKEN via
+        # Basic auth (NOT Bearer) and mints a scoped, package-specific
+        # read-only bearer for any publicly visible package.
         token_url = (
             f"{_ghcr_base()}/token?service=ghcr.io&scope=repository:{path}:pull"
         )
-        with urllib.request.urlopen(token_url, timeout=15) as tresp:
+        treq = urllib.request.Request(token_url)
+        if gh := os.environ.get("GITHUB_TOKEN"):
+            basic = base64.b64encode(f"x-access-token:{gh}".encode()).decode()
+            treq.add_header("Authorization", f"Basic {basic}")
+        with urllib.request.urlopen(treq, timeout=15) as tresp:
             token = json.loads(tresp.read()).get("token", "")
         if not token:
             raise ValueError(f"{image_ref}: GHCR token endpoint returned empty token")

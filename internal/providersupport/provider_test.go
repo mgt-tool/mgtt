@@ -551,3 +551,43 @@ func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 		t.Fatal("missing type workload — inline types not loaded")
 	}
 }
+
+func TestLoadFromBytes_ImageNeeds(t *testing.T) {
+	y := []byte(`
+meta:
+  name: k
+  version: 0.1.0
+  command: /bin/k
+auth:
+  strategy: none
+  access: {probes: none, writes: none}
+image:
+  needs: [kubectl, network]
+`)
+	p, err := LoadFromBytes(y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Image.Needs; len(got) != 2 || got[0] != "kubectl" || got[1] != "network" {
+		t.Errorf("want [kubectl network], got %v", got)
+	}
+}
+
+func TestLoadFromBytes_ImageNeedsOmittedIsNil(t *testing.T) {
+	y := []byte(`
+meta:
+  name: k
+  version: 0.1.0
+  command: /bin/k
+auth:
+  strategy: none
+  access: {probes: none, writes: none}
+`)
+	p, err := LoadFromBytes(y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Image.Needs != nil {
+		t.Errorf("missing image: block must parse as nil slice, got %v", p.Image.Needs)
+	}
+}

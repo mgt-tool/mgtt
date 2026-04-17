@@ -17,7 +17,12 @@ type rawProvider struct {
 	Variables map[string]rawVar `yaml:"variables"`
 	Auth      rawAuth           `yaml:"auth"`
 	Hooks     rawHooks          `yaml:"hooks"`
+	Image     rawImage          `yaml:"image"`
 	// Types are parsed separately to preserve declaration order.
+}
+
+type rawImage struct {
+	Needs []string `yaml:"needs"`
 }
 
 type rawMeta struct {
@@ -117,6 +122,9 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 				Probes: raw.Auth.Access.Probes,
 				Writes: raw.Auth.Access.Writes,
 			},
+		},
+		Image: ImageSpec{
+			Needs: raw.Image.Needs,
 		},
 	}
 

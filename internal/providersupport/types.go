@@ -12,6 +12,16 @@ type Provider struct {
 	Types     map[string]*Type
 	Variables map[string]Variable
 	Auth      AuthSpec
+	Image     ImageSpec
+}
+
+// ImageSpec carries image-install runtime metadata. Populated from the
+// optional `image:` block in provider.yaml.
+type ImageSpec struct {
+	// Needs lists named capabilities the provider wants the image runner
+	// to inject as docker-run flags (e.g., "kubectl", "docker", "network").
+	// Expansion lives in internal/providersupport/probe/capabilities.go.
+	Needs []string
 }
 
 type ProviderMeta struct {

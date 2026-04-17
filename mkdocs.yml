@@ -8,6 +8,7 @@ docs_dir: docs
 # from the repo's VERSION file at build time — no manual sync.
 hooks:
   - docs/_hooks/version_substitute.py
+  - docs/_hooks/registry_generator.py
 
 theme:
   name: material

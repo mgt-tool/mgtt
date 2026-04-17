@@ -1,3 +1,7 @@
 providers:
-  tempo:
-    url: https://github.com/mgt-tool/mgtt-provider-tempo
+  kubernetes: {url: https://github.com/mgt-tool/mgtt-provider-kubernetes}
+  aws:        {url: https://github.com/mgt-tool/mgtt-provider-aws}
+  docker:     {url: https://github.com/mgt-tool/mgtt-provider-docker}
+  terraform:  {url: https://github.com/mgt-tool/mgtt-provider-terraform}
+  tempo:      {url: https://github.com/mgt-tool/mgtt-provider-tempo}
+  quickwit:   {url: https://github.com/mgt-tool/mgtt-provider-quickwit}

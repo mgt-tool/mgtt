@@ -79,13 +79,15 @@ The static check is safe in any CI. The `--live` check requires a live backend a
 
 ## Read-only contract
 
-`provider.yaml` declares the access surface:
+`provider.yaml` declares the write posture at the top level:
 
 ```yaml
-auth:
-  access:
-    probes: <human-readable description>
-    writes: none           # REQUIRED
+read_only: true   # default — pure reader. Omit entirely in most providers.
+# or:
+read_only: false
+writes_note: |
+  Describe what the provider writes, when, and why. `mgtt provider
+  install` prints this note so operators consent knowingly.
 ```
 
-`writes: none` is a contract the provider makes with operators. Core cannot enforce it directly — the operator is responsible for binding credentials that match the declaration (kubernetes RBAC, cloud IAM, daemon-socket permissions, scoped tokens, POSIX permissions, or "no credentials needed"). Providers should ship a `CREDENTIALS.md` next to their `provider.yaml` describing the least-privilege provisioning for their backend; the format is provider-specific because authz models vary completely across backends.
+`read_only: true` is a contract the provider makes with operators. Core cannot enforce it directly — the operator is responsible for binding credentials that match the declaration (kubernetes RBAC, cloud IAM, daemon-socket permissions, scoped tokens, POSIX permissions, or "no credentials needed"). Providers should document the least-privilege credential provisioning for their backend in their README, which is narrative enough to cover the authz model of any particular backend — no one-size structured field fits kubectl RBAC + AWS IAM + Tempo bearer tokens simultaneously.

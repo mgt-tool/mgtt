@@ -220,12 +220,10 @@ meta:
 hooks:
   install: ""
 
-auth:
-  strategy: environment
-  reads_from: [AWS_PROFILE, ~/.aws/credentials]
-  access:
-    probes: AWS API read-only
-    writes: none
+# read_only defaults to true; shell-fallback vocabulary-only providers
+# are inherently read-only. Document the AWS credential chain this
+# provider uses in a README rather than in provider.yaml — that's
+# narrative that doesn't fit a structured field.
 
 types:
   elasticache_cluster:

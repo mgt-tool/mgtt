@@ -1012,40 +1012,32 @@ provider       ->   declares auth requirements, executes probes
 environment    ->   owns credentials (env vars, files, instance roles)
 ```
 
-### 11.2 Provider Auth Declaration
+### 11.2 Provider Write Posture + Capability Needs
+
+Two top-level fields on `provider.yaml` tell mgtt what a provider requires at probe time and what (if anything) it writes. Both are provider-level properties — they're declared the same way regardless of install method.
 
 ```yaml
 # mgtt-provider-kubernetes/provider.yaml
-auth:
-  strategy:   environment
-  reads_from:
-    - KUBECONFIG
-    - ~/.kube/config
-    - in-cluster service account
-  access:
-    probes:  kubectl read-only
-    writes:  none
-  description: >
-    uses the current kubectl context.
-    configure with kubectl config use-context before mgtt.
+needs:    [kubectl]         # host-side capabilities the provider wants
+network:  host              # docker-run network mode for image installs
+read_only: true             # default; omit the field in pure-reader providers
 ```
 
 ```yaml
-# mgtt-provider-aws/provider.yaml
-auth:
-  strategy:   environment
-  reads_from:
-    - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
-    - AWS_PROFILE
-    - ~/.aws/credentials
-    - EC2 instance profile / ECS task role / IRSA
-  access:
-    probes:  AWS API read-only
-    writes:  none
-  description: >
-    uses the standard AWS credential chain.
-    configure as you would for the AWS CLI.
+# mgtt-provider-terraform/provider.yaml
+needs:    [terraform, aws]
+network:  host
+read_only: false
+writes_note: |
+  The `drifted` fact runs `terraform plan` which refreshes state —
+  a write to the state backend. Other facts are pure reads. Use a
+  credential scoped so the provider literally cannot write, and omit
+  the `drifted` fact, for hard read-only.
 ```
+
+Credential-chain details (which env vars, which config-file paths the provider actually reads) live in each provider's README, where they can be narrative and accurate — not in a structured field that tools must pretend to parse.
+
+See [Provider Capabilities](./reference/image-capabilities.md) for the `needs:` vocabulary, the operator-override file, and the `MGTT_IMAGE_CAPS_DENY` opt-out; see [Using Providers](./concepts/using-providers.md) for how mgtt composes these declarations into the `docker run` line for image-installed providers.
 
 ### 11.3 Probe Execution Modes
 

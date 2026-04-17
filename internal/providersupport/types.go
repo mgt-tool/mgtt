@@ -11,7 +11,20 @@ type Provider struct {
 	Hooks     ProviderHooks
 	Types     map[string]*Type
 	Variables map[string]Variable
-	Auth      AuthSpec
+
+	// ReadOnly is the provider's declared write posture.
+	//
+	// true  — the provider only reads; no side effects. This is the
+	//         default when `read_only:` is absent from provider.yaml.
+	// false — the provider has side effects; WritesNote must describe them.
+	//         `mgtt provider install` prints the note so the operator
+	//         consents knowingly. Validation rejects `read_only: false`
+	//         without an accompanying WritesNote.
+	ReadOnly bool
+
+	// WritesNote explains the side effect when ReadOnly is false. Ignored
+	// when ReadOnly is true. Free-form markdown — operators read it.
+	WritesNote string
 
 	// Needs lists named capabilities the provider requires at probe time —
 	// each label names a host-side package, credential chain, or socket
@@ -93,16 +106,6 @@ type Variable struct {
 	Description string
 	Required    bool
 	Default     string
-}
-
-type AuthSpec struct {
-	Strategy string
-	Access   AuthAccess
-}
-
-type AuthAccess struct {
-	Probes string
-	Writes string
 }
 
 func ptr(f float64) *float64 { return &f }

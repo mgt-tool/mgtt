@@ -13,12 +13,13 @@ import (
 )
 
 type rawProvider struct {
-	Meta      rawMeta           `yaml:"meta"`
-	Variables map[string]rawVar `yaml:"variables"`
-	Auth      rawAuth           `yaml:"auth"`
-	Hooks     rawHooks          `yaml:"hooks"`
-	Needs     []string          `yaml:"needs"`
-	Network   string            `yaml:"network"`
+	Meta       rawMeta           `yaml:"meta"`
+	Variables  map[string]rawVar `yaml:"variables"`
+	Hooks      rawHooks          `yaml:"hooks"`
+	Needs      []string          `yaml:"needs"`
+	Network    string            `yaml:"network"`
+	ReadOnly   *bool             `yaml:"read_only"`
+	WritesNote string            `yaml:"writes_note"`
 	// Types are parsed separately to preserve declaration order.
 }
 
@@ -40,14 +41,6 @@ type rawVar struct {
 	Description string `yaml:"description"`
 	Required    bool   `yaml:"required"`
 	Default     string `yaml:"default"`
-}
-
-type rawAuth struct {
-	Strategy string `yaml:"strategy"`
-	Access   struct {
-		Probes string `yaml:"probes"`
-		Writes string `yaml:"writes"`
-	} `yaml:"access"`
 }
 
 type rawFact struct {
@@ -111,17 +104,15 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 			Install:   raw.Hooks.Install,
 			Uninstall: raw.Hooks.Uninstall,
 		},
-		Types:     make(map[string]*Type),
-		Variables: make(map[string]Variable),
-		Auth: AuthSpec{
-			Strategy: raw.Auth.Strategy,
-			Access: AuthAccess{
-				Probes: raw.Auth.Access.Probes,
-				Writes: raw.Auth.Access.Writes,
-			},
-		},
-		Needs:   raw.Needs,
-		Network: raw.Network,
+		Types:      make(map[string]*Type),
+		Variables:  make(map[string]Variable),
+		Needs:      raw.Needs,
+		Network:    raw.Network,
+		ReadOnly:   true, // default; overridden below if explicitly set
+		WritesNote: raw.WritesNote,
+	}
+	if raw.ReadOnly != nil {
+		p.ReadOnly = *raw.ReadOnly
 	}
 
 	for k, v := range raw.Variables {
@@ -163,9 +154,9 @@ func LoadFromFile(path string) (*Provider, error) {
 }
 
 // LoadFromDir loads a provider from a directory. It reads provider.yaml for
-// meta/auth/variables/hooks. If provider.yaml contains an inline types: key,
-// those are loaded (backward-compatible). Otherwise, it scans a types/
-// subdirectory and loads each .yaml file as a named type.
+// meta/needs/network/read_only/hooks/variables. If provider.yaml contains an
+// inline types: key, those are loaded (backward-compatible). Otherwise, it
+// scans a types/ subdirectory and loads each .yaml file as a named type.
 func LoadFromDir(dir string) (*Provider, error) {
 	providerPath := filepath.Join(dir, "provider.yaml")
 	data, err := os.ReadFile(providerPath)

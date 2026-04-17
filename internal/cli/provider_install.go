@@ -137,6 +137,9 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 	if p.Network != "" && p.Network != "bridge" {
 		fmt.Fprintf(w, "→ network: %s\n", p.Network)
 	}
+	if !p.ReadOnly {
+		fmt.Fprintf(w, "⚠ writes: %s\n", strings.TrimSpace(p.WritesNote))
+	}
 
 	providersRoot, err := providersupport.InstallRoot()
 	if err != nil {
@@ -304,8 +307,12 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		fmt.Fprintf(w, "⚠ could not write install metadata: %v\n", err)
 	}
 
-	fmt.Fprintf(w, "  %s %-12s  v%s  auth: %s  access: %s\n",
-		checkmark(true), p.Meta.Name, p.Meta.Version, p.Auth.Strategy, p.Auth.Access.Probes)
+	posture := "read-only"
+	if !p.ReadOnly {
+		posture = "writes"
+	}
+	fmt.Fprintf(w, "  %s %-12s  v%s  %s\n",
+		checkmark(true), p.Meta.Name, p.Meta.Version, posture)
 	return nil
 }
 

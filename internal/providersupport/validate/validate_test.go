@@ -23,11 +23,6 @@ meta:
   # Non-absolute path — the disk-existence check skips this form because
   # it's an install-time template. Absolute paths get checked.
   command: "bin/x"
-auth:
-  strategy: environment
-  access:
-    probes: read
-    writes: none
 types:
   thing:
     facts:
@@ -54,25 +49,42 @@ func TestStatic_HappyPath(t *testing.T) {
 	}
 }
 
-func TestStatic_FailsWhenWritesAbsent(t *testing.T) {
-	src := strings.Replace(minimalOK, "writes: none", "", 1)
-	r := Static(loadYAML(t, src))
-	if r.OK() {
-		t.Fatal("missing writes should fail")
+func TestStatic_DefaultsToReadOnly(t *testing.T) {
+	// Absent read_only means read-only. No warnings, no failures about writes.
+	r := Static(loadYAML(t, minimalOK))
+	if !r.OK() {
+		t.Fatalf("happy path should pass: %+v", r)
 	}
-	if !containsAny(r.Failures, "writes is not declared") {
-		t.Fatalf("failure should explain writes: %+v", r.Failures)
+	for _, wr := range r.Warnings {
+		if strings.Contains(wr, "read_only") || strings.Contains(wr, "writes") {
+			t.Fatalf("absent read_only should not warn; got %q", wr)
+		}
 	}
 }
 
-func TestStatic_WarnsWhenWritesNotNone(t *testing.T) {
-	src := strings.Replace(minimalOK, "writes: none", "writes: limited", 1)
+func TestStatic_FailsReadOnlyFalseWithoutWritesNote(t *testing.T) {
+	src := strings.Replace(minimalOK,
+		`command: "bin/x"`,
+		`command: "bin/x"`+"\nread_only: false", 1)
+	r := Static(loadYAML(t, src))
+	if r.OK() {
+		t.Fatal("read_only: false without writes_note must fail")
+	}
+	if !containsAny(r.Failures, "writes_note") {
+		t.Fatalf("failure must mention writes_note; got %+v", r.Failures)
+	}
+}
+
+func TestStatic_WarnsReadOnlyFalseWithWritesNote(t *testing.T) {
+	src := strings.Replace(minimalOK,
+		`command: "bin/x"`,
+		`command: "bin/x"`+"\nread_only: false\nwrites_note: \"touches state file on plan\"", 1)
 	r := Static(loadYAML(t, src))
 	if !r.OK() {
-		t.Fatalf("non-none writes should warn, not fail: %+v", r)
+		t.Fatalf("read_only: false with writes_note should warn, not fail: %+v", r)
 	}
-	if !containsAny(r.Warnings, "writes=") {
-		t.Fatalf("expected warning about writes: %+v", r.Warnings)
+	if !containsAny(r.Warnings, "read_only: false") {
+		t.Fatalf("expected warning about non-read-only posture: %+v", r.Warnings)
 	}
 }
 

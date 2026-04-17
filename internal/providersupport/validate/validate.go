@@ -14,6 +14,7 @@ package validate
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
@@ -44,16 +45,17 @@ func Static(p *providersupport.Provider) Report {
 		r.Failures = append(r.Failures, "meta.command is empty")
 	}
 
-	switch p.Auth.Access.Writes {
-	case "":
-		r.Failures = append(r.Failures,
-			"auth.access.writes is not declared — must be \"none\" or an explicit scope")
-	case "none":
-		// good — declared read-only
-	default:
-		r.Warnings = append(r.Warnings, fmt.Sprintf(
-			"auth.access.writes=%q — operators must confirm credentials match this scope",
-			p.Auth.Access.Writes))
+	// Write-posture contract: read_only defaults to true. When a provider
+	// declares read_only: false, writes_note must describe the side effect
+	// so `mgtt provider install` can surface it for operator consent.
+	if !p.ReadOnly {
+		if strings.TrimSpace(p.WritesNote) == "" {
+			r.Failures = append(r.Failures,
+				"read_only: false requires writes_note: describing the side effect")
+		} else {
+			r.Warnings = append(r.Warnings,
+				"read_only: false — operators must confirm credentials match the declared writes")
+		}
 	}
 
 	if err := p.CheckCompatible(); err != nil {

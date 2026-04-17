@@ -5,7 +5,7 @@ The vocabulary (`provider.yaml`) tells mgtt's constraint engine what your techno
 ## On this page
 
 - [Full schema](#full-schema)
-- [Section reference](#section-reference) — meta, needs, network, compatibility, hooks, variables, auth, types, facts, states, failure_modes
+- [Section reference](#section-reference) — meta, needs, network, compatibility, hooks, read_only, writes_note, variables, types, facts, states, failure_modes
 - [Validate your vocabulary](#validate-your-vocabulary)
 - [Next steps](#next-steps)
 
@@ -39,14 +39,12 @@ hooks:
   install: hooks/install.sh
   uninstall: hooks/uninstall.sh
 
-auth:
-  strategy: environment
-  reads_from:
-    - MY_TOOL_CONFIG
-    - ~/.my-tool/config
-  access:
-    probes: read-only
-    writes: none
+# read_only defaults to true; omit when you're read-only. Set to false
+# when the provider has side effects, and describe them in writes_note.
+#
+# read_only: false
+# writes_note: |
+#   The `drifted` fact runs `terraform plan` which refreshes state.
 
 variables:
   namespace:
@@ -173,16 +171,38 @@ Omit the block for providers with no backend-version sensitivity (e.g. `mgtt-pro
 | `install` | no | Path to a script run during `mgtt provider install`. Typically builds the binary from source (`go build -o bin/…`). Image installs skip hooks entirely. See [Install Hooks](hooks.md). |
 | `uninstall` | no | Path to a script run during `mgtt provider uninstall <name>` before the provider directory is removed. Cleans build artifacts, deregisters credentials, etc. If the script fails, the directory is still removed — uninstall must always succeed. |
 
-### `auth`
+### `read_only` and `writes_note`
 
-Documents what credentials the provider needs. mgtt never touches credentials — this is for the human (or AI) reading the provider definition, and for `mgtt provider validate` to surface the access posture.
+The provider's **write posture**. Two fields; both optional.
 
-| Field | Description |
-|-------|-------------|
-| `strategy` | How auth works: `environment`, `config-file`, `token`, `none`, etc. |
-| `reads_from` | List of environment variables or config-file paths the provider inspects. Treat as documentation, not enforcement. |
-| `access.probes` | What probing requires (e.g., `kubectl read-only`, `AWS API read-only`, `tempo HTTP read`). |
-| `access.writes` | What write operations require. `none` for pure-read providers. Non-`none` triggers a yellow WARN during validation — operators must confirm the credential scope matches. |
+| Field | Default | Description |
+|-------|---------|-------------|
+| `read_only` | `true` | Boolean. Declares whether the provider has any side effect. `true` = pure read; `false` = the provider writes something somewhere. Operators set credential scope accordingly. |
+| `writes_note` | — | Markdown prose describing what the provider writes, when `read_only` is `false`. Required whenever `read_only: false` is set. Printed during `mgtt provider install` so the operator consents knowingly. |
+
+Example — the default read-only case (omit both fields):
+
+```yaml
+meta: {…}
+needs: [aws]
+# no read_only: read-only is assumed
+```
+
+Example — a provider with side effects (Terraform's `drifted` fact refreshes state):
+
+```yaml
+read_only: false
+writes_note: |
+  The `drifted` fact runs `terraform plan` which refreshes state — a
+  write to the state backend. Other facts are pure reads. Operators
+  who need strict read-only should bind a credential that cannot
+  write to the state backend and omit the `drifted` fact from their
+  model.
+```
+
+`mgtt provider validate` fails if `read_only: false` is declared without a `writes_note`, and emits a WARN at install time when non-default so the operator can audit.
+
+Everything else about credentials (which env vars get read, which config file paths get touched) lives in the provider's README where it can be narrative and accurate — not in a structured field that tools must pretend to understand.
 
 ### `variables`
 

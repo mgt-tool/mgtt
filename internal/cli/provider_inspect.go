@@ -60,8 +60,20 @@ func renderProviderOverview(w io.Writer, p *providersupport.Provider) {
 	if len(p.Meta.Tags) > 0 {
 		fmt.Fprintf(w, "  tags:        %s\n", strings.Join(p.Meta.Tags, ", "))
 	}
-	fmt.Fprintf(w, "  auth:        %s\n", p.Auth.Strategy)
-	fmt.Fprintf(w, "  access:      %s\n", p.Auth.Access.Probes)
+	posture := "read-only"
+	if !p.ReadOnly {
+		posture = "writes"
+	}
+	fmt.Fprintf(w, "  posture:     %s\n", posture)
+	if !p.ReadOnly && strings.TrimSpace(p.WritesNote) != "" {
+		fmt.Fprintf(w, "  writes-note: %s\n", firstLine(p.WritesNote))
+	}
+	if len(p.Needs) > 0 {
+		fmt.Fprintf(w, "  needs:       %s\n", strings.Join(p.Needs, ", "))
+	}
+	if p.Network != "" && p.Network != "bridge" {
+		fmt.Fprintf(w, "  network:     %s\n", p.Network)
+	}
 	fmt.Fprintln(w)
 
 	// Sorted type names.
@@ -157,4 +169,16 @@ func renderTypeDetail(w io.Writer, p *providersupport.Provider, t *providersuppo
 			fmt.Fprintf(w, "    %-20s  can_cause: %s\n", state, strings.Join(causes, ", "))
 		}
 	}
+}
+
+// firstLine returns the first non-blank line of s, trimmed. Used so a
+// multi-line writes_note renders as one line in the summary view.
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

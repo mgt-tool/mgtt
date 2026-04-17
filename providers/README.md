@@ -65,14 +65,8 @@ meta:
 hooks:
   install: hooks/install.sh
 
-auth:
-  strategy: environment
-  reads_from:
-    - MY_TOOL_CONFIG
-    - ~/.my-tool/config
-  access:
-    probes: read-only
-    writes: none
+# read_only defaults to true — omit when your provider is a pure reader.
+# Set to false and describe the side effect in writes_note when it isn't.
 
 variables:
   namespace:
@@ -158,7 +152,7 @@ prototyping before investing in a compiled binary.
 
 **`variables`** — parameters the model author can set in `meta.vars`. Substituted into probe commands as `{variable_name}`.
 
-**`auth`** — documents what credentials the provider needs. mgtt never touches credentials; this is for the human reading the provider definition.
+**`read_only` / `writes_note`** — the provider's write posture. `read_only: true` (default) means pure reads. Set to `false` and describe the side effect in `writes_note` when the provider touches anything — state files, webhooks, credential stores. `mgtt provider install` prints the note so operators consent knowingly. Credentials themselves (which env vars, which config files) belong in the provider's README, not here — they're narrative, not structured.
 
 ### State Ordering Matters
 

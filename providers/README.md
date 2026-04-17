@@ -152,7 +152,7 @@ prototyping before investing in a compiled binary.
 
 **`variables`** — parameters the model author can set in `meta.vars`. Substituted into probe commands as `{variable_name}`.
 
-**`read_only` / `writes_note`** — the provider's write posture. `read_only: true` (default) means pure reads. Set to `false` and describe the side effect in `writes_note` when the provider touches anything — state files, webhooks, credential stores. `mgtt provider install` prints the note so operators consent knowingly. Credentials themselves (which env vars, which config files) belong in the provider's README, not here — they're narrative, not structured.
+**`read_only` / `writes_note`** — write posture. `read_only: true` (default) = pure reader; omit the field. `read_only: false` requires a `writes_note:` string; installed providers print that note at install time. Document which env vars / config paths your provider reads in its README.
 
 ### State Ordering Matters
 
@@ -450,18 +450,15 @@ Publish to `ghcr.io` (or any registry) and advertise the digest in your README a
 
 ### Declaring capabilities
 
-Providers that need host context at probe time declare **capabilities** at the top level of `provider.yaml`:
-
 ```yaml
 needs: [kubectl, aws]
 network: host
 ```
 
-Top-level because the requirement ("this provider needs kubectl and cluster network") is a property of the provider itself. Git installs satisfy needs by inheriting the operator's shell; image installs satisfy them via `docker run` bind mounts and env forwards that mgtt wires from the capability vocabulary. The built-in set covers `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`; operators override built-ins or define custom labels via `$MGTT_HOME/capabilities.yaml`. See [Provider Capabilities](../docs/reference/image-capabilities.md) for the full reference.
+- `needs:` — built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`. Operators can override or add labels via `$MGTT_HOME/capabilities.yaml`.
+- `network:` — `bridge` (default), `host`, or `none`. Use `host` when the probe needs in-cluster DNS or host-local services.
 
-`network:` is a separate field (not a capability label) because it names a runtime isolation mode, not a host resource. Valid values: `bridge` (default), `host`, `none`. Anything that needs in-cluster DNS (`*.svc`) or host-local services declares `network: host`; external-HTTPS-only providers can omit it.
-
-Shell-fallback providers (no `meta.command`) must omit both `needs:` and `network:` — there's no binary to attach the forwards to.
+Shell-fallback providers (no `meta.command`) must omit both fields. See [Provider Capabilities](../docs/reference/image-capabilities.md) for the full vocabulary.
 
 ### Registry Entry with Image
 

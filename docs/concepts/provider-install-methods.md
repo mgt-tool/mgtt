@@ -6,9 +6,9 @@ Two ways to install a provider — git clone and build, or pull a Docker image. 
 
 - [Show me](#show-me) — three concrete examples, side by side
 - [Comparison: when to use which](#comparison-when-to-use-which)
-- [Digest pinning: why it matters](#digest-pinning-why-it-matters)
+- [Digest pinning](#digest-pinning)
 - [What gets stored locally](#what-gets-stored-locally)
-- [How image-installed providers reach the host — capabilities](#how-image-installed-providers-reach-the-host-capabilities)
+- [What the image gets at runtime](#what-the-image-gets-at-runtime)
 - [Switching install method](#switching-install-method-for-the-same-provider)
 - [Registry entries with both](#registry-entries-can-declare-both)
 
@@ -46,7 +46,7 @@ No local build needed. The binary lives in the image; `mgtt` invokes it via `doc
 mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
 ```
 
-Notice the `@sha256:` digest. It's required — tags can be silently re-rolled, so digest pinning is how you get reproducible installs.
+The `@sha256:` digest is required — see [Digest pinning](#digest-pinning).
 
 ---
 
@@ -64,15 +64,19 @@ Notice the `@sha256:` digest. It's required — tags can be silently re-rolled, 
 
 ---
 
-## Digest pinning: why it matters
+## Digest pinning
 
-When you install from a Docker image, you *must* pin by digest: `@sha256:abc123...`. Why?
+`mgtt provider install --image` requires the image ref to include `@sha256:<digest>`. Tags can be re-rolled without warning; digests can't.
 
-Tags like `:0.2.0` or `:latest` can be re-rolled without warning. Today's `ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0` could be rebuilt tomorrow with a security fix or breaking change, and you'd get a silent upgrade on your next install or Docker pull. That's a problem for reproducibility and audit trails. This isn't hypothetical — the `grafana/tempo:2.6.0` image tag was rebuilt in place and broke mgtt-provider-tempo's existing deployments. See the discussion in the CHANGELOG.md of that provider.
+Find the current digest of a tag from a registry:
 
-Digests never move. `@sha256:abc123` always points to the same image layers, byte-for-byte. If a new version ships, you get a new digest — then you upgrade explicitly, on your schedule, after reviewing the changes.
+```bash
+# GHCR, for a tag like :0.2.0
+docker buildx imagetools inspect ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0 \
+  --format '{{ .Manifest.Digest }}'
+```
 
-Git installs support this too (via commit SHA), but it's optional. Docker image installs require it because binary distributions are opaque by nature — you can't read the code to assess the change, so the digest is your anchor.
+Use the returned `sha256:…` in the `--image` ref.
 
 ---
 
@@ -127,110 +131,21 @@ $ mgtt provider list
 
 ---
 
-## How image-installed providers reach the host — capabilities
+## What the image gets at runtime
 
-### The problem
-
-A git-installed provider is a native process. It inherits the operator's entire environment for free: `KUBECONFIG` is set, `~/.aws/credentials` is readable, `$PWD` is the Terraform workdir, `/var/run/docker.sock` is right there.
-
-An image-installed provider is a container. `docker run --rm <image>` inherits **none** of that by default. A Kubernetes provider launched this way can't reach the cluster; a Terraform provider can't see its state directory; a Docker provider can't talk to the daemon. The image ships with `kubectl` / `terraform` / `docker` on `PATH`, but the *context* those binaries need is on the host side of the boundary.
-
-### The rejected fixes
-
-Two obvious approaches — both wrong:
-
-- **Inherit everything.** `docker run --network host -v $HOME:$HOME:ro -e ...`. Simple and it works, but you've just mounted `~/.ssh/`, `~/.gnupg/`, and every token you own into a container whose binary was pulled from a third-party registry. Digest pinning is not a strong enough trust anchor to justify that.
-- **Per-provider `env: [...] mounts: [...]` schema.** Precise but verbose; every provider author re-types the same `~/.kube:/root/.kube:ro` incantations; drift between `mgtt-provider-kubernetes` and `mgtt-provider-quickwit`'s YAML re-introduces bugs that should be fixed in one place.
-
-### The design — named capabilities
-
-Providers declare **semantic labels** in `provider.yaml`, at the top level:
+Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `provider.yaml`:
 
 ```yaml
 needs: [kubectl, aws]
 network: host
 ```
 
-Top-level because these are the provider's *requirements*, not the image runner's *configuration*. A git-installed kubernetes provider also "needs" kubectl and cluster network — it just gets them by inheritance. The `image` runner is the install method that translates `needs` into explicit `docker run` forwards.
+- `needs:` — named capabilities (host tools, credential chains, sockets). Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`.
+- `network:` — container network mode. `bridge` (default), `host`, or `none`.
 
-`needs:` and `network:` are split because they're different kinds of things — one names host-side resources (tools, credential chains, sockets), the other selects the container's docker network mode. Keeping them under separate keys keeps each vocabulary coherent.
+Both fields show up in `mgtt provider install --image` output, in `mgtt provider ls`, and in the [public registry](../reference/registry.md).
 
-mgtt owns the vocabulary — the mapping from label to `docker run` flags:
-
-| Label | Expands to |
-|---|---|
-| `kubectl` | `-v $HOME/.kube:/root/.kube:ro -e KUBECONFIG=…` |
-| `aws` | `-v $HOME/.aws:/root/.aws:ro -e AWS_PROFILE -e AWS_ACCESS_KEY_ID …` |
-| `docker` | `-v /var/run/docker.sock:/var/run/docker.sock` |
-| `terraform` | `-v $PWD:/workspace -w /workspace -e TF_VAR_* …` |
-| `gcloud` | `-v $HOME/.config/gcloud:/root/.config/gcloud:ro …` |
-| `azure` | `-v $HOME/.azure:/root/.azure:ro …` |
-
-And `network:` controls the container's network mode:
-
-| Value | Expands to |
-|---|---|
-| `bridge` (default) | no explicit flag — container gets NAT'd external network |
-| `host` | `--network host` — container shares the host's network namespace |
-| `none` | `--network none` — no network at all |
-
-This is the same pattern snap (`plugs: [docker-support]`) and flatpak (`--socket=docker`) use: the application names a capability, the packaging system maps it to syscalls. Three properties fall out that the alternatives don't get:
-
-1. **Scannable.** `needs: [docker]` is one word an operator reads in a second. A list of `-v`/`-e` flags is not. Open `provider.yaml` on GitHub, see the caps at the top.
-2. **Consistent.** Every kubectl-wrapping provider forwards the same files. No drift between provider authors re-implementing the same mount string.
-3. **Bounded.** The socket mount only happens when `docker` is declared. A provider can't silently mount your `~/.ssh/`.
-
-### What the operator sees
-
-Every surface that lists providers now shows capabilities:
-
-- `provider.yaml` — top-level `needs:` block followed by optional `network:`, right after `meta:`.
-- [`docs/registry.yaml`](../reference/registry.md) — `capabilities: [...]` per registry entry.
-- `mgtt provider install --image …` prints `→ capabilities: kubectl, aws` (and `→ network: host` if non-default) before the install completes.
-- `mgtt provider ls` shows a bracketed cap column per installed provider.
-
-### Extending the vocabulary
-
-The built-in set is deliberately small — the seven caps above cover every provider mgtt ships with. Operators with non-default paths, air-gapped setups, or internal providers extend it locally without a mgtt change.
-
-**Override a built-in.** Drop a file at `$MGTT_HOME/capabilities.yaml`:
-
-```yaml
-capabilities:
-  # Non-default kubeconfig location on our bastion hosts
-  kubectl:
-    - "-v"
-    - "/etc/kubernetes/admin.conf:/root/.kube/config:ro"
-    - "-e"
-    - "KUBECONFIG=/root/.kube/config"
-```
-
-**Define a custom cap.** Same file:
-
-```yaml
-capabilities:
-  tibco:
-    - "-v"
-    - "/etc/tibco/cert.pem:/root/cert.pem:ro"
-    - "-e"
-    - "TIBCO_BROKER_URL"
-```
-
-A provider that declares `needs: [tibco]` will now resolve against the operator's file. Precedence (highest wins): `MGTT_IMAGE_CAP_<NAME>` env var → operator file → built-in.
-
-**Refuse a cap.** For locked-down environments:
-
-```
-MGTT_IMAGE_CAPS_DENY=docker,aws
-```
-
-mgtt skips those caps at probe time regardless of what the provider declared; the probe runs without them and fails with an honest error. This is the right knob for a CI where you don't want `mgtt plan` to wield the Docker socket even if a provider asks.
-
-### When does a cap become a built-in?
-
-Operator-local definitions are perfect for one-off infrastructure. But if a capability generalizes — a new cloud, a new observability backend, a new secret store that many providers will want — it's worth upstreaming into mgtt's built-in map so every provider author picks it up for free. The criterion is usage, not novelty: two providers needing the same forward is enough to justify a built-in.
-
-See the [Provider Capabilities reference](../reference/image-capabilities.md) for the full vocabulary, the YAML schema, env-var shortcuts, and failure modes.
+Full vocabulary, operator overrides (`$MGTT_HOME/capabilities.yaml`), the `MGTT_IMAGE_CAP_<NAME>` env shortcut, and the `MGTT_IMAGE_CAPS_DENY` opt-out live in [Provider Capabilities](../reference/image-capabilities.md). For the full operator handbook — including auditing installed providers and troubleshooting capability forwards — see [Using Providers](./using-providers.md).
 
 ---
 
@@ -248,7 +163,7 @@ Both methods use the same local directory structure, so switching is straightfor
    mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
    ```
 
-There's no data to migrate — the Go binary and the Docker image are just implementations of the same interface. The only gotcha: if you uninstall from an image, the uninstall output will print a helpful `docker rmi` hint:
+Uninstalling from an image prints a `docker rmi` hint for cleanup:
 
 ```
 Uninstalled tempo (image method)
@@ -256,7 +171,7 @@ To clean up the image:
   docker rmi ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
 ```
 
-That's optional; the image won't interfere with future installs.
+Optional — the image won't interfere with future installs.
 
 ---
 

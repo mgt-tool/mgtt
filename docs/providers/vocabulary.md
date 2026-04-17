@@ -113,35 +113,35 @@ Provider identity and binary location.
 
 ### `needs`
 
-Optional. Lists named **capabilities** the provider requires at probe time. Each label names a host-side package, credential chain, or socket (`kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`). Top-level because it's a provider-level property: git installs satisfy needs by inheriting the operator's shell environment; image installs satisfy them via `docker run` bind mounts and env forwards built by the capability vocabulary.
+Optional. Capabilities the provider requires at probe time. Each label names a host-side package, credential chain, or socket.
 
 ```yaml
 needs: [kubectl, aws]
 ```
 
-Omit when the provider reads nothing from the host (HTTP-only providers configured entirely through `vars:`). Shell-fallback providers (no `meta.command`) must omit it — there's no binary to attach the forwards to.
+Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`. Omit entirely when the provider reads nothing from the host. Providers with no `meta.command` cannot declare `needs:`.
 
-See the [Provider Capabilities reference](../reference/image-capabilities.md) for the full built-in vocabulary, operator-override file, and opt-out mechanics.
+See [Provider Capabilities](../reference/image-capabilities.md) for what each label expands to.
 
 ### `network`
 
-Optional. Selects the docker-run network mode for image-installed providers. Valid values: `bridge` (default), `host`, `none`.
+Optional. Docker-run network mode for image-installed providers.
 
 ```yaml
 network: host
 ```
 
-Separate from `needs:` because network mode is a **runtime isolation setting**, not a host-resource grant — mixing the two conflated categories. Git-installed providers ignore this field entirely; they run in the operator's native namespace.
+| Value | Effect |
+|---|---|
+| `bridge` (default) | NAT'd external network. |
+| `host` | Container shares the host's network namespace. Required for in-cluster DNS, private endpoints, `host.docker.internal`. |
+| `none` | No network. |
 
-- **`bridge`** (default): container gets a NAT'd virtual NIC. Reaches the internet, not the host's localhost or private networks. Right for providers whose only backend is an external HTTPS endpoint.
-- **`host`**: container shares the host's network namespace. Reaches in-cluster DNS (`*.svc`), private interfaces, localhost services. Required for Kubernetes (cluster API), Terraform (private state backends), anything reaching `host.docker.internal` or a VPN'd target.
-- **`none`**: no network at all. Mostly a security posture for probes that exercise pure local state.
-
-Validated by `mgtt provider validate` — typos (`overlay`, `bridged`) fail loudly at authoring time.
+Git-installed providers ignore this field.
 
 ### `compatibility`
 
-Optional. Binds the provider to specific backend versions it's been built and tested against. Protects against silent breakage when a minor-version response shape changes.
+Optional. Pins the provider to specific backend versions.
 
 ```yaml
 compatibility:
@@ -150,19 +150,19 @@ compatibility:
   tested_against:
     - "grafana/tempo:2.6.0@sha256:f55a8a…"
   notes: |
-    Tempo 2.6 introduced breaking changes vs. 2.5:
-      • Metrics response shape: {"data":…} → {"series":…}
-      • Percentile syntax order: (p, duration) → (duration, p)
+    Tempo 2.6 response shape:
+      • Metrics: {"data":…} → {"series":…}
+      • Percentile syntax: (p, duration) → (duration, p)
 ```
 
 | Field | Description |
 |-------|-------------|
-| `backend` | Name of the backend system (matches the tool/service, e.g. `tempo`, `quickwit`, `docker`). |
-| `versions` | Semver range the provider supports. Use it. Backends re-roll tags. |
-| `tested_against` | List of SHA-pinned image refs the provider's integration tests run against. Digest pin — tag pins are vulnerable to silent re-rolls. |
-| `notes` | Free-form markdown. Use it to document response-shape quirks, missing features in older versions, etc. |
+| `backend` | Name of the backend system (e.g. `tempo`, `quickwit`, `docker`). |
+| `versions` | Semver range the provider supports. |
+| `tested_against` | SHA-pinned image refs the provider's integration tests run against. |
+| `notes` | Free-form markdown. Document response-shape quirks, missing features per version. |
 
-Omit the block for providers with no backend-version sensitivity (e.g. `mgtt-provider-aws`, which uses the AWS API — stable across releases).
+Omit for providers whose backend has a stable API across releases (e.g. the AWS API).
 
 ### `hooks`
 
@@ -173,36 +173,34 @@ Omit the block for providers with no backend-version sensitivity (e.g. `mgtt-pro
 
 ### `read_only` and `writes_note`
 
-The provider's **write posture**. Two fields; both optional.
+Write posture. Both fields optional.
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `read_only` | `true` | Boolean. Declares whether the provider has any side effect. `true` = pure read; `false` = the provider writes something somewhere. Operators set credential scope accordingly. |
-| `writes_note` | — | Markdown prose describing what the provider writes, when `read_only` is `false`. Required whenever `read_only: false` is set. Printed during `mgtt provider install` so the operator consents knowingly. |
+| `read_only` | `true` | `true` = pure reader. `false` = the provider writes something. |
+| `writes_note` | — | Prose describing the side effect. Required when `read_only: false`. Printed at install time. |
 
-Example — the default read-only case (omit both fields):
+Default read-only case — omit both fields:
 
 ```yaml
 meta: {…}
 needs: [aws]
-# no read_only: read-only is assumed
 ```
 
-Example — a provider with side effects (Terraform's `drifted` fact refreshes state):
+Provider with side effects:
 
 ```yaml
 read_only: false
 writes_note: |
   The `drifted` fact runs `terraform plan` which refreshes state — a
-  write to the state backend. Other facts are pure reads. Operators
-  who need strict read-only should bind a credential that cannot
-  write to the state backend and omit the `drifted` fact from their
-  model.
+  write to the state backend. Other facts are pure reads. Bind a
+  credential that cannot write to the state backend and omit the
+  `drifted` fact for hard read-only.
 ```
 
-`mgtt provider validate` fails if `read_only: false` is declared without a `writes_note`, and emits a WARN at install time when non-default so the operator can audit.
+Validation fails if `read_only: false` is declared without a `writes_note`. Install emits a WARN when non-default.
 
-Everything else about credentials (which env vars get read, which config file paths get touched) lives in the provider's README where it can be narrative and accurate — not in a structured field that tools must pretend to understand.
+Document which env vars and config paths the provider reads in the provider's README, not here.
 
 ### `variables`
 

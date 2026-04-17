@@ -105,3 +105,34 @@ def fetch_provider_yaml(repo_url: str, ref: str) -> str:
     if "content" not in obj:
         raise ValueError(f"{owner}/{repo}@{ref}: API response lacks 'content'")
     return base64.b64decode(obj["content"]).decode("utf-8")
+
+
+def _ghcr_base() -> str:
+    return os.environ.get("MGTT_REGISTRY_GHCR_BASE", "https://ghcr.io")
+
+
+def fetch_image_digest(image_ref: str, tag: str) -> str:
+    """Return the sha256 digest ghcr.io computes for <image_ref>:<tag>.
+
+    image_ref is the registry/org/repo portion (no tag). Example:
+    ghcr.io/mgt-tool/mgtt-provider-tempo → queries
+    <base>/v2/mgt-tool/mgtt-provider-tempo/manifests/<tag>.
+    """
+    prefix = "ghcr.io/"
+    if not image_ref.startswith(prefix):
+        raise ValueError(f"only ghcr.io images supported for now: {image_ref!r}")
+    path = image_ref[len(prefix):]
+    url = f"{_ghcr_base()}/v2/{path}/manifests/{tag}"
+    req = urllib.request.Request(url)
+    req.add_header(
+        "Accept",
+        "application/vnd.docker.distribution.manifest.v2+json, "
+        "application/vnd.oci.image.manifest.v1+json",
+    )
+    if token := os.environ.get("GITHUB_TOKEN"):
+        req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        digest = resp.headers.get("Docker-Content-Digest")
+    if not digest:
+        raise ValueError(f"{image_ref}:{tag}: no Docker-Content-Digest header")
+    return digest

@@ -19,6 +19,7 @@ import unittest
 from registry_generator import (
     CACHE_DIR,
     REGISTRY_MD,
+    fetch_image_digest,
     fetch_provider_yaml,
     load_registry,
     on_pre_build,
@@ -152,6 +153,22 @@ class GitHubFetchTest(unittest.TestCase):
         text = fetch_provider_yaml("https://github.com/mgt-tool/mgtt-provider-tempo", "v0.2.0")
         self.assertIn("name: tempo", text)
         self.assertIn("version: 0.2.0", text)
+
+
+class GHCRDigestTest(unittest.TestCase):
+    def setUp(self):
+        self._server, self._thread, self._base = start_stub_server()
+        os.environ["MGTT_REGISTRY_GHCR_BASE"] = self._base + "/ghcr"
+
+    def tearDown(self):
+        self._server.shutdown()
+        self._thread.join()
+        os.environ.pop("MGTT_REGISTRY_GHCR_BASE", None)
+
+    def test_digest_from_manifest_header(self):
+        from registry_generator import fetch_image_digest
+        digest = fetch_image_digest("ghcr.io/mgt-tool/mgtt-provider-tempo", "0.2.0")
+        self.assertEqual(digest, "sha256:deadbeef")
 
 
 if __name__ == "__main__":

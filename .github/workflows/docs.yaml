@@ -11,6 +11,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  packages: read   # registry generator pulls ghcr.io manifest digests
 
 concurrency:
   group: pages
@@ -29,11 +30,12 @@ jobs:
         with:
           python-version: '3.13'
 
-      - run: pip install mkdocs-material pymdown-extensions
+      - run: pip install mkdocs-material pymdown-extensions pyyaml
 
       - run: mkdocs build -d _site
         env:
           SITE_URL: https://mgt-tool.github.io/mgtt
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-pages-artifact@v4
         with:

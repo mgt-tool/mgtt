@@ -206,7 +206,7 @@ func TestMux_DispatchesViaInterface(t *testing.T) {
 // We exercise buildFullArgv directly so no docker daemon is needed.
 func TestImageRunner_PrependsDockerRunArgs(t *testing.T) {
 	imageRef := "ghcr.io/x@sha256:abc"
-	r := NewImageRunner(imageRef).(*ExternalRunner)
+	r := NewImageRunner(imageRef, nil).(*ExternalRunner)
 
 	if r.Binary != "docker" {
 		t.Fatalf("want Binary=docker, got %q", r.Binary)
@@ -265,4 +265,73 @@ type executorFunc func(ctx context.Context, cmd Command) (Result, error)
 
 func (f executorFunc) Run(ctx context.Context, cmd Command) (Result, error) {
 	return f(ctx, cmd)
+}
+
+// TestImageRunner_AppliesCaps verifies that caps declared in image.needs
+// are expanded into the docker-run ArgPrefix ahead of the image ref. The
+// image ref must remain the final arg so probe args follow it.
+func TestImageRunner_AppliesCaps(t *testing.T) {
+	t.Setenv("HOME", "/home/alice")
+	t.Setenv("MGTT_HOME", t.TempDir())
+	ResetOverridesCache()
+
+	r := NewImageRunner("ghcr.io/x@sha256:abc", []string{"kubectl", "network"}).(*ExternalRunner)
+	joined := stringsJoin(r.ArgPrefix)
+	if !containsAll(joined, "run", "--rm") {
+		t.Errorf("prefix must start with run --rm; got %v", r.ArgPrefix)
+	}
+	if !containsAll(joined, "/home/alice/.kube:/root/.kube:ro") {
+		t.Errorf("kubectl mount missing; got %v", r.ArgPrefix)
+	}
+	if !containsAll(joined, "--network", "host") {
+		t.Errorf("network cap missing; got %v", r.ArgPrefix)
+	}
+	if last := r.ArgPrefix[len(r.ArgPrefix)-1]; last != "ghcr.io/x@sha256:abc" {
+		t.Errorf("image ref must be final arg; got %q (full: %v)", last, r.ArgPrefix)
+	}
+}
+
+func TestImageRunner_NoCapsIsLegacyShape(t *testing.T) {
+	t.Setenv("MGTT_HOME", t.TempDir())
+	ResetOverridesCache()
+	r := NewImageRunner("ghcr.io/x@sha256:abc", nil).(*ExternalRunner)
+	want := []string{"run", "--rm", "ghcr.io/x@sha256:abc"}
+	if len(r.ArgPrefix) != len(want) {
+		t.Fatalf("no-caps path must match legacy shape; got %v", r.ArgPrefix)
+	}
+	for i := range want {
+		if r.ArgPrefix[i] != want[i] {
+			t.Fatalf("ArgPrefix[%d]=%q, want %q", i, r.ArgPrefix[i], want[i])
+		}
+	}
+}
+
+// tiny helpers so we don't pull strings into this already-long file.
+func stringsJoin(parts []string) string {
+	out := ""
+	for i, p := range parts {
+		if i > 0 {
+			out += " "
+		}
+		out += p
+	}
+	return out
+}
+
+func containsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if !contains(s, sub) {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }

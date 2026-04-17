@@ -40,14 +40,20 @@ func NewExternalRunner(binary string) Executor {
 
 // NewImageRunner returns an Executor that runs the provider via
 //
-//	docker run --rm <imageRef> <probe-args…>
+//	docker run --rm <cap-flags…> <imageRef> <probe-args…>
 //
-// The image's ENTRYPOINT must be the provider binary; args are passed
-// through unchanged per the standard probe protocol.
-func NewImageRunner(imageRef string) Executor {
+// The image's ENTRYPOINT must be the provider binary; probe args are
+// passed through unchanged per the standard probe protocol. `needs` is
+// the provider's declared image.needs list; each label is expanded into
+// bind-mount/env-forward flags by capabilities.Apply. A nil or empty
+// needs yields the legacy no-forwarding shape.
+func NewImageRunner(imageRef string, needs []string) Executor {
+	args := []string{"run", "--rm"}
+	args = append(args, Apply(needs)...)
+	args = append(args, imageRef)
 	return &ExternalRunner{
 		Binary:    "docker",
-		ArgPrefix: []string{"run", "--rm", imageRef},
+		ArgPrefix: args,
 	}
 }
 

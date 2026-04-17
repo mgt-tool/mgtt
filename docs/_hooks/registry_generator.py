@@ -152,3 +152,44 @@ def parse_provider(yaml_text: str) -> dict:
         "read_only": doc.get("read_only", True),
         "writes_note": doc.get("writes_note", ""),
     }
+
+
+def _namespace_from_url(repo_url: str) -> str:
+    owner, _ = _parse_repo(repo_url)
+    return owner
+
+
+def render_card(*, entry_name: str, repo_url: str, image_ref: str,
+                digest: str, info: dict, skip_image: bool) -> str:
+    owner = _namespace_from_url(repo_url)
+    fqn = f"{owner}/{info['name']}@{info['version']}"
+    caps = ", ".join(f"`{n}`" for n in info["needs"]) if info["needs"] else "—"
+    network = f"`{info['network']}`" if info["network"] and info["network"] != "bridge" else "— (bridge)"
+    tags = ", ".join(info["tags"]) if info["tags"] else "—"
+    posture = "read-only" if info["read_only"] else "writes"
+
+    parts = [
+        f"## {entry_name}",
+        "",
+        info["description"] or "",
+        "",
+        f"- **FQN**: `{fqn}`",
+        f"- **Capabilities**: {caps} · **Network**: {network}",
+        f"- **Posture**: {posture}",
+    ]
+    if not info["read_only"] and info["writes_note"]:
+        first = info["writes_note"].strip().splitlines()[0]
+        parts.append(f"- **Writes**: {first}")
+    parts.append(f"- **Tags**: {tags}")
+    parts.append(f"- **Requires mgtt**: `{info['requires_mgtt']}`")
+    parts.append("")
+    parts.append("```bash")
+    parts.append(f"mgtt provider install {entry_name}")
+    parts.append(f"mgtt provider install {owner}/{info['name']}@{info['version']}")
+    parts.append(f"mgtt provider install {repo_url}")
+    if not skip_image:
+        parts.append(f"mgtt provider install --image {image_ref}:{info['version']}@{digest}")
+    parts.append("```")
+    parts.append("")
+    parts.append("---")
+    return "\n".join(parts)

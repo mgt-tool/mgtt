@@ -24,6 +24,7 @@ from registry_generator import (
     load_registry,
     on_pre_build,
     parse_provider,
+    render_card,
     resolve_ref,
 )
 
@@ -197,6 +198,67 @@ class ParseProviderTest(unittest.TestCase):
         self.assertEqual(info["network"], "host")
         self.assertFalse(info["read_only"])
         self.assertIn("writes state", info["writes_note"])
+
+
+class RenderCardTest(unittest.TestCase):
+    def test_renders_full_card(self):
+        info = {
+            "name": "tempo",
+            "version": "0.2.0",
+            "description": "Per-span SLO checks",
+            "tags": ["tracing", "otel"],
+            "requires_mgtt": ">=0.1.0",
+            "needs": [],
+            "network": "host",
+            "read_only": True,
+            "writes_note": "",
+        }
+        text = render_card(
+            entry_name="tempo",
+            repo_url="https://github.com/mgt-tool/mgtt-provider-tempo",
+            image_ref="ghcr.io/mgt-tool/mgtt-provider-tempo",
+            digest="sha256:deadbeef",
+            info=info,
+            skip_image=False,
+        )
+        self.assertIn("## tempo", text)
+        self.assertIn("mgt-tool/tempo@0.2.0", text)
+        self.assertIn("**Network**: `host`", text)
+        self.assertIn("sha256:deadbeef", text)
+        self.assertIn("mgtt provider install tempo", text)
+        self.assertIn("https://github.com/mgt-tool/mgtt-provider-tempo", text)
+
+    def test_render_card_handles_read_only_false(self):
+        info = {
+            "name": "terraform", "version": "0.1.0",
+            "description": "Terraform state",
+            "tags": [], "requires_mgtt": ">=0.1.0",
+            "needs": ["terraform"], "network": "host",
+            "read_only": False, "writes_note": "refreshes state on plan",
+        }
+        text = render_card(
+            entry_name="terraform",
+            repo_url="https://github.com/mgt-tool/mgtt-provider-terraform",
+            image_ref="ghcr.io/mgt-tool/mgtt-provider-terraform",
+            digest="sha256:abc",
+            info=info,
+            skip_image=False,
+        )
+        self.assertIn("refreshes state on plan", text)
+        self.assertIn("**Posture**: writes", text)
+
+    def test_render_card_skip_image(self):
+        info = {
+            "name": "x", "version": "0.1.0",
+            "description": "x", "tags": [], "requires_mgtt": ">=0.1.0",
+            "needs": [], "network": "", "read_only": True, "writes_note": "",
+        }
+        text = render_card(
+            entry_name="x", repo_url="https://github.com/x/x",
+            image_ref="", digest="", info=info, skip_image=True,
+        )
+        self.assertNotIn("--image", text)
+        self.assertNotIn("sha256:", text)
 
 
 if __name__ == "__main__":

@@ -78,7 +78,17 @@ def on_pre_build(config, **_kwargs):
             image_ref = entry.get("image") or _default_image_ref(entry["url"])
             digest = ""
             if not entry["skip_image"]:
-                digest = fetch_image_digest(image_ref, info["version"])
+                try:
+                    digest = fetch_image_digest(image_ref, info["version"])
+                except Exception as digest_exc:  # noqa: BLE001
+                    # Private GHCR packages, token-exchange failure, etc.
+                    # Better to render the card without the digest than
+                    # drop the whole provider from the registry page.
+                    print(
+                        f"registry-generator: {name}: digest fetch skipped: "
+                        f"{type(digest_exc).__name__}: {digest_exc}",
+                        file=sys.stderr,
+                    )
             card = render_card(
                 entry_name=name,
                 repo_url=entry["url"],
@@ -382,7 +392,12 @@ def render_card(*, entry_name: str, repo_url: str, image_ref: str,
     parts.append(f"mgtt provider install {owner}/{info['name']}@{info['version']}")
     parts.append(f"mgtt provider install {repo_url}")
     if not skip_image:
-        parts.append(f"mgtt provider install --image {image_ref}:{info['version']}@{digest}")
+        # When digest is unavailable (private GHCR package, etc.) leave
+        # the placeholder text `<digest>` — the preamble already tells
+        # operators to substitute their own `docker buildx imagetools
+        # inspect` output.
+        suffix = f"@{digest}" if digest else "@<digest>"
+        parts.append(f"mgtt provider install --image {image_ref}:{info['version']}{suffix}")
     parts.append("```")
     parts.append("")
     parts.append("---")

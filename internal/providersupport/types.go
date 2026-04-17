@@ -13,16 +13,21 @@ type Provider struct {
 	Variables map[string]Variable
 	Auth      AuthSpec
 
-	// Needs lists named capabilities the provider requires at probe time
-	// (e.g., "kubectl", "docker", "network"). Top-level because the
-	// underlying requirement ("this provider needs kubectl tools and
-	// cluster network") is a property of the provider regardless of
-	// install method — git installs satisfy needs by inheriting the
-	// operator's shell environment; image installs satisfy them via
-	// docker-run flag forwarding done by internal/providersupport/probe/
-	// capabilities.go. Populated from the top-level `needs:` block in
-	// provider.yaml.
+	// Needs lists named capabilities the provider requires at probe time —
+	// each label names a host-side package, credential chain, or socket
+	// (kubectl, aws, docker, terraform, gcloud, azure). Git installs
+	// satisfy needs by inheriting the operator's shell environment;
+	// image installs satisfy them via docker-run bind mounts and env
+	// forwards built by internal/providersupport/probe/capabilities.go.
+	// Populated from the top-level `needs:` block in provider.yaml.
 	Needs []string
+
+	// Network selects the docker-run network mode for image-installed
+	// providers. Valid values: "bridge" (default), "host", "none".
+	// Separate from Needs because network mode is a runtime isolation
+	// setting, not a host-side resource grant — mixing the two under
+	// one key conflated categories. Empty string defaults to "bridge".
+	Network string
 }
 
 type ProviderMeta struct {

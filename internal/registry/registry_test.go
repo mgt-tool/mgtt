@@ -198,7 +198,7 @@ func TestFetch_ParsesCapabilities(t *testing.T) {
   kubernetes:
     url: https://github.com/x/y
     description: k8s
-    capabilities: [kubectl, network]
+    capabilities: [kubectl, aws]
   tempo:
     url: https://github.com/x/tempo
     description: tempo
@@ -216,8 +216,8 @@ func TestFetch_ParsesCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("kubernetes entry missing")
 	}
-	if len(k.Capabilities) != 2 || k.Capabilities[0] != "kubectl" || k.Capabilities[1] != "network" {
-		t.Errorf("want [kubectl network], got %v", k.Capabilities)
+	if len(k.Capabilities) != 2 || k.Capabilities[0] != "kubectl" || k.Capabilities[1] != "aws" {
+		t.Errorf("want [kubectl aws], got %v", k.Capabilities)
 	}
 	tempo, _ := reg.Lookup("tempo")
 	if tempo.Capabilities != nil {

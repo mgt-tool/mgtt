@@ -228,7 +228,8 @@ auth:
   strategy: none
   access: {probes: none, writes: none}
 
-needs: [kubectl, network]
+needs: [kubectl]
+network: host
 `)
 	if err := os.WriteFile(filepath.Join(capDir, "provider.yaml"), capYAML, 0o644); err != nil {
 		t.Fatal(err)
@@ -278,7 +279,7 @@ auth:
 	if capfulLine == "" || plainLine == "" {
 		t.Fatalf("both providers must render; got:\n%s", output)
 	}
-	if !strings.Contains(capfulLine, "[kubectl, network]") {
+	if !strings.Contains(capfulLine, "[kubectl]") {
 		t.Errorf("capful line must show bracketed caps; got:\n%s", capfulLine)
 	}
 	if !strings.Contains(plainLine, "-") {

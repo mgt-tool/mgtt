@@ -459,12 +459,15 @@ Publish to `ghcr.io` (or any registry) and advertise the digest in your README a
 Providers that need host context at probe time declare **capabilities** at the top level of `provider.yaml`:
 
 ```yaml
-needs: [kubectl, network]
+needs: [kubectl, aws]
+network: host
 ```
 
-Top-level because the requirement ("this provider needs kubectl and cluster network") is a property of the provider itself. Git installs satisfy needs by inheriting the operator's shell; image installs satisfy them via `docker run` bind mounts and env forwards that mgtt wires from the capability vocabulary. The built-in set covers `network`, `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`; operators override built-ins or define custom labels via `$MGTT_HOME/capabilities.yaml`. See [Provider Capabilities](../docs/reference/image-capabilities.md) for the full reference.
+Top-level because the requirement ("this provider needs kubectl and cluster network") is a property of the provider itself. Git installs satisfy needs by inheriting the operator's shell; image installs satisfy them via `docker run` bind mounts and env forwards that mgtt wires from the capability vocabulary. The built-in set covers `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`; operators override built-ins or define custom labels via `$MGTT_HOME/capabilities.yaml`. See [Provider Capabilities](../docs/reference/image-capabilities.md) for the full reference.
 
-HTTP-only providers (tempo, quickwit) typically just need `[network]`. CLI-wrapping providers (kubernetes, terraform, docker) declare the matching cap plus `network` when the target is an in-cluster service. Shell-fallback providers (no `meta.command`) must omit `needs` entirely — there's no binary to attach the forwards to.
+`network:` is a separate field (not a capability label) because it names a runtime isolation mode, not a host resource. Valid values: `bridge` (default), `host`, `none`. Anything that needs in-cluster DNS (`*.svc`) or host-local services declares `network: host`; external-HTTPS-only providers can omit it.
+
+Shell-fallback providers (no `meta.command`) must omit both `needs:` and `network:` — there's no binary to attach the forwards to.
 
 ### Registry Entry with Image
 

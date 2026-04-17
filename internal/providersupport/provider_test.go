@@ -561,14 +561,53 @@ meta:
 auth:
   strategy: none
   access: {probes: none, writes: none}
-needs: [kubectl, network]
+needs: [kubectl, aws]
 `)
 	p, err := LoadFromBytes(y)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := p.Needs; len(got) != 2 || got[0] != "kubectl" || got[1] != "network" {
-		t.Errorf("want [kubectl network], got %v", got)
+	if got := p.Needs; len(got) != 2 || got[0] != "kubectl" || got[1] != "aws" {
+		t.Errorf("want [kubectl aws], got %v", got)
+	}
+}
+
+func TestLoadFromBytes_Network(t *testing.T) {
+	y := []byte(`
+meta:
+  name: k
+  version: 0.1.0
+  command: /bin/k
+auth:
+  strategy: none
+  access: {probes: none, writes: none}
+network: host
+`)
+	p, err := LoadFromBytes(y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Network != "host" {
+		t.Errorf("want Network=host, got %q", p.Network)
+	}
+}
+
+func TestLoadFromBytes_NetworkDefaultsToEmpty(t *testing.T) {
+	y := []byte(`
+meta:
+  name: k
+  version: 0.1.0
+  command: /bin/k
+auth:
+  strategy: none
+  access: {probes: none, writes: none}
+`)
+	p, err := LoadFromBytes(y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Network != "" {
+		t.Errorf("omitted network: must default to empty (bridge); got %q", p.Network)
 	}
 }
 

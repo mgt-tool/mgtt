@@ -206,7 +206,7 @@ func TestMux_DispatchesViaInterface(t *testing.T) {
 // We exercise buildFullArgv directly so no docker daemon is needed.
 func TestImageRunner_PrependsDockerRunArgs(t *testing.T) {
 	imageRef := "ghcr.io/x@sha256:abc"
-	r := NewImageRunner(imageRef, nil).(*ExternalRunner)
+	r := NewImageRunner(imageRef, nil, "").(*ExternalRunner)
 
 	if r.Binary != "docker" {
 		t.Fatalf("want Binary=docker, got %q", r.Binary)
@@ -267,7 +267,7 @@ func (f executorFunc) Run(ctx context.Context, cmd Command) (Result, error) {
 	return f(ctx, cmd)
 }
 
-// TestImageRunner_AppliesCaps verifies that caps declared in image.needs
+// TestImageRunner_AppliesCaps verifies that caps declared in `needs:`
 // are expanded into the docker-run ArgPrefix ahead of the image ref. The
 // image ref must remain the final arg so probe args follow it.
 func TestImageRunner_AppliesCaps(t *testing.T) {
@@ -275,7 +275,7 @@ func TestImageRunner_AppliesCaps(t *testing.T) {
 	t.Setenv("MGTT_HOME", t.TempDir())
 	ResetOverridesCache()
 
-	r := NewImageRunner("ghcr.io/x@sha256:abc", []string{"kubectl", "network"}).(*ExternalRunner)
+	r := NewImageRunner("ghcr.io/x@sha256:abc", []string{"kubectl", "aws"}, "").(*ExternalRunner)
 	joined := stringsJoin(r.ArgPrefix)
 	if !containsAll(joined, "run", "--rm") {
 		t.Errorf("prefix must start with run --rm; got %v", r.ArgPrefix)
@@ -283,8 +283,8 @@ func TestImageRunner_AppliesCaps(t *testing.T) {
 	if !containsAll(joined, "/home/alice/.kube:/root/.kube:ro") {
 		t.Errorf("kubectl mount missing; got %v", r.ArgPrefix)
 	}
-	if !containsAll(joined, "--network", "host") {
-		t.Errorf("network cap missing; got %v", r.ArgPrefix)
+	if !containsAll(joined, "/home/alice/.aws:/root/.aws:ro") {
+		t.Errorf("aws mount missing; got %v", r.ArgPrefix)
 	}
 	if last := r.ArgPrefix[len(r.ArgPrefix)-1]; last != "ghcr.io/x@sha256:abc" {
 		t.Errorf("image ref must be final arg; got %q (full: %v)", last, r.ArgPrefix)
@@ -294,7 +294,7 @@ func TestImageRunner_AppliesCaps(t *testing.T) {
 func TestImageRunner_NoCapsIsLegacyShape(t *testing.T) {
 	t.Setenv("MGTT_HOME", t.TempDir())
 	ResetOverridesCache()
-	r := NewImageRunner("ghcr.io/x@sha256:abc", nil).(*ExternalRunner)
+	r := NewImageRunner("ghcr.io/x@sha256:abc", nil, "").(*ExternalRunner)
 	want := []string{"run", "--rm", "ghcr.io/x@sha256:abc"}
 	if len(r.ArgPrefix) != len(want) {
 		t.Fatalf("no-caps path must match legacy shape; got %v", r.ArgPrefix)
@@ -302,6 +302,39 @@ func TestImageRunner_NoCapsIsLegacyShape(t *testing.T) {
 	for i := range want {
 		if r.ArgPrefix[i] != want[i] {
 			t.Fatalf("ArgPrefix[%d]=%q, want %q", i, r.ArgPrefix[i], want[i])
+		}
+	}
+}
+
+// TestImageRunner_NetworkHost verifies the top-level `network: host`
+// field is rendered as --network host in the argv, between run --rm
+// and the cap flags.
+func TestImageRunner_NetworkHost(t *testing.T) {
+	t.Setenv("MGTT_HOME", t.TempDir())
+	ResetOverridesCache()
+	r := NewImageRunner("ghcr.io/x@sha256:abc", nil, "host").(*ExternalRunner)
+	want := []string{"run", "--rm", "--network", "host", "ghcr.io/x@sha256:abc"}
+	if len(r.ArgPrefix) != len(want) {
+		t.Fatalf("network:host shape mismatch; got %v", r.ArgPrefix)
+	}
+	for i := range want {
+		if r.ArgPrefix[i] != want[i] {
+			t.Fatalf("ArgPrefix[%d]=%q, want %q", i, r.ArgPrefix[i], want[i])
+		}
+	}
+}
+
+// TestImageRunner_NetworkBridgeIsDefault verifies that "" and "bridge"
+// both produce the bare shape (no explicit --network) since bridge is
+// docker's default and an explicit flag is noise.
+func TestImageRunner_NetworkBridgeIsDefault(t *testing.T) {
+	t.Setenv("MGTT_HOME", t.TempDir())
+	ResetOverridesCache()
+	for _, mode := range []string{"", "bridge"} {
+		r := NewImageRunner("ghcr.io/x@sha256:abc", nil, mode).(*ExternalRunner)
+		want := []string{"run", "--rm", "ghcr.io/x@sha256:abc"}
+		if len(r.ArgPrefix) != len(want) {
+			t.Errorf("mode=%q: want no explicit --network; got %v", mode, r.ArgPrefix)
 		}
 	}
 }

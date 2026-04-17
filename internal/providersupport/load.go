@@ -18,6 +18,7 @@ type rawProvider struct {
 	Auth      rawAuth           `yaml:"auth"`
 	Hooks     rawHooks          `yaml:"hooks"`
 	Needs     []string          `yaml:"needs"`
+	Network   string            `yaml:"network"`
 	// Types are parsed separately to preserve declaration order.
 }
 
@@ -119,7 +120,8 @@ func LoadFromBytes(data []byte) (*Provider, error) {
 				Writes: raw.Auth.Access.Writes,
 			},
 		},
-		Needs: raw.Needs,
+		Needs:   raw.Needs,
+		Network: raw.Network,
 	}
 
 	for k, v := range raw.Variables {

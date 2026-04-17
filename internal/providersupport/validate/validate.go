@@ -150,6 +150,17 @@ func Static(p *providersupport.Provider) Report {
 		}
 	}
 
+	// network: docker's three built-in modes. "" is acceptable (defaults
+	// to bridge). Anything else is almost certainly a typo the user wants
+	// to see now, not at probe time.
+	switch p.Network {
+	case "", "bridge", "host", "none":
+		// ok
+	default:
+		r.Failures = append(r.Failures, fmt.Sprintf(
+			"unknown network mode %q (valid: bridge, host, none)", p.Network))
+	}
+
 	if r.OK() && len(r.Warnings) == 0 {
 		r.Passed = append(r.Passed, "static checks: ok")
 	}

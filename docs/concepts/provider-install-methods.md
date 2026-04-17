@@ -147,10 +147,13 @@ Two obvious approaches — both wrong:
 Providers declare **semantic labels** in `provider.yaml`, at the top level:
 
 ```yaml
-needs: [kubectl, network]
+needs: [kubectl, aws]
+network: host
 ```
 
 Top-level because these are the provider's *requirements*, not the image runner's *configuration*. A git-installed kubernetes provider also "needs" kubectl and cluster network — it just gets them by inheritance. The `image` runner is the install method that translates `needs` into explicit `docker run` forwards.
+
+`needs:` and `network:` are split because they're different kinds of things — one names host-side resources (tools, credential chains, sockets), the other selects the container's docker network mode. Keeping them under separate keys keeps each vocabulary coherent.
 
 mgtt owns the vocabulary — the mapping from label to `docker run` flags:
 
@@ -160,9 +163,16 @@ mgtt owns the vocabulary — the mapping from label to `docker run` flags:
 | `aws` | `-v $HOME/.aws:/root/.aws:ro -e AWS_PROFILE -e AWS_ACCESS_KEY_ID …` |
 | `docker` | `-v /var/run/docker.sock:/var/run/docker.sock` |
 | `terraform` | `-v $PWD:/workspace -w /workspace -e TF_VAR_* …` |
-| `network` | `--network host` |
 | `gcloud` | `-v $HOME/.config/gcloud:/root/.config/gcloud:ro …` |
 | `azure` | `-v $HOME/.azure:/root/.azure:ro …` |
+
+And `network:` controls the container's network mode:
+
+| Value | Expands to |
+|---|---|
+| `bridge` (default) | no explicit flag — container gets NAT'd external network |
+| `host` | `--network host` — container shares the host's network namespace |
+| `none` | `--network none` — no network at all |
 
 This is the same pattern snap (`plugs: [docker-support]`) and flatpak (`--socket=docker`) use: the application names a capability, the packaging system maps it to syscalls. Three properties fall out that the alternatives don't get:
 
@@ -174,9 +184,9 @@ This is the same pattern snap (`plugs: [docker-support]`) and flatpak (`--socket
 
 Every surface that lists providers now shows capabilities:
 
-- `provider.yaml` — top-level `needs:` block, right after `meta:`.
+- `provider.yaml` — top-level `needs:` block followed by optional `network:`, right after `meta:`.
 - [`docs/registry.yaml`](../reference/registry.md) — `capabilities: [...]` per registry entry.
-- `mgtt provider install --image …` prints `→ capabilities: kubectl, network` before the install completes.
+- `mgtt provider install --image …` prints `→ capabilities: kubectl, aws` (and `→ network: host` if non-default) before the install completes.
 - `mgtt provider ls` shows a bracketed cap column per installed provider.
 
 ### Extending the vocabulary

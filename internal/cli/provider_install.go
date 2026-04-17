@@ -134,6 +134,9 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 		}
 		fmt.Fprintf(w, "→ capabilities: %s\n", strings.Join(p.Needs, ", "))
 	}
+	if p.Network != "" && p.Network != "bridge" {
+		fmt.Fprintf(w, "→ network: %s\n", p.Network)
+	}
 
 	providersRoot, err := providersupport.InstallRoot()
 	if err != nil {

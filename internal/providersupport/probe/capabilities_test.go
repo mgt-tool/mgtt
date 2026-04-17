@@ -19,15 +19,6 @@ func TestApply_BuiltinKubectl(t *testing.T) {
 	}
 }
 
-func TestApply_BuiltinNetwork(t *testing.T) {
-	t.Setenv("MGTT_HOME", t.TempDir())
-	ResetOverridesCache()
-	got := Apply([]string{"network"})
-	if len(got) != 2 || got[0] != "--network" || got[1] != "host" {
-		t.Errorf("network cap must be --network host; got %v", got)
-	}
-}
-
 func TestApply_BuiltinDockerSocket(t *testing.T) {
 	t.Setenv("MGTT_HOME", t.TempDir())
 	ResetOverridesCache()
@@ -39,12 +30,16 @@ func TestApply_BuiltinDockerSocket(t *testing.T) {
 }
 
 func TestApply_UnknownCapSkipped(t *testing.T) {
+	t.Setenv("HOME", "/home/alice")
 	t.Setenv("MGTT_HOME", t.TempDir())
 	ResetOverridesCache()
-	got := Apply([]string{"kubectl", "vault-undefined", "network"})
+	got := Apply([]string{"kubectl", "vault-undefined", "aws"})
 	joined := strings.Join(got, " ")
-	if !strings.Contains(joined, "--network host") {
+	if !strings.Contains(joined, ".kube") {
 		t.Errorf("known caps must still expand when an unknown is skipped; got %v", got)
+	}
+	if !strings.Contains(joined, ".aws") {
+		t.Errorf("known caps after the unknown must still expand; got %v", got)
 	}
 	if strings.Contains(joined, "vault-undefined") {
 		t.Errorf("unknown cap must not leak into argv; got %v", got)
@@ -52,16 +47,17 @@ func TestApply_UnknownCapSkipped(t *testing.T) {
 }
 
 func TestApply_CapsDenyFilters(t *testing.T) {
+	t.Setenv("HOME", "/home/alice")
 	t.Setenv("MGTT_HOME", t.TempDir())
 	ResetOverridesCache()
-	t.Setenv("MGTT_IMAGE_CAPS_DENY", "docker,network")
-	got := Apply([]string{"kubectl", "docker", "network"})
+	t.Setenv("MGTT_IMAGE_CAPS_DENY", "docker,aws")
+	got := Apply([]string{"kubectl", "docker", "aws"})
 	joined := strings.Join(got, " ")
 	if strings.Contains(joined, "/var/run/docker.sock") {
 		t.Errorf("docker cap must be filtered by DENY; got %v", got)
 	}
-	if strings.Contains(joined, "--network") {
-		t.Errorf("network cap must be filtered by DENY; got %v", got)
+	if strings.Contains(joined, ".aws") {
+		t.Errorf("aws cap must be filtered by DENY; got %v", got)
 	}
 	if !strings.Contains(joined, ".kube") {
 		t.Errorf("kubectl cap must survive; got %v", got)

@@ -449,7 +449,8 @@ auth:
   strategy: none
   access: {probes: none, writes: none}
 
-needs: [kubectl, network]
+needs: [kubectl]
+network: host
 `
 	fakeDocker := &providersupport.DockerCmd{
 		Run: func(_ context.Context, args ...string) ([]byte, error) {
@@ -478,8 +479,11 @@ needs: [kubectl, network]
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "capabilities: kubectl, network") {
+	if !strings.Contains(out, "capabilities: kubectl") {
 		t.Errorf("install must print declared caps; got %q", out)
+	}
+	if !strings.Contains(out, "network: host") {
+		t.Errorf("install must print non-default network mode; got %q", out)
 	}
 }
 

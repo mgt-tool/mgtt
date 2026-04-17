@@ -170,7 +170,7 @@ func TestStatic_RejectsUnknownCap(t *testing.T) {
 func TestStatic_RejectsNeedsOnShellFallback(t *testing.T) {
 	p := loadYAML(t, minimalOK)
 	p.Meta.Command = "" // shell-fallback
-	p.Needs = []string{"network"}
+	p.Needs = []string{"kubectl"}
 	r := Static(p)
 	if r.OK() {
 		t.Fatal("shell-fallback providers must not declare needs")
@@ -189,11 +189,43 @@ func TestStatic_RejectsNeedsOnShellFallback(t *testing.T) {
 
 func TestStatic_AcceptsKnownCaps(t *testing.T) {
 	p := loadYAML(t, minimalOK)
-	p.Needs = []string{"kubectl", "network"}
+	p.Needs = []string{"kubectl", "aws"}
 	r := Static(p)
 	for _, f := range r.Failures {
 		if strings.Contains(f, "needs") || strings.Contains(f, "capability") {
 			t.Errorf("known caps must not produce failures; got %v", r.Failures)
 		}
+	}
+}
+
+func TestStatic_AcceptsValidNetworkModes(t *testing.T) {
+	for _, mode := range []string{"", "bridge", "host", "none"} {
+		p := loadYAML(t, minimalOK)
+		p.Network = mode
+		r := Static(p)
+		for _, f := range r.Failures {
+			if strings.Contains(f, "network") {
+				t.Errorf("mode %q must be accepted; got failure %q", mode, f)
+			}
+		}
+	}
+}
+
+func TestStatic_RejectsUnknownNetworkMode(t *testing.T) {
+	p := loadYAML(t, minimalOK)
+	p.Network = "overlay"
+	r := Static(p)
+	if r.OK() {
+		t.Fatal("unknown network mode must fail validation")
+	}
+	found := false
+	for _, f := range r.Failures {
+		if strings.Contains(f, "network") && strings.Contains(f, "overlay") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("failure must name the bad mode and the field; got %v", r.Failures)
 	}
 }

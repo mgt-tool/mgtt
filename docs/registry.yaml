@@ -2,7 +2,7 @@ providers:
   kubernetes:
     url: https://github.com/mgt-tool/mgtt-provider-kubernetes
     description: Kubernetes cluster resources via kubectl
-    capabilities: [kubectl, network]
+    capabilities: [kubectl]
     tags:
       - workloads
       - networking
@@ -16,7 +16,7 @@ providers:
   aws:
     url: https://github.com/mgt-tool/mgtt-provider-aws
     description: AWS managed services via aws-cli
-    capabilities: [aws, network]
+    capabilities: [aws]
     tags:
       - databases
       - compute
@@ -31,7 +31,7 @@ providers:
   terraform:
     url: https://github.com/mgt-tool/mgtt-provider-terraform
     description: Terraform-managed infrastructure — state health, drift detection, config-vs-reality reasoning
-    capabilities: [terraform, aws, network]
+    capabilities: [terraform, aws]
     tags:
       - iac
       - terraform
@@ -40,7 +40,7 @@ providers:
     url: https://github.com/mgt-tool/mgtt-provider-tempo
     # image: ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:<digest>  # once v0.2.0 is published
     description: Per-span SLO checks against Grafana Tempo — current_p99, breach_duration, error_rate
-    capabilities: [network]
+    capabilities: []
     tags:
       - tracing
       - otel
@@ -49,7 +49,7 @@ providers:
   quickwit:
     url: https://github.com/mgt-tool/mgtt-provider-quickwit
     description: Cross-span tracing checks against Quickwit — transaction_flow, async_hop, consumer_health
-    capabilities: [network]
+    capabilities: []
     tags:
       - tracing
       - otel

@@ -12,7 +12,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Breaking
 
-- Schema: capabilities moved from `image.needs: [...]` to a top-level `needs: [...]` block in `provider.yaml`. The underlying requirement ("this provider needs kubectl") is a property of the provider, not of the image-install runtime that happens to translate it into flags. Pre-1.0, ripped without an alias — providers must update their YAML. External provider repos tracked in the registry have been updated in the same release.
+- Schema: capabilities moved from `image.needs: [...]` to a top-level `needs: [...]` block in `provider.yaml`. The underlying requirement ("this provider needs kubectl") is a property of the provider, not of the image-install runtime that happens to translate it into flags. Pre-1.0, ripped without an alias — providers must update their YAML.
+- Schema: `network` split out of the capability vocabulary into its own top-level field. Previously `needs: [kubectl, network]` conflated two categories — host-resource grants and docker-run isolation mode. Now: `needs: [kubectl]` (tools/creds only) plus `network: host` (or `bridge`/`none`). `mgtt provider validate` rejects `network` as a cap name and validates the new field against the `bridge|host|none` set. All six registry providers updated.
 
 ### Fixed
 

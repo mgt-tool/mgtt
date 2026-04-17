@@ -31,7 +31,7 @@ providers:
   terraform:
     url: https://github.com/mgt-tool/mgtt-provider-terraform
     description: Terraform-managed infrastructure — state health, drift detection, config-vs-reality reasoning
-    capabilities: [terraform, aws]
+    capabilities: [terraform]
     tags:
       - iac
       - terraform

@@ -288,5 +288,33 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(got, "new")
 
 
+class OfflineModeTest(unittest.TestCase):
+    def tearDown(self):
+        os.environ.pop("MGTT_REGISTRY_GENERATOR", None)
+        shutil.rmtree(CACHE_DIR, ignore_errors=True)
+
+    def test_offline_renders_placeholder(self):
+        os.environ["MGTT_REGISTRY_GENERATOR"] = "offline"
+        on_pre_build(config=None)
+        text = REGISTRY_MD.read_text()
+        self.assertIn("[unavailable — registry sync offline]", text)
+
+
+class FailSoftTest(unittest.TestCase):
+    def setUp(self):
+        # No stub server. Point the GitHub base at a port that's not
+        # listening so real fetches fail with ConnectionRefused.
+        os.environ["MGTT_REGISTRY_GITHUB_BASE"] = "http://127.0.0.1:1"
+        shutil.rmtree(CACHE_DIR, ignore_errors=True)
+
+    def tearDown(self):
+        os.environ.pop("MGTT_REGISTRY_GITHUB_BASE", None)
+        shutil.rmtree(CACHE_DIR, ignore_errors=True)
+
+    def test_unreachable_url_yields_error_card(self):
+        on_pre_build(config=None)
+        self.assertIn("registry sync failed", REGISTRY_MD.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

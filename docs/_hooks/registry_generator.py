@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -63,26 +64,53 @@ def on_pre_build(config, **_kwargs):
     with REGISTRY_YAML.open() as f:
         entries = load_registry(f)
 
+    offline = os.environ.get("MGTT_REGISTRY_GENERATOR") == "offline"
+
     sections = [REGISTRY_MD_PREAMBLE]
     for name, entry in entries.items():
-        ref = resolve_ref(entry["url"], entry["channel"])
-        yaml_text = fetch_provider_yaml(entry["url"], ref)
-        info = parse_provider(yaml_text)
-        image_ref = entry.get("image") or _default_image_ref(entry["url"])
-        digest = ""
-        if not entry["skip_image"]:
-            digest = fetch_image_digest(image_ref, info["version"])
-        card = render_card(
-            entry_name=name,
-            repo_url=entry["url"],
-            image_ref=image_ref,
-            digest=digest,
-            info=info,
-            skip_image=entry["skip_image"],
-        )
-        sections.append(card)
+        if offline:
+            sections.append(_offline_card(name, entry))
+            continue
+        try:
+            ref = resolve_ref(entry["url"], entry["channel"])
+            yaml_text = fetch_provider_yaml(entry["url"], ref)
+            info = parse_provider(yaml_text)
+            image_ref = entry.get("image") or _default_image_ref(entry["url"])
+            digest = ""
+            if not entry["skip_image"]:
+                digest = fetch_image_digest(image_ref, info["version"])
+            card = render_card(
+                entry_name=name,
+                repo_url=entry["url"],
+                image_ref=image_ref,
+                digest=digest,
+                info=info,
+                skip_image=entry["skip_image"],
+            )
+            sections.append(card)
+        except Exception as exc:  # noqa: BLE001 — deliberate fail-soft
+            print(f"registry-generator: {name}: {exc}", file=sys.stderr)
+            sections.append(_error_card(name, entry, exc))
 
     REGISTRY_MD.write_text("\n".join(sections) + "\n")
+
+
+def _offline_card(entry_name: str, entry: dict) -> str:
+    return (
+        f"## {entry_name}\n\n"
+        f"[unavailable — registry sync offline]\n\n"
+        f"- **Source**: `{entry['url']}`\n"
+        "\n---\n"
+    )
+
+
+def _error_card(entry_name: str, entry: dict, err: Exception) -> str:
+    return (
+        f"## {entry_name}\n\n"
+        f":warning: **registry sync failed**: {err}\n\n"
+        f"- **Source**: `{entry['url']}`\n"
+        "\n---\n"
+    )
 
 
 def _default_image_ref(repo_url: str) -> str:

@@ -31,7 +31,7 @@ auth:
     probes: none
     writes: none
 `)
-	if err := os.WriteFile(filepath.Join(gitDir, "provider.yaml"), gitYAML, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(gitDir, "manifest.yaml"), gitYAML, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ auth:
     probes: none
     writes: none
 `)
-	if err := os.WriteFile(filepath.Join(imageDir, "provider.yaml"), imageYAML, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(imageDir, "manifest.yaml"), imageYAML, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -155,7 +155,7 @@ func TestProviderLs_CorruptMetaShowsQuestion(t *testing.T) {
 	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yamlFile := filepath.Join(corruptDir, "provider.yaml")
+	yamlFile := filepath.Join(corruptDir, "manifest.yaml")
 	yamlContent := []byte(`meta:
   name: corrupt-provider
   version: 1.5.0
@@ -208,7 +208,7 @@ auth:
 }
 
 // TestProviderLs_ShowsCapabilities verifies that image.needs declared in
-// provider.yaml surfaces as a [...] column in the list output, so
+// manifest.yaml surfaces as a [...] column in the list output, so
 // operators see the runtime scope alongside the install method.
 func TestProviderLs_ShowsCapabilities(t *testing.T) {
 	home := t.TempDir()
@@ -231,7 +231,7 @@ auth:
 needs: [kubectl]
 network: host
 `)
-	if err := os.WriteFile(filepath.Join(capDir, "provider.yaml"), capYAML, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(capDir, "manifest.yaml"), capYAML, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -248,7 +248,7 @@ auth:
   strategy: none
   access: {probes: none, writes: none}
 `)
-	if err := os.WriteFile(filepath.Join(plainDir, "provider.yaml"), plainYAML, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(plainDir, "manifest.yaml"), plainYAML, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

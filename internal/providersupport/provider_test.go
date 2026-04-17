@@ -535,7 +535,7 @@ func TestLoadFromDir_FallsBackToInlineTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dir+"/provider.yaml", data, 0644); err != nil {
+	if err := os.WriteFile(dir+"/manifest.yaml", data, 0644); err != nil {
 		t.Fatal(err)
 	}
 

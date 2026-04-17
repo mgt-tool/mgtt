@@ -15,14 +15,14 @@ import (
 	"github.com/mgt-tool/mgtt/internal/registry"
 )
 
-// tarManifest returns the bytes `docker cp cid:/provider.yaml -` would emit:
-// a tar archive containing a single regular-file entry for provider.yaml.
+// tarManifest returns the bytes `docker cp cid:/manifest.yaml -` would emit:
+// a tar archive containing a single regular-file entry for manifest.yaml.
 func tarManifest(t *testing.T, body string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	if err := tw.WriteHeader(&tar.Header{
-		Name:     "provider.yaml",
+		Name:     "manifest.yaml",
 		Mode:     0o644,
 		Size:     int64(len(body)),
 		Typeflag: tar.TypeReg,
@@ -78,7 +78,7 @@ func TestInstallProvider_RegistryFlagOverridesEnv(t *testing.T) {
 	}
 }
 
-// minimalProviderYAML is a valid provider.yaml for installFromImage tests.
+// minimalProviderYAML is a valid manifest.yaml for installFromImage tests.
 const minimalProviderYAML = `
 meta:
   name: test-provider
@@ -93,7 +93,7 @@ auth:
 `
 
 // TestInstallFromImage_WritesFilesAndMeta exercises the full installFromImage
-// path with a fake DockerCmd. Verifies that provider.yaml and .mgtt-install.json
+// path with a fake DockerCmd. Verifies that manifest.yaml and .mgtt-install.json
 // are written to MGTT_HOME/providers/<name>/ with the correct content.
 func TestInstallFromImage_WritesFilesAndMeta(t *testing.T) {
 	home := t.TempDir()
@@ -128,14 +128,14 @@ func TestInstallFromImage_WritesFilesAndMeta(t *testing.T) {
 
 	destDir := filepath.Join(home, "providers", "test-provider")
 
-	// provider.yaml must exist and contain the manifest bytes.
-	yamlPath := filepath.Join(destDir, "provider.yaml")
+	// manifest.yaml must exist and contain the manifest bytes.
+	yamlPath := filepath.Join(destDir, "manifest.yaml")
 	yamlBytes, err := os.ReadFile(yamlPath)
 	if err != nil {
-		t.Fatalf("provider.yaml not written: %v", err)
+		t.Fatalf("manifest.yaml not written: %v", err)
 	}
 	if !strings.Contains(string(yamlBytes), "test-provider") {
-		t.Errorf("provider.yaml does not contain provider name; got %q", yamlBytes)
+		t.Errorf("manifest.yaml does not contain provider name; got %q", yamlBytes)
 	}
 
 	// .mgtt-install.json must exist with correct method, source, version.
@@ -171,7 +171,7 @@ func TestInstallFromImage_WritesFilesAndMeta(t *testing.T) {
 
 // TestInstallFromImage_WritesTypesDir verifies that a multi-file provider
 // image (kubernetes-style /types/*.yaml) lands under destDir/types/ after
-// install. Prior to this, only /provider.yaml was extracted and all types
+// install. Prior to this, only /manifest.yaml was extracted and all types
 // silently vanished.
 func TestInstallFromImage_WritesTypesDir(t *testing.T) {
 	home := t.TempDir()
@@ -210,7 +210,7 @@ func TestInstallFromImage_WritesTypesDir(t *testing.T) {
 				cpCalls++
 				joined := strings.Join(args, " ")
 				switch {
-				case strings.Contains(joined, ":/provider.yaml"):
+				case strings.Contains(joined, ":/manifest.yaml"):
 					return tarManifest(t, minimalProviderYAML), nil
 				case strings.Contains(joined, ":/types"):
 					return typesTar.Bytes(), nil
@@ -233,7 +233,7 @@ func TestInstallFromImage_WritesTypesDir(t *testing.T) {
 			t.Errorf("types file %s missing after image install: %v", fname, err)
 		}
 	}
-	// cp must have been invoked for both /provider.yaml and /types.
+	// cp must have been invoked for both /manifest.yaml and /types.
 	if cpCalls != 2 {
 		t.Errorf("expected 2 cp calls (manifest + types), got %d", cpCalls)
 	}
@@ -267,8 +267,8 @@ func TestInstallFromImage_NameHintOverride(t *testing.T) {
 
 	// Provider must be installed under the override name, not the manifest name.
 	overrideDir := filepath.Join(home, "providers", "my-override")
-	if _, err := os.Stat(filepath.Join(overrideDir, "provider.yaml")); err != nil {
-		t.Errorf("provider.yaml not found under override name %q: %v", "my-override", err)
+	if _, err := os.Stat(filepath.Join(overrideDir, "manifest.yaml")); err != nil {
+		t.Errorf("manifest.yaml not found under override name %q: %v", "my-override", err)
 	}
 	// Default name dir must NOT exist.
 	defaultDir := filepath.Join(home, "providers", "test-provider")
@@ -278,7 +278,7 @@ func TestInstallFromImage_NameHintOverride(t *testing.T) {
 }
 
 // TestInstallFromImage_RejectsMalformedManifest verifies that a malformed
-// provider.yaml extracted from an image is rejected before any files are written.
+// manifest.yaml extracted from an image is rejected before any files are written.
 func TestInstallFromImage_RejectsMalformedManifest(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("MGTT_HOME", root)
@@ -461,7 +461,7 @@ network: host
 				return []byte("cid-test\n"), nil
 			case "cp":
 				joined := strings.Join(args, " ")
-				if strings.Contains(joined, ":/provider.yaml") {
+				if strings.Contains(joined, ":/manifest.yaml") {
 					return tarManifest(t, capsProviderYAML), nil
 				}
 				// /types missing → no types. DockerCmd.ExtractTypes treats
@@ -512,7 +512,7 @@ needs: [vault-nope]
 			case "create":
 				return []byte("cid-test\n"), nil
 			case "cp":
-				if strings.Contains(strings.Join(args, " "), ":/provider.yaml") {
+				if strings.Contains(strings.Join(args, " "), ":/manifest.yaml") {
 					return tarManifest(t, unknownCapYAML), nil
 				}
 				return nil, errors.New("no /types")

@@ -21,5 +21,5 @@ RUN go build -o /out/mgtt-provider-fixture .
 
 FROM debian:12-slim
 COPY --from=build /out/mgtt-provider-fixture /usr/local/bin/mgtt-provider-fixture
-COPY test/integration/testdata/fixture-provider/provider.yaml /provider.yaml
+COPY test/integration/testdata/fixture-provider/manifest.yaml /manifest.yaml
 ENTRYPOINT ["/usr/local/bin/mgtt-provider-fixture"]

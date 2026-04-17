@@ -15,7 +15,7 @@ type Provider struct {
 	// ReadOnly is the provider's declared write posture.
 	//
 	// true  — the provider only reads; no side effects. This is the
-	//         default when `read_only:` is absent from provider.yaml.
+	//         default when `read_only:` is absent from manifest.yaml.
 	// false — the provider has side effects; WritesNote must describe them.
 	//         `mgtt provider install` prints the note so the operator
 	//         consents knowingly. Validation rejects `read_only: false`
@@ -32,7 +32,7 @@ type Provider struct {
 	// satisfy needs by inheriting the operator's shell environment;
 	// image installs satisfy them via docker-run bind mounts and env
 	// forwards built by internal/providersupport/probe/capabilities.go.
-	// Populated from the top-level `needs:` block in provider.yaml.
+	// Populated from the top-level `needs:` block in manifest.yaml.
 	Needs []string
 
 	// Network selects the docker-run network mode for image-installed

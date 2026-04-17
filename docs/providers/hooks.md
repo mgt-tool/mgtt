@@ -35,7 +35,7 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in x86_64) ARCH="amd64" ;; aarch64) ARCH="arm64" ;; esac
 
-VERSION=$(grep 'version:' provider.yaml | head -1 | awk '{print $2}')
+VERSION=$(grep 'version:' manifest.yaml | head -1 | awk '{print $2}')
 URL="https://github.com/my-org/mgtt-provider-my-provider/releases/download/v${VERSION}/mgtt-provider-my-provider-${OS}-${ARCH}"
 
 curl -sSL "$URL" -o bin/mgtt-provider-my-provider
@@ -62,12 +62,12 @@ echo "✓ installed Python provider"
 
 ## Vocabulary-only providers (no hook)
 
-If all your facts have inline `probe.cmd` definitions in `provider.yaml`, you don't need a binary or install hook. Set `meta.command: ""` and `hooks.install: ""`. This is the quick-start path for prototyping.
+If all your facts have inline `probe.cmd` definitions in `manifest.yaml`, you don't need a binary or install hook. Set `meta.command: ""` and `hooks.install: ""`. This is the quick-start path for prototyping.
 
 ---
 
 ## Next steps
 
-- [Vocabulary](vocabulary.md) — writing provider.yaml
+- [Vocabulary](vocabulary.md) — writing manifest.yaml
 - [Binary Protocol](protocol.md) — implementing the probe commands
 - [Testing](testing.md) — validate, simulate, and live-test your provider

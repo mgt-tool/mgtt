@@ -70,7 +70,7 @@ This tests the binary — does it actually collect facts from a live system?
 
 The [kubernetes provider](https://github.com/mgt-tool/mgtt-provider-kubernetes) is the reference implementation:
 
-- `provider.yaml` — full vocabulary with 2 types, 5 facts, 4 states
+- `manifest.yaml` — full vocabulary with 2 types, 5 facts, 4 states
 - `main.go` — binary using kubectl JSON output
 - `hooks/install.sh` — Go build script
 
@@ -80,6 +80,6 @@ The [aws provider](https://github.com/mgt-tool/mgtt-provider-aws) shows a minima
 
 ## Next steps
 
-- [Vocabulary](vocabulary.md) — writing provider.yaml
+- [Vocabulary](vocabulary.md) — writing manifest.yaml
 - [Binary Protocol](protocol.md) — implementing probe/validate/describe
 - [Install Hooks](hooks.md) — build scripts

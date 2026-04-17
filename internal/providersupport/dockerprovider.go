@@ -58,13 +58,13 @@ func (d *DockerCmd) PullImage(ctx context.Context, ref string) error {
 	return nil
 }
 
-// ExtractManifest creates a container from the image, copies /provider.yaml
+// ExtractManifest creates a container from the image, copies /manifest.yaml
 // out of its filesystem, then removes the container. Works for any base
 // image — including distroless and scratch — because nothing inside the
-// container is executed. The provider image MUST embed its provider.yaml
-// at /provider.yaml; no other location is supported.
+// container is executed. The provider image MUST embed its manifest.yaml
+// at /manifest.yaml; no other location is supported.
 //
-// `docker cp <cid>:/provider.yaml -` emits a tar archive on stdout containing
+// `docker cp <cid>:/manifest.yaml -` emits a tar archive on stdout containing
 // the single file; we decode the first regular-file entry and return its body.
 func (d *DockerCmd) ExtractManifest(ctx context.Context, ref string) ([]byte, error) {
 	if d.Timeout > 0 {
@@ -85,26 +85,26 @@ func (d *DockerCmd) ExtractManifest(ctx context.Context, ref string) ([]byte, er
 		_, _ = d.Run(ctx, "rm", "-v", cid)
 	}()
 
-	tarOut, err := d.Run(ctx, "cp", cid+":/provider.yaml", "-")
+	tarOut, err := d.Run(ctx, "cp", cid+":/manifest.yaml", "-")
 	if err != nil {
-		return nil, fmt.Errorf("docker cp /provider.yaml from %s: %w\n%s", ref, err, tarOut)
+		return nil, fmt.Errorf("docker cp /manifest.yaml from %s: %w\n%s", ref, err, tarOut)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(tarOut))
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return nil, fmt.Errorf("extract /provider.yaml from %s: no regular file in tar stream", ref)
+			return nil, fmt.Errorf("extract /manifest.yaml from %s: no regular file in tar stream", ref)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("extract /provider.yaml from %s: read tar header: %w", ref, err)
+			return nil, fmt.Errorf("extract /manifest.yaml from %s: read tar header: %w", ref, err)
 		}
 		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA { //nolint:staticcheck // TypeRegA is legacy but still appears
 			continue
 		}
 		body, err := io.ReadAll(tr)
 		if err != nil {
-			return nil, fmt.Errorf("extract /provider.yaml from %s: read body: %w", ref, err)
+			return nil, fmt.Errorf("extract /manifest.yaml from %s: read body: %w", ref, err)
 		}
 		return body, nil
 	}
@@ -113,7 +113,7 @@ func (d *DockerCmd) ExtractManifest(ctx context.Context, ref string) ([]byte, er
 // ExtractTypes pulls the /types/ directory out of the image as a map of
 // filename → contents. Multi-file providers (kubernetes, tempo, quickwit,
 // terraform) declare one type per file under types/; without this step the
-// install directory would only contain provider.yaml and every type would
+// install directory would only contain manifest.yaml and every type would
 // disappear on image install.
 //
 // Returns (nil, nil) when the image has no /types/ directory — inline-types

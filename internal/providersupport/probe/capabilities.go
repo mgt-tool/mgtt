@@ -1,7 +1,7 @@
 // Capabilities expansion for image-installed providers.
 //
 // Providers declare semantic labels ("kubectl", "aws", "docker", …) in
-// their provider.yaml. At probe dispatch time mgtt expands each label
+// their manifest.yaml. At probe dispatch time mgtt expands each label
 // into the docker-run flags that actually grant the intent: bind mounts
 // for credential dirs, -e flags for env vars, socket mounts for daemon
 // access. Network mode (bridge/host/none) is a separate top-level
@@ -146,7 +146,7 @@ func KnownNames() []string {
 // MGTT_IMAGE_CAPS_DENY. The return value is ready to prepend to
 // `<imageRef> <probe-args>`.
 //
-// Order is stable: caps expand in the order provider.yaml declares them,
+// Order is stable: caps expand in the order manifest.yaml declares them,
 // so operators reading the docker-run line can scan needs and argv side
 // by side.
 //

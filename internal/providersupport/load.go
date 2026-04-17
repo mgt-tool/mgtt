@@ -153,20 +153,20 @@ func LoadFromFile(path string) (*Provider, error) {
 	return LoadFromBytes(data)
 }
 
-// LoadFromDir loads a provider from a directory. It reads provider.yaml for
-// meta/needs/network/read_only/hooks/variables. If provider.yaml contains an
+// LoadFromDir loads a provider from a directory. It reads manifest.yaml for
+// meta/needs/network/read_only/hooks/variables. If manifest.yaml contains an
 // inline types: key, those are loaded (backward-compatible). Otherwise, it
 // scans a types/ subdirectory and loads each .yaml file as a named type.
 func LoadFromDir(dir string) (*Provider, error) {
-	providerPath := filepath.Join(dir, "provider.yaml")
+	providerPath := filepath.Join(dir, "manifest.yaml")
 	data, err := os.ReadFile(providerPath)
 	if err != nil {
-		return nil, fmt.Errorf("read provider.yaml in %q: %w", dir, err)
+		return nil, fmt.Errorf("read manifest.yaml in %q: %w", dir, err)
 	}
 
 	p, err := LoadFromBytes(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse provider.yaml in %q: %w", dir, err)
+		return nil, fmt.Errorf("parse manifest.yaml in %q: %w", dir, err)
 	}
 
 	// If inline types were loaded, we're done (backward-compatible).

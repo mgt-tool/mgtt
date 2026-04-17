@@ -24,7 +24,7 @@ func TestUninstallProvider_RemovesDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	yaml := []byte("meta:\n  name: testprov\n  version: 1.0.0\n")
-	if err := os.WriteFile(filepath.Join(dir, "provider.yaml"), yaml, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -51,7 +51,7 @@ func TestUninstallProvider_RunsHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	yaml := []byte("meta:\n  name: hookprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
-	if err := os.WriteFile(filepath.Join(dir, "provider.yaml"), yaml, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// Hook writes a marker file so we can verify it ran.
@@ -81,7 +81,7 @@ func TestUninstallProvider_BrokenYAMLStillRemovesDir(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "provider.yaml"), []byte("not: [valid yaml"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte("not: [valid yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,7 +106,7 @@ func TestUninstallProvider_ImageInstall_SkipsHook(t *testing.T) {
 
 	// Provider YAML declares an uninstall hook.
 	yaml := []byte("meta:\n  name: imageprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
-	if err := os.WriteFile(filepath.Join(dir, "provider.yaml"), yaml, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +161,7 @@ func TestUninstallProvider_GitInstall_RunsHookAsBefore(t *testing.T) {
 
 	// Provider YAML declares an uninstall hook.
 	yaml := []byte("meta:\n  name: gitprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
-	if err := os.WriteFile(filepath.Join(dir, "provider.yaml"), yaml, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

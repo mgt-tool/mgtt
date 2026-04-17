@@ -17,7 +17,7 @@ var providerUninstallCmd = &cobra.Command{
 	Short: "Uninstall a provider (runs optional uninstall hook, then removes the directory)",
 	Long: `Removes an installed provider from ~/.mgtt/providers/<name>/.
 
-If the provider declares hooks.uninstall in provider.yaml, that script is
+If the provider declares hooks.uninstall in manifest.yaml, that script is
 executed before the directory is removed (same environment as the install hook:
 MGTT_PROVIDER_DIR and MGTT_PROVIDER_NAME are set).
 
@@ -48,14 +48,14 @@ func uninstallProvider(w io.Writer, name string) error {
 		// and continue uninstall.
 	}
 
-	// Load provider.yaml to discover the uninstall hook. This uses the
+	// Load manifest.yaml to discover the uninstall hook. This uses the
 	// un-gated LoadEmbedded (not LoadForUse) because uninstall must work
 	// even when the provider is version-incompatible with the running mgtt.
 	p, err := providersupport.LoadEmbedded(name)
 	if err != nil {
 		// Provider dir exists but YAML is unparseable — still remove it.
 		// The operator chose to uninstall; honour that.
-		fmt.Fprintf(w, "  warning: could not load provider.yaml: %v\n", err)
+		fmt.Fprintf(w, "  warning: could not load manifest.yaml: %v\n", err)
 		fmt.Fprintf(w, "  removing %s\n", dir)
 		return os.RemoveAll(dir)
 	}

@@ -36,7 +36,7 @@ type InstallMeta struct {
 	Source string `json:"source"`
 	// InstalledAt is the wall-clock time of install (UTC, second precision).
 	InstalledAt time.Time `json:"installed_at"`
-	// Version is the Meta.Version from the provider.yaml at install time.
+	// Version is the Meta.Version from the manifest.yaml at install time.
 	// Used only for `mgtt provider list` output today; informational.
 	Version string `json:"version,omitempty"`
 }

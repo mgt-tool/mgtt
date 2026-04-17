@@ -65,10 +65,10 @@ func TestExtractManifest_HappyPath(t *testing.T) {
 			case "create":
 				return []byte("container-abc\n"), nil
 			case "cp":
-				if !strings.Contains(joined, "container-abc:/provider.yaml") {
-					t.Errorf("cp: expected container-abc:/provider.yaml, got %s", joined)
+				if !strings.Contains(joined, "container-abc:/manifest.yaml") {
+					t.Errorf("cp: expected container-abc:/manifest.yaml, got %s", joined)
 				}
-				return tarBytes(t, "provider.yaml", manifest), nil
+				return tarBytes(t, "manifest.yaml", manifest), nil
 			case "rm":
 				if !strings.Contains(joined, "container-abc") {
 					t.Errorf("rm: expected container-abc in args, got %s", joined)
@@ -102,7 +102,7 @@ func TestExtractManifest_HappyPath(t *testing.T) {
 }
 
 // TestExtractManifest_MissingFile verifies that a cp failure (the file isn't
-// in the image) wraps the underlying docker error and mentions /provider.yaml.
+// in the image) wraps the underlying docker error and mentions /manifest.yaml.
 // The container must still be removed.
 func TestExtractManifest_MissingFile(t *testing.T) {
 	underlyingErr := errors.New("Error: No such container:path")
@@ -128,8 +128,8 @@ func TestExtractManifest_MissingFile(t *testing.T) {
 	if !errors.Is(err, underlyingErr) {
 		t.Fatalf("expected error wrapping underlying docker error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "/provider.yaml") {
-		t.Fatalf("expected error message mentioning /provider.yaml, got %v", err)
+	if !strings.Contains(err.Error(), "/manifest.yaml") {
+		t.Fatalf("expected error message mentioning /manifest.yaml, got %v", err)
 	}
 	if !rmCalled {
 		t.Fatalf("expected rm to be called for cleanup even when cp fails")
@@ -188,7 +188,7 @@ func tarDirBytes(t *testing.T, dirName string, files map[string]string) []byte {
 }
 
 // TestExtractTypes_HappyPath verifies that multi-file providers' /types/
-// directory is extracted alongside /provider.yaml. Kubernetes, tempo,
+// directory is extracted alongside /manifest.yaml. Kubernetes, tempo,
 // quickwit, and terraform all ship types/<name>.yaml layouts; without
 // this, image-install would drop every type on the floor.
 func TestExtractTypes_HappyPath(t *testing.T) {
@@ -227,7 +227,7 @@ func TestExtractTypes_HappyPath(t *testing.T) {
 }
 
 // TestExtractTypes_MissingDirIsNotAnError exercises providers that use
-// inline `types:` in provider.yaml and have no types/ directory. docker cp
+// inline `types:` in manifest.yaml and have no types/ directory. docker cp
 // fails with "No such file or directory"; we must return (nil, nil) not an
 // error — the caller treats absence as "nothing to copy".
 func TestExtractTypes_MissingDirIsNotAnError(t *testing.T) {

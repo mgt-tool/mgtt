@@ -89,14 +89,14 @@ Both methods write into `~/.mgtt/providers/<name>/`, but what ends up on disk di
 ~/.mgtt/providers/tempo/
 ├── .mgtt-install.json     # metadata: method, source URL, timestamp
 ├── probe                  # the compiled executable (built from source)
-└── <maybe other files>    # provider.yaml, docs, examples, etc.
+└── <maybe other files>    # manifest.yaml, docs, examples, etc.
 ```
 
 **Image install:**
 ```
 ~/.mgtt/providers/tempo/
 ├── .mgtt-install.json     # metadata: method, image digest, timestamp
-└── provider.yaml          # provider descriptor only; binary lives in the Docker image
+└── manifest.yaml          # provider descriptor only; binary lives in the Docker image
 ```
 
 The `.mgtt-install.json` file records:
@@ -133,7 +133,7 @@ $ mgtt provider list
 
 ## What the image gets at runtime
 
-Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `provider.yaml`:
+Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `manifest.yaml`:
 
 ```yaml
 needs: [kubectl, aws]

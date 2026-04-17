@@ -173,9 +173,9 @@ func TestImageInstall_FullRoundTrip(t *testing.T) {
 		t.Errorf("source: want %q, got %q", digestRef, meta.Source)
 	}
 
-	// 5b. Verify provider.yaml was written to the install dir.
-	if _, err := os.Stat(filepath.Join(providerDir, "provider.yaml")); err != nil {
-		t.Errorf("provider.yaml missing from install dir: %v", err)
+	// 5b. Verify manifest.yaml was written to the install dir.
+	if _, err := os.Stat(filepath.Join(providerDir, "manifest.yaml")); err != nil {
+		t.Errorf("manifest.yaml missing from install dir: %v", err)
 	}
 
 	// 6. `mgtt provider ls` shows the provider with method=image.

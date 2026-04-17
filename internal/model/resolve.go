@@ -25,7 +25,7 @@ type ResolutionWarning struct {
 type InstalledProvider struct {
 	Name      string // short name (dir name under ~/.mgtt/providers/)
 	Namespace string // from .mgtt-install.json; empty for legacy installs
-	Version   string // from provider.yaml meta.version
+	Version   string // from manifest.yaml meta.version
 	Dir       string // filesystem path
 }
 

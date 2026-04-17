@@ -205,10 +205,10 @@ The catalog above is small — three types across two providers. Real systems ha
 
 ### Option 1: Write a vocabulary-only provider (fastest)
 
-Define a `provider.yaml` with your types, facts, states, and inline probe commands. No compiled binary needed — mgtt executes the shell commands directly.
+Define a `manifest.yaml` with your types, facts, states, and inline probe commands. No compiled binary needed — mgtt executes the shell commands directly.
 
 ```yaml
-# my-aws-extras/provider.yaml
+# my-aws-extras/manifest.yaml
 meta:
   name: my-aws-extras
   version: 0.1.0
@@ -222,7 +222,7 @@ hooks:
 
 # read_only defaults to true; shell-fallback vocabulary-only providers
 # are inherently read-only. Document the AWS credential chain this
-# provider uses in a README rather than in provider.yaml — that's
+# provider uses in a README rather than in manifest.yaml — that's
 # narrative that doesn't fit a structured field.
 
 types:
@@ -262,7 +262,7 @@ This is the right starting point. You can always add a compiled binary later for
 
 ### Option 2: Extend an existing provider
 
-Fork the official `aws` or `kubernetes` provider repository and add types to its `provider.yaml`. This keeps all your AWS types in one provider.
+Fork the official `aws` or `kubernetes` provider repository and add types to its `manifest.yaml`. This keeps all your AWS types in one provider.
 
 ### Option 3: Contribute upstream
 

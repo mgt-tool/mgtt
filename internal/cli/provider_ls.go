@@ -64,7 +64,7 @@ func renderProviderLs(w io.Writer, providers []*providersupport.Provider) {
 			}
 			// On error: show "?" and continue (don't abort the listing)
 		}
-		// Capabilities come from provider.yaml's image.needs. They're
+		// Capabilities come from manifest.yaml's image.needs. They're
 		// most meaningful for image-installed providers (they drive the
 		// docker-run flags), but rendering them for git installs too is
 		// fine: it's still a declared part of the provider contract.

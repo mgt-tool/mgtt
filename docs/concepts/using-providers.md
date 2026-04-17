@@ -19,7 +19,7 @@ How to install, run, audit, and control providers with mgtt.
 mgtt provider install <name|url|--image ref>
   ↓
 ~/.mgtt/providers/<name>/
-├── provider.yaml
+├── manifest.yaml
 ├── types/
 ├── bin/provider        (git installs only)
 └── .mgtt-install.json
@@ -54,13 +54,13 @@ docker run --rm [--network <mode>] [<cap flags…>] <image-ref> \
   probe <component> <fact> --type <type> [--var val …]
 ```
 
-The `--network`, cap flags, and image ref all come from the provider's `provider.yaml` and `.mgtt-install.json`. Container starts with an empty environment unless `needs:` grants host-side resources explicitly.
+The `--network`, cap flags, and image ref all come from the provider's `manifest.yaml` and `.mgtt-install.json`. Container starts with an empty environment unless `needs:` grants host-side resources explicitly.
 
 ---
 
 ## What mgtt forwards
 
-Image-installed providers declare their runtime requirements in `provider.yaml`:
+Image-installed providers declare their runtime requirements in `manifest.yaml`:
 
 ```yaml
 needs: [kubectl, aws]
@@ -175,7 +175,7 @@ The [public registry](../reference/registry.md) lists every mgt-tool provider wi
 Image-installed providers need `network: host` to resolve in-cluster DNS or reach private API endpoints. Check the provider's declaration:
 
 ```bash
-grep ^network: $MGTT_HOME/providers/kubernetes/provider.yaml
+grep ^network: $MGTT_HOME/providers/kubernetes/manifest.yaml
 ```
 
 ### A capability isn't being applied
@@ -204,7 +204,7 @@ env | grep AWS_
 
 ### Install fails with "unknown capability"
 
-The provider's `provider.yaml` declares a label not in the merged vocabulary. Add it to `$MGTT_HOME/capabilities.yaml` before reinstalling, or file an issue against the provider repo.
+The provider's `manifest.yaml` declares a label not in the merged vocabulary. Add it to `$MGTT_HOME/capabilities.yaml` before reinstalling, or file an issue against the provider repo.
 
 ---
 
@@ -212,5 +212,5 @@ The provider's `provider.yaml` declares a label not in the merged vocabulary. Ad
 
 - [Provider Install Methods](provider-install-methods.md) — git vs image, digest pinning, on-disk layout
 - [Provider Capabilities](../reference/image-capabilities.md) — full capability vocabulary and override schema
-- [Writing Providers](../providers/overview.md) — authoring `provider.yaml`, binary protocol, hooks
+- [Writing Providers](../providers/overview.md) — authoring `manifest.yaml`, binary protocol, hooks
 - [Configuration](../reference/configuration.md) — every `MGTT_*` env var

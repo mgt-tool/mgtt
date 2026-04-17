@@ -21,7 +21,7 @@ mgtt invokes the runner as:
 
     <runner> probe <component-name> <fact-name> [--<key> <value> ...]
 
-- `<runner>` is `meta.command` from the provider's `provider.yaml`.
+- `<runner>` is `meta.command` from the provider's `manifest.yaml`.
 - All entries from `Command.Vars` and `Command.Extra` are passed as `--<key> <value>` pairs in alphabetical order. Core does not privilege any key (no special `--namespace`, `--cluster`, etc.). Providers declare which flags they expect in their own README.
 - `--type <T>` is reserved by core when the model declares a typed component.
 - A key appearing in both `Vars` and `Extra` is a usage error — the runner reports `ErrUsage`.
@@ -66,7 +66,7 @@ When mgtt sets `MGTT_DEBUG=1` in the runner's environment, the provider MAY emit
 
 ## Versioning
 
-`provider.yaml` declares `meta.requires.mgtt` as a semver range. **Only `>=X.Y.Z` is accepted**; ranges, carets, and tildes are rejected at load time. Core refuses to load incompatible providers — except for `mgtt provider uninstall <name>`, which always works regardless of version mismatch (you must always be able to remove a provider you can no longer use).
+`manifest.yaml` declares `meta.requires.mgtt` as a semver range. **Only `>=X.Y.Z` is accepted**; ranges, carets, and tildes are rejected at load time. Core refuses to load incompatible providers — except for `mgtt provider uninstall <name>`, which always works regardless of version mismatch (you must always be able to remove a provider you can no longer use).
 
 ## Validation
 
@@ -79,7 +79,7 @@ The static check is safe in any CI. The `--live` check requires a live backend a
 
 ## Read-only contract
 
-`provider.yaml` declares the write posture at the top level:
+`manifest.yaml` declares the write posture at the top level:
 
 ```yaml
 read_only: true   # default — pure reader. Omit entirely in most providers.

@@ -90,7 +90,7 @@ def _make_handler():
                 else:
                     body = b"[]"
                 self._respond(200, body, "application/json")
-            elif "/contents/provider.yaml" in self.path:
+            elif "/contents/manifest.yaml" in self.path:
                 body = json.dumps({
                     "content": base64.b64encode(tempo_yaml.encode()).decode(),
                     "encoding": "base64",

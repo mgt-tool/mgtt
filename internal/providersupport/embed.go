@@ -42,7 +42,7 @@ func SearchDirs() []string {
 func ProviderDir(name string) string {
 	for _, dir := range SearchDirs() {
 		candidate := filepath.Join(dir, name)
-		if _, err := os.Stat(filepath.Join(candidate, "provider.yaml")); err == nil {
+		if _, err := os.Stat(filepath.Join(candidate, "manifest.yaml")); err == nil {
 			return candidate
 		}
 	}
@@ -51,7 +51,7 @@ func ProviderDir(name string) string {
 
 // LoadEmbedded loads a provider by name from the search path. Uses
 // LoadFromDir so multi-file providers (types/*.yaml) are supported; inline
-// types in provider.yaml still work via LoadFromDir's fallback.
+// types in manifest.yaml still work via LoadFromDir's fallback.
 func LoadEmbedded(name string) (*Provider, error) {
 	dir := ProviderDir(name)
 	if dir == "" {
@@ -71,7 +71,7 @@ func ListEmbedded() []string {
 		}
 		for _, e := range entries {
 			if e.IsDir() && !seen[e.Name()] {
-				if _, err := os.Stat(filepath.Join(dir, e.Name(), "provider.yaml")); err == nil {
+				if _, err := os.Stat(filepath.Join(dir, e.Name(), "manifest.yaml")); err == nil {
 					seen[e.Name()] = true
 					names = append(names, e.Name())
 				}

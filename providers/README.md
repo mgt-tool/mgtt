@@ -2,7 +2,7 @@
 
 A provider teaches mgtt about a technology. You provide three things:
 
-1. **The vocabulary** (`provider.yaml`) — types, facts, states, failure modes, written in mgtt's language
+1. **The vocabulary** (`manifest.yaml`) — types, facts, states, failure modes, written in mgtt's language
 2. **The binary** — a program that probes real systems and returns typed values
 3. **The install hook** — a script that builds or downloads the binary
 
@@ -12,7 +12,7 @@ That's it. mgtt handles the reasoning; your provider handles the observing.
 
 ```
 my-provider/
-├── provider.yaml              vocabulary for the constraint engine
+├── manifest.yaml              vocabulary for the constraint engine
 ├── hooks/
 │   └── install.sh             builds the binary (runs during mgtt provider install)
 ├── go.mod                     (if writing in Go — any language works)
@@ -28,7 +28,7 @@ split type definitions into individual files:
 
 ```
 my-provider/
-├── provider.yaml              meta, auth, variables, hooks (no types: key)
+├── manifest.yaml              meta, auth, variables, hooks (no types: key)
 ├── types/
 │   ├── deployment.yaml        one file per type
 │   ├── service.yaml
@@ -42,12 +42,12 @@ my-provider/
 Each `.yaml` file in `types/` contains exactly what would go under `types.<name>:` in
 a single-file provider. The filename (minus `.yaml`) becomes the type name.
 
-**Backward-compatible**: providers with inline `types:` in `provider.yaml` still work.
+**Backward-compatible**: providers with inline `types:` in `manifest.yaml` still work.
 The loader checks for `types:` first; if absent, it scans the `types/` directory.
 
 Load multi-file providers with `LoadFromDir("path/to/my-provider")`.
 
-## Step 1: Write the Vocabulary (`provider.yaml`)
+## Step 1: Write the Vocabulary (`manifest.yaml`)
 
 The vocabulary tells mgtt's constraint engine what your technology looks like —
 what component types exist, what facts can be observed, what states are possible,
@@ -250,7 +250,7 @@ Return:
 {"ok": true, "auth": "config at ~/.my-tool/config", "access": "read-only"}
 ```
 
-**`describe`** — self-declare capabilities (optional, supplements provider.yaml):
+**`describe`** — self-declare capabilities (optional, supplements manifest.yaml):
 
 ```bash
 mgtt-provider-my-provider describe
@@ -385,7 +385,7 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in x86_64) ARCH="amd64" ;; aarch64) ARCH="arm64" ;; esac
 
-VERSION=$(grep 'version:' provider.yaml | head -1 | awk '{print $2}')
+VERSION=$(grep 'version:' manifest.yaml | head -1 | awk '{print $2}')
 URL="https://github.com/my-org/mgtt-provider-my-provider/releases/download/v${VERSION}/mgtt-provider-my-provider-${OS}-${ARCH}"
 
 curl -sSL "$URL" -o bin/mgtt-provider-my-provider
@@ -415,7 +415,7 @@ echo "✓ installed Python provider"
 Providers can be installed two ways:
 
 - **Git install** (`mgtt provider install <url>`) — clones the repo and runs `hooks/install.sh` to build the binary on the host. Requires the Go (or Python, or whatever) toolchain locally.
-- **Image install** (`mgtt provider install --image <ref>@sha256:...`) — pulls a Docker image that ships the compiled binary and the `provider.yaml`. mgtt invokes probes via `docker run` against the image. The host only needs `docker`.
+- **Image install** (`mgtt provider install --image <ref>@sha256:...`) — pulls a Docker image that ships the compiled binary and the `manifest.yaml`. mgtt invokes probes via `docker run` against the image. The host only needs `docker`.
 
 Image install is the recommended distribution path for corporate operators — no local toolchain, digest-pinned reproducibility, and works identically across machines.
 
@@ -423,7 +423,7 @@ Image install is the recommended distribution path for corporate operators — n
 
 The image must satisfy three requirements:
 
-1. **`/provider.yaml` at the root** — the vocabulary, extracted by mgtt at install time via `docker create` + `docker cp`. Any base image works, including distroless and scratch — mgtt never executes anything inside the container during extraction.
+1. **`/manifest.yaml` at the root** — the vocabulary, extracted by mgtt at install time via `docker create` + `docker cp`. Any base image works, including distroless and scratch — mgtt never executes anything inside the container during extraction.
 2. **`ENTRYPOINT` is the provider binary** — mgtt invokes probes with `docker run --rm <image> probe <component> <fact> ...`. The entrypoint must accept the same argv the host-installed binary does.
 3. **Image is digest-pinned when published to the registry** — tags can be re-rolled silently. Always publish (and install) with `@sha256:...`.
 
@@ -439,12 +439,12 @@ RUN go build -o /out/mgtt-provider-my-provider .
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /out/mgtt-provider-my-provider /bin/provider
-COPY provider.yaml /provider.yaml
+COPY manifest.yaml /manifest.yaml
 COPY types /types
 ENTRYPOINT ["/bin/provider"]
 ```
 
-The `COPY types /types` line is only needed for multi-file providers (those that keep one type per file under `types/<name>.yaml`). mgtt's image installer `docker cp`s both `/provider.yaml` and (if present) `/types/` out of the container.
+The `COPY types /types` line is only needed for multi-file providers (those that keep one type per file under `types/<name>.yaml`). mgtt's image installer `docker cp`s both `/manifest.yaml` and (if present) `/types/` out of the container.
 
 Publish to `ghcr.io` (or any registry) and advertise the digest in your README and the registry entry.
 
@@ -495,7 +495,7 @@ rm -rf bin/ .venv/
 echo "✓ cleanup complete"
 ```
 
-Declare it in `provider.yaml`:
+Declare it in `manifest.yaml`:
 
 ```yaml
 hooks:
@@ -595,12 +595,12 @@ Providers live in their own repositories, not under this directory. Study these 
 - [mgtt-provider-kubernetes](https://github.com/mgt-tool/mgtt-provider-kubernetes) — 37-type vocabulary (multi-file `types/`), Go binary using kubectl
 - [mgtt-provider-docker](https://github.com/mgt-tool/mgtt-provider-docker) — Docker provider
 
-Each repo shows `provider.yaml` vocabulary, `main.go` runner, and `hooks/install.sh`.
+Each repo shows `manifest.yaml` vocabulary, `main.go` runner, and `hooks/install.sh`.
 
 ## Design Principles
 
 - **Vocabulary is mgtt's language.** You fill in the blanks with your technology's knowledge. The schema is the same for every provider.
 - **The binary is a black box.** mgtt doesn't care how you probe — kubectl, API call, SSH, curl. Args in, JSON out.
-- **The engine never calls your binary for reasoning.** It reads `provider.yaml` to build failure paths. The binary is only called when it's time to actually observe a component.
+- **The engine never calls your binary for reasoning.** It reads `manifest.yaml` to build failure paths. The binary is only called when it's time to actually observe a component.
 - **Any language works.** Go is convenient (single binary, fast), but Bash, Python, Rust, or anything that speaks the protocol is fine.
 - **State ordering is your responsibility.** The engine evaluates states top-to-bottom, first match wins. Put specific conditions before general ones.

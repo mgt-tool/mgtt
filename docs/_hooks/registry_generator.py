@@ -1,4 +1,4 @@
-"""Build-time hook: regenerate docs/reference/registry.md from upstream provider.yamls.
+"""Build-time hook: regenerate docs/reference/registry.md from upstream manifest.yamls.
 
 Wired in mkdocs.yml under `hooks:`. Runs once per build via on_pre_build.
 """
@@ -40,7 +40,7 @@ REGISTRY_MD_PREAMBLE = """# Provider Registry
 <!--
 GENERATED FILE — do not edit by hand.
 Source: docs/registry.yaml (minimal name→URL map) + each provider's upstream
-provider.yaml. Rebuilt by docs/_hooks/registry_generator.py on every
+manifest.yaml. Rebuilt by docs/_hooks/registry_generator.py on every
 mkdocs build.
 -->
 
@@ -48,7 +48,7 @@ Community-maintained providers for mgtt.
 
 The single source of truth for the name→URL map is
 [`docs/registry.yaml`](https://github.com/mgt-tool/mgtt/blob/main/docs/registry.yaml).
-Per-provider detail below is pulled from each repo's `provider.yaml` at
+Per-provider detail below is pulled from each repo's `manifest.yaml` at
 its latest `v*` tag on every docs build.
 
 Replace `<digest>` shown in Install commands below with the current
@@ -200,7 +200,7 @@ def fetch_provider_yaml(repo_url: str, ref: str) -> str:
     owner, repo = _parse_repo(repo_url)
 
     def _fetch() -> str:
-        raw = _github_get(f"/repos/{owner}/{repo}/contents/provider.yaml?ref={ref}")
+        raw = _github_get(f"/repos/{owner}/{repo}/contents/manifest.yaml?ref={ref}")
         obj = json.loads(raw)
         if obj.get("encoding") != "base64":
             raise ValueError(f"{owner}/{repo}@{ref}: unexpected content encoding {obj.get('encoding')!r}")

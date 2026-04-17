@@ -1,6 +1,6 @@
 # Provider Vocabulary
 
-The vocabulary (`provider.yaml`) tells mgtt's constraint engine what your technology looks like — what component types exist, what facts can be observed, what states are possible, how failures propagate — plus the provider's own operational metadata (capabilities, network mode, compatibility binding, variables, auth, hooks).
+The vocabulary (`manifest.yaml`) tells mgtt's constraint engine what your technology looks like — what component types exist, what facts can be observed, what states are possible, how failures propagate — plus the provider's own operational metadata (capabilities, network mode, compatibility binding, variables, auth, hooks).
 
 ## On this page
 

@@ -10,7 +10,7 @@
 5. [The Constraint Engine](#5-the-constraint-engine) — how reasoning works
 6. [Model Format](#6-model-format) — `system.model.yaml`
 7. [Fact Store Format](#7-fact-store-format) — observation log
-8. [Provider Format](#8-provider-format) — `provider.yaml` schema
+8. [Provider Format](#8-provider-format) — `manifest.yaml` schema
 9. [Complete Provider Example](#9-complete-provider-example)
 10. [Provider Authoring Toolchain](#10-provider-authoring-toolchain)
 11. [Authentication and Probe Execution](#11-authentication-and-probe-execution)
@@ -548,7 +548,7 @@ repository contains no provider-specific content.
 
 A provider directory has two parts:
 
-1. **`provider.yaml`** — the vocabulary: types, facts, states, failure modes,
+1. **`manifest.yaml`** — the vocabulary: types, facts, states, failure modes,
    healthy conditions. This is what the constraint engine reads. It never
    touches the real system.
 
@@ -558,7 +558,7 @@ A provider directory has two parts:
 
 ```
 mgtt-provider-kubernetes/            (separate git repository)
-├── provider.yaml                    vocabulary for the engine
+├── manifest.yaml                    vocabulary for the engine
 ├── types/*.yaml                     one file per component type
 ├── hooks/
 │   └── install.sh                   compiles or downloads the binary
@@ -567,7 +567,7 @@ mgtt-provider-kubernetes/            (separate git repository)
     └── mgtt-provider-kubernetes     the compiled provider binary
 ```
 
-### 8.1 Top-Level Structure — provider.yaml
+### 8.1 Top-Level Structure — manifest.yaml
 
 ```yaml
 meta:
@@ -651,17 +651,17 @@ mgtt-provider-kubernetes validate --namespace <ns>
 {"ok": true, "auth": "kubectl context (eks-prod)", "access": "read-only"}
 ```
 
-**describe** — self-declare capabilities (optional, supplements provider.yaml):
+**describe** — self-declare capabilities (optional, supplements manifest.yaml):
 ```bash
 mgtt-provider-kubernetes describe
 
-# stdout: JSON matching the types block of provider.yaml
+# stdout: JSON matching the types block of manifest.yaml
 ```
 
 Exit code 0 means success. Non-zero means error; stderr contains the message.
 
 mgtt passes model variables as `--<key> <value>` args. The provider binary
-receives the variables declared in `provider.yaml`'s `variables` block.
+receives the variables declared in `manifest.yaml`'s `variables` block.
 
 ### 8.3 The `data_types` Block
 
@@ -715,7 +715,7 @@ Built-in variables always available:
 Provider-declared variables set in `model.meta.vars`:
 
 ```yaml
-# provider.yaml
+# manifest.yaml
 variables:
   namespace:
     description: kubernetes namespace
@@ -830,7 +830,7 @@ type: kubernetes.deployment
 ## 9. Complete Provider Example
 
 ```yaml
-# mgtt-provider-simplecache/provider.yaml
+# mgtt-provider-simplecache/manifest.yaml
 
 meta:
   name:        simplecache
@@ -927,7 +927,7 @@ variables:
 
 ```bash
 mgtt provider init <name>        # scaffold provider directory from template
-mgtt provider validate           # check provider.yaml + binary against spec
+mgtt provider validate           # check manifest.yaml + binary against spec
 mgtt provider test --readonly    # run probes in sandboxed read-only mode
 mgtt provider publish            # submit to community registry
 
@@ -939,7 +939,7 @@ mgtt stdlib inspect <type>       # full definition of a stdlib type
 
 ```
 <name>/
-├── provider.yaml                template with all fields documented
+├── manifest.yaml                template with all fields documented
 ├── hooks/
 │   └── install.sh               compiles the binary
 ├── go.mod                       Go module (for Go providers)
@@ -951,7 +951,7 @@ mgtt stdlib inspect <type>       # full definition of a stdlib type
 
 A provider consists of three things:
 
-**1. The vocabulary (provider.yaml):** fill in mgtt's schema with the
+**1. The vocabulary (manifest.yaml):** fill in mgtt's schema with the
 technology's specifics — `types`, `facts`, `states`, `healthy`, `failure_modes`.
 
 **2. The binary:** implement the three-command protocol (§8.2.2): `probe`,
@@ -1014,17 +1014,17 @@ environment    ->   owns credentials (env vars, files, instance roles)
 
 ### 11.2 Provider Write Posture + Capability Needs
 
-Two top-level fields on `provider.yaml` tell mgtt what a provider requires at probe time and what (if anything) it writes. Both are provider-level properties — they're declared the same way regardless of install method.
+Two top-level fields on `manifest.yaml` tell mgtt what a provider requires at probe time and what (if anything) it writes. Both are provider-level properties — they're declared the same way regardless of install method.
 
 ```yaml
-# mgtt-provider-kubernetes/provider.yaml
+# mgtt-provider-kubernetes/manifest.yaml
 needs:    [kubectl]         # host-side capabilities the provider wants
 network:  host              # docker-run network mode for image installs
 read_only: true             # default; omit the field in pure-reader providers
 ```
 
 ```yaml
-# mgtt-provider-terraform/provider.yaml
+# mgtt-provider-terraform/manifest.yaml
 needs:    [terraform, aws]
 network:  host
 read_only: false
@@ -1049,7 +1049,7 @@ protocol defined in §8.2.2. The binary handles authentication, connection,
 parsing, and type conversion internally.
 
 **Shell fallback** — for providers without a binary, mgtt executes the
-`probe.cmd` template from provider.yaml directly in the local shell
+`probe.cmd` template from manifest.yaml directly in the local shell
 environment.
 
 **Fixture mode** — `$MGTT_FIXTURES` points to a YAML file with canned probe

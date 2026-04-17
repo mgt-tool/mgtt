@@ -82,7 +82,7 @@ func init() {
 	rootCmd.AddCommand(providerCmd)
 }
 
-// installFromImage pulls a provider image, extracts /provider.yaml from it,
+// installFromImage pulls a provider image, extracts /manifest.yaml from it,
 // and registers the provider locally without cloning any git source.
 // The ref must include a @sha256: digest (enforced by ValidateImageRef).
 // nameHint, if non-empty, overrides the name from the manifest.
@@ -97,7 +97,7 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 		return err
 	}
 
-	fmt.Fprintf(w, "→ extracting /provider.yaml\n")
+	fmt.Fprintf(w, "→ extracting /manifest.yaml\n")
 	manifestBytes, err := docker.ExtractManifest(ctx, ref)
 	if err != nil {
 		return err
@@ -105,10 +105,10 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 
 	p, err := providersupport.LoadFromBytes(manifestBytes)
 	if err != nil {
-		return fmt.Errorf("parse provider.yaml from image: %w", err)
+		return fmt.Errorf("parse manifest.yaml from image: %w", err)
 	}
 	if p.Meta.Name == "" {
-		return fmt.Errorf("provider.yaml from image is missing meta.name")
+		return fmt.Errorf("manifest.yaml from image is missing meta.name")
 	}
 
 	name := nameHint
@@ -118,7 +118,7 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 
 	// Install-time capability validation. Per the image-runner capabilities
 	// spec, unknown caps must fail install loudly — silent drop at probe time
-	// turns a typo in provider.yaml into a cryptic "probe didn't reach X"
+	// turns a typo in manifest.yaml into a cryptic "probe didn't reach X"
 	// debugging session. Shell-fallback refusal is handled by validate.Static.
 	if len(p.Needs) > 0 {
 		var unknown []string
@@ -129,7 +129,7 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 		}
 		if len(unknown) > 0 {
 			return fmt.Errorf(
-				"provider declares unknown image capabilities: %s (known: %s); add them to $MGTT_HOME/capabilities.yaml or fix provider.yaml",
+				"provider declares unknown image capabilities: %s (known: %s); add them to $MGTT_HOME/capabilities.yaml or fix manifest.yaml",
 				strings.Join(unknown, ", "), strings.Join(probe.KnownNames(), ", "))
 		}
 		fmt.Fprintf(w, "→ capabilities: %s\n", strings.Join(p.Needs, ", "))
@@ -149,8 +149,8 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create provider dir: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(destDir, "provider.yaml"), manifestBytes, 0o644); err != nil {
-		return fmt.Errorf("write provider.yaml: %w", err)
+	if err := os.WriteFile(filepath.Join(destDir, "manifest.yaml"), manifestBytes, 0o644); err != nil {
+		return fmt.Errorf("write manifest.yaml: %w", err)
 	}
 
 	// Multi-file providers (kubernetes, tempo, quickwit, terraform) keep type
@@ -216,7 +216,7 @@ func installProvider(w io.Writer, nameOrPath string) error {
 	// 2. Local path
 	if srcDir == "" {
 		if filepath.IsAbs(nameOrPath) || strings.HasPrefix(nameOrPath, ".") || strings.Contains(nameOrPath, string(filepath.Separator)) {
-			if _, err := os.Stat(filepath.Join(nameOrPath, "provider.yaml")); err == nil {
+			if _, err := os.Stat(filepath.Join(nameOrPath, "manifest.yaml")); err == nil {
 				srcDir = nameOrPath
 			}
 		}
@@ -265,10 +265,10 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		return fmt.Errorf("not found (tried git URL, local path, name lookup, and registry)")
 	}
 
-	// Load provider.yaml to get canonical name.
-	p, err := providersupport.LoadFromFile(filepath.Join(srcDir, "provider.yaml"))
+	// Load manifest.yaml to get canonical name.
+	p, err := providersupport.LoadFromFile(filepath.Join(srcDir, "manifest.yaml"))
 	if err != nil {
-		return fmt.Errorf("load provider.yaml: %w", err)
+		return fmt.Errorf("load manifest.yaml: %w", err)
 	}
 
 	// Copy to the canonical install root (honoring MGTT_HOME).
@@ -371,7 +371,7 @@ func deriveNamespace(urlOrRef string) string {
 }
 
 // cloneRepo clones a git repo to a temp dir and returns the path.
-// Expects provider.yaml at the repo root.
+// Expects manifest.yaml at the repo root.
 func cloneRepo(w io.Writer, url string) (string, error) {
 	fmt.Fprintf(w, "  cloning %s...\n", url)
 	tmpDir, err := os.MkdirTemp("", "mgtt-provider-*")
@@ -384,9 +384,9 @@ func cloneRepo(w io.Writer, url string) (string, error) {
 		os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("git clone: %w", err)
 	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "provider.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmpDir, "manifest.yaml")); err != nil {
 		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("cloned repo has no provider.yaml")
+		return "", fmt.Errorf("cloned repo has no manifest.yaml")
 	}
 	return tmpDir, nil
 }

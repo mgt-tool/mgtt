@@ -73,7 +73,7 @@ This keeps backend vocabulary out of mgtt core.
 
 ## Read-only contract
 
-Declare your provider's access surface in `provider.yaml`:
+Declare your provider's access surface in `manifest.yaml`:
 
 ```yaml
 auth:
@@ -84,7 +84,7 @@ auth:
 
 `writes: none` is a contract you make with operators. mgtt cannot enforce it directly — operators are responsible for binding credentials that match (kubernetes RBAC, cloud IAM, daemon-socket permissions, scoped tokens, POSIX permissions, or "no credentials needed").
 
-Providers SHOULD ship a `CREDENTIALS.md` next to `provider.yaml` describing how to provision least-privilege credentials for the backend. The format is provider-specific because authorization models vary completely:
+Providers SHOULD ship a `CREDENTIALS.md` next to `manifest.yaml` describing how to provision least-privilege credentials for the backend. The format is provider-specific because authorization models vary completely:
 
 - A kubernetes provider may include ClusterRole YAML.
 - An AWS provider may include an IAM policy JSON.

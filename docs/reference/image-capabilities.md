@@ -1,6 +1,6 @@
 # Provider Capabilities
 
-Reference for the `needs:` and `network:` fields in `provider.yaml` and how mgtt expands them at probe time.
+Reference for the `needs:` and `network:` fields in `manifest.yaml` and how mgtt expands them at probe time.
 
 ## Declaring
 

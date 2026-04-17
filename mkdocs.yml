@@ -4,6 +4,11 @@ repo_url: https://github.com/mgt-tool/mgtt
 repo_name: mgt-tool/mgtt
 docs_dir: docs
 
+# Exclude internal design specs and plans from the published site.
+# Kept locally (gitignored) for contributor reference, but not shipped.
+exclude_docs: |
+  superpowers/
+
 # Wire the {{ MGTT_VERSION }} placeholder so docs source the version
 # from the repo's VERSION file at build time — no manual sync.
 hooks:

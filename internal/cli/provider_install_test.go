@@ -85,11 +85,9 @@ meta:
   version: 1.2.3
   description: a test provider
 
-auth:
-  strategy: none
-  access:
-    probes: none
-    writes: none
+install:
+  image:
+    repository: ghcr.io/example/test-provider
 `
 
 // TestInstallFromImage_WritesFilesAndMeta exercises the full installFromImage
@@ -444,13 +442,14 @@ func TestInstallFromImage_PrintsDeclaredCaps(t *testing.T) {
 meta:
   name: capped
   version: 1.0.0
-  command: /bin/provider
-auth:
-  strategy: none
-  access: {probes: none, writes: none}
-
-needs: [kubectl]
-network: host
+  description: a capped provider
+runtime:
+  entrypoint: /bin/provider
+  needs: [kubectl]
+  network_mode: host
+install:
+  image:
+    repository: ghcr.io/example/capped
 `
 	fakeDocker := &providersupport.DockerCmd{
 		Run: func(_ context.Context, args ...string) ([]byte, error) {
@@ -487,6 +486,103 @@ network: host
 	}
 }
 
+// TestInstall_RejectsImageWhenSourceOnly verifies that `--image` is
+// rejected when the image's baked manifest only declares install.source.
+// Gating happens after manifest parse, before files are written.
+func TestInstall_RejectsImageWhenSourceOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MGTT_HOME", home)
+
+	const sourceOnlyYAML = `
+meta:
+  name: sourceonly
+  version: 0.1.0
+  description: source-only provider
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
+`
+
+	fakeDocker := &providersupport.DockerCmd{
+		Run: func(_ context.Context, args ...string) ([]byte, error) {
+			switch args[0] {
+			case "pull":
+				return nil, nil
+			case "create":
+				return []byte("cid-test\n"), nil
+			case "cp":
+				if strings.Contains(strings.Join(args, " "), ":/manifest.yaml") {
+					return tarManifest(t, sourceOnlyYAML), nil
+				}
+				return nil, errors.New("no /types")
+			case "rm":
+				return nil, nil
+			}
+			return nil, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	err := installFromImage(
+		context.Background(),
+		&buf,
+		"ghcr.io/example/sourceonly@sha256:deadbeefdeadbeefdeadbeefdeadbeef",
+		"",
+		fakeDocker,
+	)
+	if err == nil {
+		t.Fatal("expected error when --image used against source-only manifest")
+	}
+	if !strings.Contains(err.Error(), "no image-install recipe") {
+		t.Errorf("unexpected error wording: %v", err)
+	}
+	// No install dir should exist.
+	if _, statErr := os.Stat(filepath.Join(home, "providers", "sourceonly")); !os.IsNotExist(statErr) {
+		t.Errorf("no install dir should exist after method-mismatch rejection; stat err=%v", statErr)
+	}
+}
+
+// TestInstall_RejectsSourceWhenImageOnly verifies that a plain
+// `provider install` (no --image) is rejected when the manifest only
+// declares install.image.
+func TestInstall_RejectsSourceWhenImageOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MGTT_HOME", home)
+	t.Setenv("MGTT_REGISTRY_URL", "disabled")
+
+	// Stage a local provider directory so installProvider's local-path
+	// branch finds it without hitting git or the registry.
+	srcDir := filepath.Join(home, "src", "imageonly")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const imageOnlyYAML = `meta:
+  name: imageonly
+  version: 0.1.0
+  description: image-only provider
+install:
+  image:
+    repository: ghcr.io/example/imageonly
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "manifest.yaml"), []byte(imageOnlyYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	err := installProvider(&buf, srcDir)
+	if err == nil {
+		t.Fatal("expected error when plain install used against image-only manifest")
+	}
+	if !strings.Contains(err.Error(), "no source-install recipe") {
+		t.Errorf("unexpected error wording: %v", err)
+	}
+	// No install dir should exist under providers/.
+	if _, statErr := os.Stat(filepath.Join(home, "providers", "imageonly")); !os.IsNotExist(statErr) {
+		t.Errorf("no install dir should exist after method-mismatch rejection; stat err=%v", statErr)
+	}
+}
+
 func TestInstallFromImage_RejectsUnknownCap(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("MGTT_HOME", home)
@@ -497,12 +593,13 @@ func TestInstallFromImage_RejectsUnknownCap(t *testing.T) {
 meta:
   name: bogus
   version: 1.0.0
-  command: /bin/provider
-auth:
-  strategy: none
-  access: {probes: none, writes: none}
-
-needs: [vault-nope]
+  description: a bogus provider
+runtime:
+  entrypoint: /bin/provider
+  needs: [vault-nope]
+install:
+  image:
+    repository: ghcr.io/example/bogus
 `
 	fakeDocker := &providersupport.DockerCmd{
 		Run: func(_ context.Context, args ...string) ([]byte, error) {

@@ -25,11 +25,10 @@ func TestProviderLs_ShowsInstallMethod(t *testing.T) {
   name: git-provider
   version: 1.0.0
   description: A git-installed provider
-auth:
-  strategy: none
-  access:
-    probes: none
-    writes: none
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
 `)
 	if err := os.WriteFile(filepath.Join(gitDir, "manifest.yaml"), gitYAML, 0o644); err != nil {
 		t.Fatal(err)
@@ -44,11 +43,9 @@ auth:
   name: image-provider
   version: 2.0.0
   description: An image-installed provider
-auth:
-  strategy: none
-  access:
-    probes: none
-    writes: none
+install:
+  image:
+    repository: ghcr.io/example/image-provider
 `)
 	if err := os.WriteFile(filepath.Join(imageDir, "manifest.yaml"), imageYAML, 0o644); err != nil {
 		t.Fatal(err)
@@ -160,11 +157,10 @@ func TestProviderLs_CorruptMetaShowsQuestion(t *testing.T) {
   name: corrupt-provider
   version: 1.5.0
   description: Provider with corrupt metadata
-auth:
-  strategy: none
-  access:
-    probes: none
-    writes: none
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
 `)
 	if err := os.WriteFile(yamlFile, yamlContent, 0o644); err != nil {
 		t.Fatal(err)
@@ -223,13 +219,14 @@ func TestProviderLs_ShowsCapabilities(t *testing.T) {
   name: capful
   version: 1.0.0
   description: uses host resources
-  command: /bin/capful
-auth:
-  strategy: none
-  access: {probes: none, writes: none}
-
-needs: [kubectl]
-network: host
+runtime:
+  entrypoint: /bin/capful
+  needs: [kubectl]
+  network_mode: host
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
 `)
 	if err := os.WriteFile(filepath.Join(capDir, "manifest.yaml"), capYAML, 0o644); err != nil {
 		t.Fatal(err)
@@ -244,9 +241,10 @@ network: host
   name: plain
   version: 1.0.0
   description: no caps needed
-auth:
-  strategy: none
-  access: {probes: none, writes: none}
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
 `)
 	if err := os.WriteFile(filepath.Join(plainDir, "manifest.yaml"), plainYAML, 0o644); err != nil {
 		t.Fatal(err)

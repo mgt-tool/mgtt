@@ -23,7 +23,7 @@ func TestUninstallProvider_RemovesDirectory(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yaml := []byte("meta:\n  name: testprov\n  version: 1.0.0\n")
+	yaml := []byte("meta:\n  name: testprov\n  version: 1.0.0\n  description: test provider\ninstall:\n  source:\n    build: hooks/install.sh\n    clean: hooks/uninstall.sh\n")
 	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestUninstallProvider_RunsHook(t *testing.T) {
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yaml := []byte("meta:\n  name: hookprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
+	yaml := []byte("meta:\n  name: hookprov\n  version: 1.0.0\n  description: hook provider\ninstall:\n  source:\n    build: hooks/install.sh\n    clean: hooks/uninstall.sh\n")
 	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -104,8 +104,10 @@ func TestUninstallProvider_ImageInstall_SkipsHook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Provider YAML declares an uninstall hook.
-	yaml := []byte("meta:\n  name: imageprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
+	// Provider YAML declares both install methods. Because .mgtt-install.json
+	// records method=image, the uninstall hook must still be skipped even
+	// though install.source.clean is present.
+	yaml := []byte("meta:\n  name: imageprov\n  version: 1.0.0\n  description: image provider\ninstall:\n  source:\n    build: hooks/install.sh\n    clean: hooks/uninstall.sh\n  image:\n    repository: ghcr.io/example/imageprov\n")
 	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +161,8 @@ func TestUninstallProvider_GitInstall_RunsHookAsBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Provider YAML declares an uninstall hook.
-	yaml := []byte("meta:\n  name: gitprov\n  version: 1.0.0\nhooks:\n  uninstall: hooks/uninstall.sh\n")
+	// Provider YAML declares an uninstall hook via install.source.clean.
+	yaml := []byte("meta:\n  name: gitprov\n  version: 1.0.0\n  description: git provider\ninstall:\n  source:\n    build: hooks/install.sh\n    clean: hooks/uninstall.sh\n")
 	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), yaml, 0o644); err != nil {
 		t.Fatal(err)
 	}

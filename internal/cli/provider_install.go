@@ -112,6 +112,14 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 		return fmt.Errorf("manifest.yaml from image is missing meta.name")
 	}
 
+	// Gate install method against the provider's declared install blocks.
+	// Operator passed --image; reject if the manifest does not advertise
+	// an image-install recipe rather than silently install an
+	// unsupported combination.
+	if p.Install.Image == nil {
+		return fmt.Errorf("provider %q has no image-install recipe (manifest declares install.source only); install without --image to build from source", p.Meta.Name)
+	}
+
 	name := nameHint
 	if name == "" {
 		name = p.Meta.Name
@@ -271,6 +279,14 @@ func installProvider(w io.Writer, nameOrPath string) error {
 	p, err := providersupport.LoadFromFile(filepath.Join(srcDir, "manifest.yaml"))
 	if err != nil {
 		return fmt.Errorf("load manifest.yaml: %w", err)
+	}
+
+	// Gate install method against the provider's declared install blocks.
+	// Operator did not pass --image; reject if the manifest advertises only
+	// an image-install recipe rather than fail deep inside a missing build
+	// script.
+	if p.Install.Source == nil {
+		return fmt.Errorf("provider %q has no source-install recipe (manifest declares install.image only); pass --image <ref> to install from the published image", p.Meta.Name)
 	}
 
 	// Copy to the canonical install root (honoring MGTT_HOME).

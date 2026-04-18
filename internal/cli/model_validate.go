@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/scenarios"
 
 	"github.com/spf13/cobra"
 )
@@ -17,64 +19,251 @@ var modelCmd = &cobra.Command{
 	Short: "Model operations",
 }
 
+// writeScenariosFlag controls whether `mgtt model validate` regenerates
+// the scenarios.yaml sidecar for the model (and the workspace
+// scenarios.index.yaml when no explicit path was given).
+var writeScenariosFlag bool
+
 var modelValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Validate system.model.yaml",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// If no path was supplied AND --write-scenarios was asked for,
+		// treat this as a workspace walk: find every model.yaml under
+		// CWD, regenerate each, and write the workspace index.
+		explicitPath := len(args) > 0
+		if writeScenariosFlag && !explicitPath {
+			return runWorkspaceWriteScenarios(cmd)
+		}
+
 		path := "system.model.yaml"
-		if len(args) > 0 {
+		if explicitPath {
 			path = args[0]
 		}
-
-		m, err := model.Load(path)
-		if err != nil {
-			return err
-		}
-
-		reg := providersupport.LoadAllForUse()
-
-		// Warn on legacy bare-name provider refs before running validation.
-		for _, entry := range m.Meta.Providers {
-			ref, parseErr := model.ParseProviderRef(entry)
-			if parseErr != nil {
-				continue // malformed refs are caught by model.Validate
-			}
-			if ref.LegacyBareName {
-				fmt.Fprintf(cmd.ErrOrStderr(),
-					"⚠ model uses bare provider name %q; consider %q\n",
-					ref.Name, "<namespace>/"+ref.Name+"@<version>")
-			}
-		}
-
-		result := model.Validate(m, reg)
-
-		// Build depCounts: map component name → number of direct dependencies.
-		// Use -1 to signal "no deps but has a healthy override".
-		depCounts := make(map[string]int, len(m.Components))
-		for _, name := range m.Order {
-			comp := m.Components[name]
-			count := 0
-			for _, dep := range comp.Depends {
-				count += len(dep.On)
-			}
-			if count == 0 && len(comp.HealthyRaw) > 0 {
-				depCounts[name] = -1
-			} else {
-				depCounts[name] = count
-			}
-		}
-
-		renderModelValidate(cmd.OutOrStdout(), result, m.Order, depCounts)
-
-		if result.HasErrors() {
-			os.Exit(1)
-		}
-		return nil
+		return runSingleModelValidate(cmd, path, writeScenariosFlag)
 	},
 }
 
+// runSingleModelValidate validates one model file at path. When
+// writeScenarios is true, regenerate scenarios.yaml beside it. On every
+// call, if a scenarios.yaml already exists, compare its source_hash
+// against the current content — error if they differ.
+func runSingleModelValidate(cmd *cobra.Command, path string, writeScenarios bool) error {
+	m, err := model.Load(path)
+	if err != nil {
+		return err
+	}
+
+	reg := providersupport.LoadAllForUse()
+
+	// Warn on legacy bare-name provider refs before running validation.
+	for _, entry := range m.Meta.Providers {
+		ref, parseErr := model.ParseProviderRef(entry)
+		if parseErr != nil {
+			continue // malformed refs are caught by model.Validate
+		}
+		if ref.LegacyBareName {
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"⚠ model uses bare provider name %q; consider %q\n",
+				ref.Name, "<namespace>/"+ref.Name+"@<version>")
+		}
+	}
+
+	result := model.Validate(m, reg)
+
+	// Build depCounts: map component name → number of direct dependencies.
+	// Use -1 to signal "no deps but has a healthy override".
+	depCounts := make(map[string]int, len(m.Components))
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		count := 0
+		for _, dep := range comp.Depends {
+			count += len(dep.On)
+		}
+		if count == 0 && len(comp.HealthyRaw) > 0 {
+			depCounts[name] = -1
+		} else {
+			depCounts[name] = count
+		}
+	}
+
+	renderModelValidate(cmd.OutOrStdout(), result, m.Order, depCounts)
+
+	if result.HasErrors() {
+		os.Exit(1)
+	}
+
+	// Drift detection: if scenarios.yaml exists next to the model, its
+	// stored source_hash must still match the current model + types.
+	scenariosPath := filepath.Join(filepath.Dir(path), "scenarios.yaml")
+	if _, err := os.Stat(scenariosPath); err == nil {
+		f, err := os.Open(scenariosPath)
+		if err != nil {
+			return err
+		}
+		_, committedHash, err := scenarios.Read(f)
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("read %s: %w", scenariosPath, err)
+		}
+		typePaths := collectTypePaths(reg)
+		currentHash, err := scenarios.ComputeSourceHash(path, typePaths)
+		if err != nil {
+			return err
+		}
+		if committedHash != currentHash {
+			return fmt.Errorf("%s is stale: source_hash=%s but current content hashes to %s. Run `mgtt model validate --write-scenarios` and commit.", scenariosPath, committedHash, currentHash)
+		}
+	}
+
+	if writeScenarios {
+		if _, err := regenerateScenariosFor(cmd, m, reg, path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// regenerateScenariosFor enumerates scenarios for m and writes
+// scenarios.yaml beside modelPath. Returns the IndexEntry that would go
+// into scenarios.index.yaml when called from a workspace walk.
+func regenerateScenariosFor(cmd *cobra.Command, m *model.Model, reg *providersupport.Registry, modelPath string) (scenarios.IndexEntry, error) {
+	scs := scenarios.Enumerate(m, reg)
+	typePaths := collectTypePaths(reg)
+	hash, err := scenarios.ComputeSourceHash(modelPath, typePaths)
+	if err != nil {
+		return scenarios.IndexEntry{}, fmt.Errorf("compute source hash: %w", err)
+	}
+	outPath := filepath.Join(filepath.Dir(modelPath), "scenarios.yaml")
+	f, err := os.Create(outPath)
+	if err != nil {
+		return scenarios.IndexEntry{}, fmt.Errorf("create %s: %w", outPath, err)
+	}
+	if err := scenarios.Write(f, hash, scs); err != nil {
+		f.Close()
+		return scenarios.IndexEntry{}, fmt.Errorf("write scenarios.yaml: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return scenarios.IndexEntry{}, err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "wrote %d scenarios to %s\n", len(scs), outPath)
+	return scenarios.IndexEntry{
+		Name:          m.Meta.Name,
+		ModelPath:     modelPath,
+		ScenariosPath: outPath,
+		Hash:          hash,
+		Count:         len(scs),
+	}, nil
+}
+
+// runWorkspaceWriteScenarios walks CWD for every model.yaml, regenerates
+// each, detects meta.name collisions, and writes scenarios.index.yaml at
+// the workspace root.
+func runWorkspaceWriteScenarios(cmd *cobra.Command) error {
+	modelPaths, err := findWorkspaceModels(".")
+	if err != nil {
+		return err
+	}
+	if len(modelPaths) == 0 {
+		return fmt.Errorf("no model.yaml files found under current directory")
+	}
+
+	reg := providersupport.LoadAllForUse()
+	entries := make([]scenarios.IndexEntry, 0, len(modelPaths))
+	for _, mp := range modelPaths {
+		m, err := model.Load(mp)
+		if err != nil {
+			return fmt.Errorf("load %s: %w", mp, err)
+		}
+		result := model.Validate(m, reg)
+		if result.HasErrors() {
+			return fmt.Errorf("%s: model has validation errors; run `mgtt model validate %s` first", mp, mp)
+		}
+		entry, err := regenerateScenariosFor(cmd, m, reg, mp)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry)
+	}
+
+	seen := map[string]string{}
+	for _, e := range entries {
+		if prev, ok := seen[e.Name]; ok {
+			return fmt.Errorf("two models with meta.name=%q: %s and %s", e.Name, prev, e.ModelPath)
+		}
+		seen[e.Name] = e.ModelPath
+	}
+
+	f, err := os.Create("scenarios.index.yaml")
+	if err != nil {
+		return fmt.Errorf("create scenarios.index.yaml: %w", err)
+	}
+	defer f.Close()
+	if err := scenarios.WriteIndex(f, entries); err != nil {
+		return fmt.Errorf("write scenarios.index.yaml: %w", err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "wrote workspace index with %d model(s) to scenarios.index.yaml\n", len(entries))
+	return nil
+}
+
+// findWorkspaceModels walks root looking for files literally named
+// model.yaml, skipping vendor/build directories.
+func findWorkspaceModels(root string) ([]string, error) {
+	skip := map[string]bool{
+		".git":         true,
+		".mgtt":        true,
+		"node_modules": true,
+		"site":         true,
+	}
+	var out []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		name := info.Name()
+		if info.IsDir() {
+			if skip[name] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if name == "model.yaml" {
+			out = append(out, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// collectTypePaths returns the on-disk paths of every type YAML the
+// registry knows about, de-duplicated. Types whose SourcePath is empty
+// (inline types, tests) are skipped — callers that need byte-level
+// coverage for those cases should re-hash provider manifests directly.
+func collectTypePaths(reg *providersupport.Registry) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range reg.All() {
+		for _, t := range p.Types {
+			if t.SourcePath == "" {
+				continue
+			}
+			if seen[t.SourcePath] {
+				continue
+			}
+			seen[t.SourcePath] = true
+			out = append(out, t.SourcePath)
+		}
+	}
+	return out
+}
+
 func init() {
+	modelValidateCmd.Flags().BoolVar(&writeScenariosFlag, "write-scenarios", false,
+		"regenerate scenarios.yaml (and scenarios.index.yaml when no explicit model path is given) at the model's directory")
 	modelCmd.AddCommand(modelValidateCmd)
 	rootCmd.AddCommand(modelCmd)
 }

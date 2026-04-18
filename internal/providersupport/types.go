@@ -115,6 +115,11 @@ type Type struct {
 	States             []StateDef
 	DefaultActiveState string
 	FailureModes       map[string][]string
+	// SourcePath is the on-disk path the type was loaded from, when
+	// known. Set by LoadFromDir for types in the types/ subdirectory;
+	// for inline types or tests it stays empty. Consumers that need a
+	// stable hash should fall back to content-hashing when this is "".
+	SourcePath string
 }
 
 type FactSpec struct {

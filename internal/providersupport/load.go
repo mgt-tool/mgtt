@@ -217,7 +217,8 @@ func LoadFromDir(dir string) (*Provider, error) {
 			continue
 		}
 		typeName := strings.TrimSuffix(entry.Name(), ".yaml")
-		typeData, err := os.ReadFile(filepath.Join(typesDir, entry.Name()))
+		typePath := filepath.Join(typesDir, entry.Name())
+		typeData, err := os.ReadFile(typePath)
 		if err != nil {
 			return nil, fmt.Errorf("read type file %q: %w", entry.Name(), err)
 		}
@@ -239,6 +240,7 @@ func LoadFromDir(dir string) (*Provider, error) {
 		if err != nil {
 			return nil, fmt.Errorf("type %q: %w", typeName, err)
 		}
+		t.SourcePath = typePath
 		p.Types[typeName] = t
 	}
 

@@ -4,6 +4,16 @@ All notable changes to mgtt are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-04-18
+
+### Changed (breaking)
+
+- **`manifest.yaml` schema rewritten.** v0.x manifests are rejected. Three top-level blocks: `meta` (identity), `runtime` (needs + network_mode + entrypoint + backends), `install` (source + image subblocks declare which methods the provider offers). `hooks:` retired; `meta.command` moved to `runtime.entrypoint`; install-method declaration is now canonical in the manifest instead of inferred from hook presence + registry state. See [`docs/reference/manifest.md`](docs/reference/manifest.md).
+
+- **All in-tree providers updated to v1.0.** aws 1.0.0, kubernetes 3.0.0, docker 1.0.0, tempo 1.0.0, terraform 1.0.0, quickwit 1.0.0. Older provider versions won't install against mgtt 0.2.0.
+
+- `mgtt provider install --image` rejects providers without an `install.image` block; `mgtt provider install` (source) rejects providers without `install.source`. No more deep-in-build failures.
+
 ## [Unreleased]
 
 ### Added

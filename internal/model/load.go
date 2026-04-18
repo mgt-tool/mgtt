@@ -82,6 +82,7 @@ func Load(path string) (*Model, error) {
 		},
 		Components: make(map[string]*Component, len(raw.Components)),
 		Order:      order,
+		SourcePath: path,
 	}
 
 	for name, rc := range raw.Components {

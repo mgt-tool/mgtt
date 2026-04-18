@@ -2,12 +2,16 @@ package engine
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 
+	"github.com/mgt-tool/mgtt/internal/engine/strategy"
 	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/scenarios"
 	"github.com/mgt-tool/mgtt/internal/state"
 )
 
@@ -94,12 +98,68 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 	}
 
 	// Stage 5 — Probe suggestion.
-	// Pick the next fact to collect from unchecked components along surviving
-	// paths (or the entry point if it has no facts). Components with complete
-	// fact coverage are skipped.
-	tree.Suggested = suggestProbe(m, reg, store, tree)
+	// Pick the next fact to collect. When scenarios are available for
+	// this model (loaded from scenarios.yaml beside it, if any), delegate
+	// to strategy.Occam which prefers shortest scenarios and tie-breaks
+	// by --suspect / cross-elimination count. When no scenarios are
+	// available, keep the legacy path-tree-aware BFS behavior so existing
+	// engine tests pass bit-for-bit.
+	scs := loadScenariosIfPresent(m)
+	if len(scs) > 0 {
+		input := strategy.Input{
+			Model:     m,
+			Registry:  reg,
+			Store:     store,
+			Scenarios: scs,
+		}
+		strat := strategy.AutoSelect(input)
+		dec := strat.SuggestProbe(input)
+		tree.Suggested = decisionToProbe(dec)
+	} else {
+		tree.Suggested = suggestProbe(m, reg, store, tree)
+	}
 
 	return tree
+}
+
+// decisionToProbe adapts a strategy.Decision into the *Probe type the
+// PathTree exposes to CLI renderers. Done/Stuck decisions with no
+// probe return nil — the caller already handles nil Suggested.
+func decisionToProbe(d strategy.Decision) *Probe {
+	if d.Probe == nil {
+		return nil
+	}
+	return &Probe{
+		Component:  d.Probe.Component,
+		Fact:       d.Probe.Fact,
+		Provider:   d.Probe.Provider,
+		ParseMode:  d.Probe.ParseMode,
+		Eliminates: d.Probe.Eliminates,
+		Cost:       d.Probe.Cost,
+		Access:     d.Probe.Access,
+		Command:    d.Probe.Command,
+	}
+}
+
+// loadScenariosIfPresent reads scenarios.yaml from the model's source
+// directory when available, returning an empty slice on any miss. The
+// model file path is tracked on Model.SourcePath if set by the loader;
+// otherwise this is a no-op and the BFS fallback path is used.
+func loadScenariosIfPresent(m *model.Model) []scenarios.Scenario {
+	if m == nil || m.SourcePath == "" {
+		return nil
+	}
+	p := filepath.Join(filepath.Dir(m.SourcePath), "scenarios.yaml")
+	f, err := os.Open(p)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	scs, _, err := scenarios.Read(f)
+	if err != nil {
+		return nil
+	}
+	return scs
 }
 
 // enumeratePaths does a BFS from entry through the dependency graph and

@@ -7,8 +7,15 @@ import "github.com/mgt-tool/mgtt/internal/expr"
 type Model struct {
 	Meta       Meta
 	Components map[string]*Component
-	Order      []string  // declaration order from YAML
-	graph      *depGraph // unexported, built during Load / BuildGraph
+	Order      []string // declaration order from YAML
+
+	// SourcePath is the on-disk path the model was loaded from, when
+	// known. Set by Load; left empty for models constructed in tests.
+	// Consumers that need a stable sidecar location (scenarios.yaml)
+	// fall back to returning nil / skipping when this is empty.
+	SourcePath string
+
+	graph *depGraph // unexported, built during Load / BuildGraph
 }
 
 // Meta holds the top-level metadata block.

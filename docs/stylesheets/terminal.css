@@ -267,6 +267,17 @@
 
 /* ── Navigation ────────────────────────────────────────────────────── */
 
+/* Material renders the site title as a label inside the primary nav so it
+   can double as the mobile-drawer header. On desktop it's redundant — the
+   title is already in the top header bar. Hide it above the breakpoint
+   where the sidebar stops being a drawer. */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary .md-nav--primary > .md-nav__title {
+    display: none;
+  }
+}
+
+
 /* Top-level items: bumped weight + a leading "$" prompt glyph so the
    section hierarchy reads as shell sections. */
 .md-sidebar--primary .md-nav--primary > .md-nav__list > .md-nav__item > .md-nav__link {

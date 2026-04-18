@@ -2,13 +2,13 @@ meta:
   name: fixture
   version: 0.0.1
   description: integration-test fixture provider — exposes one widget component type
-  command: /usr/local/bin/mgtt-provider-fixture
-hooks: {}
-auth:
-  strategy: none
-  access:
-    probes: none
-    writes: none
+
+runtime:
+  needs: []
+
+install:
+  image:
+    repository: ghcr.io/mgt-tool/fixture-provider
 
 types:
   widget:
@@ -18,6 +18,7 @@ types:
         type: mgtt.int
         ttl: 10s
         probe:
+          cmd: "widget count"
           cost: low
     healthy:
       - count > 0

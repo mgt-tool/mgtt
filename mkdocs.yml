@@ -68,6 +68,9 @@ nav:
     - Type Catalog: reference/type-catalog.md
     - Specification: reference/spec.md
 
+extra_css:
+  - stylesheets/nav.css
+
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true

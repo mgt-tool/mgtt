@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -413,7 +414,7 @@ func reportStuck(cmd *cobra.Command, store *facts.Store, trail []probeRecord, pr
 	// Stable order for deterministic output.
 	sortedComps := make([]string, len(comps))
 	copy(sortedComps, comps)
-	sortStrings(sortedComps)
+	sort.Strings(sortedComps)
 	for _, c := range sortedComps {
 		for _, f := range store.FactsFor(c) {
 			fmt.Fprintf(w, "  %s.%s = %v\n", c, f.Key, f.Value)
@@ -485,12 +486,3 @@ func suspectReport(suspects []strategy.SuspectHint, root *scenarios.Scenario) st
 	return strings.Join(parts, "; ")
 }
 
-// sortStrings is a tiny helper to keep the import list stable — the stuck
-// report is the only caller and doesn't need the full sort package elsewhere.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j-1] > s[j]; j-- {
-			s[j-1], s[j] = s[j], s[j-1]
-		}
-	}
-}

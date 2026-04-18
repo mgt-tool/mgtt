@@ -41,9 +41,23 @@ type probeRunner interface {
 // without reaching through a constructor chain. Production `runDiagnose`
 // picks these up on every call.
 var (
-	newProbeRunner = defaultNewProbeRunner
-	diagnoseStdin  io.Reader = os.Stdin
+	newProbeRunner                       = defaultNewProbeRunner
+	diagnoseStdin        io.Reader       = os.Stdin
+	diagnoseLoader                       = defaultDiagnoseLoader
 )
+
+// diagnoseLoaderFn returns the model, registry, and scenarios the
+// diagnose loop will operate on. Tests replace this to inject synthetic
+// fixtures without touching disk.
+type diagnoseLoaderFn func(modelPathHint string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error)
+
+func defaultDiagnoseLoader(modelPathHint string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error) {
+	modelPath, err := resolveModelPath(modelPathHint)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return loadModelAndScenarios(modelPath)
+}
 
 func newDiagnoseCmd() *cobra.Command {
 	var f diagnoseFlags
@@ -81,11 +95,7 @@ func runDiagnose(cmd *cobra.Command, f diagnoseFlags) error {
 	ctx, cancel := context.WithTimeout(parentCtx, f.deadline)
 	defer cancel()
 
-	modelPath, err := resolveModelPath(f.modelPath)
-	if err != nil {
-		return err
-	}
-	m, reg, scs, err := loadModelAndScenarios(modelPath)
+	m, reg, scs, err := diagnoseLoader(f.modelPath)
 	if err != nil {
 		return err
 	}
@@ -408,6 +418,7 @@ func reportStuck(cmd *cobra.Command, store *facts.Store, trail []probeRecord, pr
 	}
 	fmt.Fprintln(w)
 	writeBudget(w, probesRun, maxProbes, start, deadline)
+	writeTrail(w, trail)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Hint: if this incident resolves, run `mgtt incident end --suggest-scenarios`")
 	fmt.Fprintln(w, "to propose the missing chain for review.")

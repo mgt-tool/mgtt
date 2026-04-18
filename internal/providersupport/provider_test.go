@@ -781,3 +781,17 @@ install:
 		t.Errorf("want source-only install; got %+v", p.Install)
 	}
 }
+
+func TestResolveEntrypoint(t *testing.T) {
+	p := &Provider{Meta: ProviderMeta{Name: "aws"}}
+	if got := p.ResolveEntrypoint(InstallMethodGit, "/opt/mgtt/providers/aws"); got != "/opt/mgtt/providers/aws/bin/mgtt-provider-aws" {
+		t.Errorf("source default: got %q", got)
+	}
+	if got := p.ResolveEntrypoint(InstallMethodImage, ""); got != "" {
+		t.Errorf("image default should be empty; got %q", got)
+	}
+	p.Runtime.Entrypoint = "/custom/bin/x"
+	if got := p.ResolveEntrypoint(InstallMethodGit, "/opt/mgtt/providers/aws"); got != "/custom/bin/x" {
+		t.Errorf("override: got %q", got)
+	}
+}

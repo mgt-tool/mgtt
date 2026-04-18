@@ -14,6 +14,7 @@ package validate
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/expr"
@@ -41,9 +42,10 @@ func Static(p *providersupport.Provider) Report {
 	if p.Meta.Version == "" {
 		r.Failures = append(r.Failures, "meta.version is empty")
 	}
-	if p.Meta.Command == "" {
-		r.Failures = append(r.Failures, "meta.command is empty")
-	}
+	// v1.0: install viability is enforced at parse time (LoadFromBytes
+	// requires at least one of install.source or install.image). No
+	// meta.command field exists anymore — the invocation path is derived
+	// by Provider.ResolveEntrypoint at probe-dispatch time.
 
 	// Write-posture contract: read_only defaults to true. When a provider
 	// declares read_only: false, writes_note must describe the side effect
@@ -62,13 +64,14 @@ func Static(p *providersupport.Provider) Report {
 		r.Failures = append(r.Failures, err.Error())
 	}
 
-	// meta.command: if set to a path (not a $VAR template), verify it exists.
-	// Templates like "$MGTT_PROVIDER_DIR/bin/foo" are resolved at install time;
-	// absolute paths can be checked here.
-	if cmd := p.Meta.Command; cmd != "" && cmd[0] == '/' {
+	// runtime.entrypoint: if the author declared an absolute path, verify
+	// it exists on disk. Empty entrypoint means "use the convention"
+	// (providerDir/bin/mgtt-provider-<name>), which we can't check here
+	// without access to the install dir — that's an install-time concern.
+	if cmd := p.Runtime.Entrypoint; cmd != "" && cmd[0] == '/' {
 		if _, err := os.Stat(cmd); os.IsNotExist(err) {
 			r.Failures = append(r.Failures, fmt.Sprintf(
-				"meta.command %q does not exist on disk", cmd))
+				"runtime.entrypoint %q does not exist on disk", cmd))
 		}
 	}
 
@@ -134,16 +137,15 @@ func Static(p *providersupport.Provider) Report {
 	}
 
 	// needs: every declared capability must resolve against the merged
-	// vocabulary (built-ins + operator overrides). Shell-fallback providers
-	// (no meta.command) cannot declare needs — they have no binary, which
-	// means there's no image install target and no process whose environment
-	// mgtt would forward anything into.
-	if len(p.Needs) > 0 {
-		if p.Meta.Command == "" {
-			r.Failures = append(r.Failures,
-				"needs declared but provider has no command (shell-fallback providers don't support image install)")
+	// vocabulary (built-ins + operator overrides). Iterate in sorted key
+	// order so failure messages are stable across runs.
+	if len(p.Runtime.Needs) > 0 {
+		names := make([]string, 0, len(p.Runtime.Needs))
+		for n := range p.Runtime.Needs {
+			names = append(names, n)
 		}
-		for _, n := range p.Needs {
+		sort.Strings(names)
+		for _, n := range names {
 			if !probe.Known(n) {
 				r.Failures = append(r.Failures, fmt.Sprintf(
 					"unknown capability %q (known: %s); add it to $MGTT_HOME/capabilities.yaml or remove from needs",
@@ -152,16 +154,8 @@ func Static(p *providersupport.Provider) Report {
 		}
 	}
 
-	// network: docker's three built-in modes. "" is acceptable (defaults
-	// to bridge). Anything else is almost certainly a typo the user wants
-	// to see now, not at probe time.
-	switch p.Network {
-	case "", "bridge", "host", "none":
-		// ok
-	default:
-		r.Failures = append(r.Failures, fmt.Sprintf(
-			"unknown network mode %q (valid: bridge, host, none)", p.Network))
-	}
+	// network_mode: parser already enforces "", "bridge", "host". No
+	// duplicate check here — LoadFromBytes rejects anything else.
 
 	if r.OK() && len(r.Warnings) == 0 {
 		r.Passed = append(r.Passed, "static checks: ok")

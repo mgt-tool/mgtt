@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -120,9 +121,10 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 	// spec, unknown caps must fail install loudly — silent drop at probe time
 	// turns a typo in manifest.yaml into a cryptic "probe didn't reach X"
 	// debugging session. Shell-fallback refusal is handled by validate.Static.
-	if len(p.Needs) > 0 {
+	if len(p.Runtime.Needs) > 0 {
+		needNames := sortedNeedNames(p.Runtime.Needs)
 		var unknown []string
-		for _, n := range p.Needs {
+		for _, n := range needNames {
 			if !probe.Known(n) {
 				unknown = append(unknown, n)
 			}
@@ -132,10 +134,10 @@ func installFromImage(ctx context.Context, w io.Writer, ref, nameHint string, do
 				"provider declares unknown image capabilities: %s (known: %s); add them to $MGTT_HOME/capabilities.yaml or fix manifest.yaml",
 				strings.Join(unknown, ", "), strings.Join(probe.KnownNames(), ", "))
 		}
-		fmt.Fprintf(w, "→ capabilities: %s\n", strings.Join(p.Needs, ", "))
+		fmt.Fprintf(w, "→ capabilities: %s\n", strings.Join(needNames, ", "))
 	}
-	if p.Network != "" && p.Network != "bridge" {
-		fmt.Fprintf(w, "→ network: %s\n", p.Network)
+	if p.Runtime.NetworkMode != "" && p.Runtime.NetworkMode != "bridge" {
+		fmt.Fprintf(w, "→ network: %s\n", p.Runtime.NetworkMode)
 	}
 	if !p.ReadOnly {
 		fmt.Fprintf(w, "⚠ writes: %s\n", strings.TrimSpace(p.WritesNote))
@@ -281,9 +283,9 @@ func installProvider(w io.Writer, nameOrPath string) error {
 		return fmt.Errorf("copy provider: %w", err)
 	}
 
-	// Run install hook if declared.
-	if p.Hooks.Install != "" {
-		hookPath := filepath.Join(destDir, p.Hooks.Install)
+	// Run install/build script if the provider declares a source install.
+	if p.Install.Source != nil && p.Install.Source.Build != "" {
+		hookPath := filepath.Join(destDir, p.Install.Source.Build)
 		fmt.Fprintf(w, "  running install hook: %s\n", hookPath)
 		hookCmd := exec.Command("bash", hookPath)
 		hookCmd.Dir = destDir
@@ -421,6 +423,18 @@ func copyDir(src, dst string) error {
 		}
 		return os.WriteFile(target, data, info.Mode())
 	})
+}
+
+// sortedNeedNames returns the keys of a Runtime.Needs map in lexicographic
+// order. Callers that render capability lists use this so output is
+// deterministic even though the underlying map is unordered.
+func sortedNeedNames(needs map[string]string) []string {
+	out := make([]string, 0, len(needs))
+	for k := range needs {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // isGitURL returns true if the string looks like a git-cloneable URL.

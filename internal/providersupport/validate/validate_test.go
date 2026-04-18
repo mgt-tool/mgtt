@@ -16,13 +16,19 @@ func loadYAML(t *testing.T, src string) *providersupport.Provider {
 	return p
 }
 
+// minimalOK is a v1.0 manifest that passes both parser validation and
+// Static checks. Source install is declared so the parser accepts it;
+// runtime.entrypoint is omitted so the convention ($MGTT_PROVIDER_DIR/bin/...)
+// applies and no disk-existence check runs.
 const minimalOK = `
 meta:
   name: x
   version: 1.0.0
-  # Non-absolute path — the disk-existence check skips this form because
-  # it's an install-time template. Absolute paths get checked.
-  command: "bin/x"
+  description: "test provider"
+install:
+  source:
+    build: install.sh
+    clean: uninstall.sh
 types:
   thing:
     facts:
@@ -63,22 +69,23 @@ func TestStatic_DefaultsToReadOnly(t *testing.T) {
 }
 
 func TestStatic_FailsReadOnlyFalseWithoutWritesNote(t *testing.T) {
+	// read_only: false without writes_note is rejected at parse time in v1.0;
+	// LoadFromBytes returns an error. Validate that behaviour here (equivalent
+	// consumer-visible guarantee).
 	src := strings.Replace(minimalOK,
-		`command: "bin/x"`,
-		`command: "bin/x"`+"\nread_only: false", 1)
-	r := Static(loadYAML(t, src))
-	if r.OK() {
-		t.Fatal("read_only: false without writes_note must fail")
-	}
-	if !containsAny(r.Failures, "writes_note") {
-		t.Fatalf("failure must mention writes_note; got %+v", r.Failures)
+		"description: \"test provider\"",
+		"description: \"test provider\"\nread_only: false", 1)
+	if _, err := providersupport.LoadFromBytes([]byte(src)); err == nil {
+		t.Fatal("read_only: false without writes_note must be rejected at parse time")
+	} else if !strings.Contains(err.Error(), "writes_note") {
+		t.Fatalf("error must mention writes_note; got %v", err)
 	}
 }
 
 func TestStatic_WarnsReadOnlyFalseWithWritesNote(t *testing.T) {
 	src := strings.Replace(minimalOK,
-		`command: "bin/x"`,
-		`command: "bin/x"`+"\nread_only: false\nwrites_note: \"touches state file on plan\"", 1)
+		"description: \"test provider\"",
+		"description: \"test provider\"\nread_only: false\nwrites_note: \"touches state file on plan\"", 1)
 	r := Static(loadYAML(t, src))
 	if !r.OK() {
 		t.Fatalf("read_only: false with writes_note should warn, not fail: %+v", r)
@@ -118,11 +125,15 @@ func TestStatic_WarnsWhenParseEmpty(t *testing.T) {
 	}
 }
 
-func TestStatic_FailsOnMissingCommandBinary(t *testing.T) {
-	src := strings.Replace(minimalOK, `command: "bin/x"`, `command: "/nonexistent/path/xyz"`, 1)
+func TestStatic_FailsOnMissingEntrypointBinary(t *testing.T) {
+	// runtime.entrypoint as an absolute path gets checked for existence.
+	src := strings.Replace(minimalOK,
+		"install:",
+		"runtime:\n  entrypoint: /nonexistent/path/xyz\ninstall:",
+		1)
 	r := Static(loadYAML(t, src))
 	if r.OK() {
-		t.Fatal("absolute command path pointing nowhere should fail")
+		t.Fatal("absolute entrypoint path pointing nowhere should fail")
 	}
 	if !containsAny(r.Failures, "does not exist on disk") {
 		t.Fatalf("failure should mention missing binary: %+v", r.Failures)
@@ -162,7 +173,7 @@ func containsAny(xs []string, sub string) bool {
 
 func TestStatic_RejectsUnknownCap(t *testing.T) {
 	p := loadYAML(t, minimalOK)
-	p.Needs = []string{"kubectl", "vault-nope"}
+	p.Runtime.Needs = map[string]string{"kubectl": "", "vault-nope": ""}
 	r := Static(p)
 	if r.OK() {
 		t.Fatal("expected validation failure for unknown cap")
@@ -179,29 +190,9 @@ func TestStatic_RejectsUnknownCap(t *testing.T) {
 	}
 }
 
-func TestStatic_RejectsNeedsOnShellFallback(t *testing.T) {
-	p := loadYAML(t, minimalOK)
-	p.Meta.Command = "" // shell-fallback
-	p.Needs = []string{"kubectl"}
-	r := Static(p)
-	if r.OK() {
-		t.Fatal("shell-fallback providers must not declare needs")
-	}
-	found := false
-	for _, f := range r.Failures {
-		if strings.Contains(f, "needs") && strings.Contains(f, "no command") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("failure must explain shell-fallback/no-command; got %v", r.Failures)
-	}
-}
-
 func TestStatic_AcceptsKnownCaps(t *testing.T) {
 	p := loadYAML(t, minimalOK)
-	p.Needs = []string{"kubectl", "aws"}
+	p.Runtime.Needs = map[string]string{"kubectl": "", "aws": ""}
 	r := Static(p)
 	for _, f := range r.Failures {
 		if strings.Contains(f, "needs") || strings.Contains(f, "capability") {
@@ -211,9 +202,9 @@ func TestStatic_AcceptsKnownCaps(t *testing.T) {
 }
 
 func TestStatic_AcceptsValidNetworkModes(t *testing.T) {
-	for _, mode := range []string{"", "bridge", "host", "none"} {
+	for _, mode := range []string{"", "bridge", "host"} {
 		p := loadYAML(t, minimalOK)
-		p.Network = mode
+		p.Runtime.NetworkMode = mode
 		r := Static(p)
 		for _, f := range r.Failures {
 			if strings.Contains(f, "network") {
@@ -223,21 +214,16 @@ func TestStatic_AcceptsValidNetworkModes(t *testing.T) {
 	}
 }
 
-func TestStatic_RejectsUnknownNetworkMode(t *testing.T) {
-	p := loadYAML(t, minimalOK)
-	p.Network = "overlay"
-	r := Static(p)
-	if r.OK() {
-		t.Fatal("unknown network mode must fail validation")
-	}
-	found := false
-	for _, f := range r.Failures {
-		if strings.Contains(f, "network") && strings.Contains(f, "overlay") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("failure must name the bad mode and the field; got %v", r.Failures)
+func TestStatic_RejectsUnknownNetworkModeAtParseTime(t *testing.T) {
+	// v1.0: network_mode enum is enforced at parse time. Validate the
+	// parser rejects overlay (or any non-{"", bridge, host} value).
+	src := strings.Replace(minimalOK,
+		"install:",
+		"runtime:\n  network_mode: overlay\ninstall:",
+		1)
+	if _, err := providersupport.LoadFromBytes([]byte(src)); err == nil {
+		t.Fatal("unknown network_mode must be rejected at parse time")
+	} else if !strings.Contains(err.Error(), "network_mode") {
+		t.Fatalf("error must name the field; got %v", err)
 	}
 }

@@ -68,11 +68,11 @@ func renderProviderOverview(w io.Writer, p *providersupport.Provider) {
 	if !p.ReadOnly && strings.TrimSpace(p.WritesNote) != "" {
 		fmt.Fprintf(w, "  writes-note: %s\n", firstLine(p.WritesNote))
 	}
-	if len(p.Needs) > 0 {
-		fmt.Fprintf(w, "  needs:       %s\n", strings.Join(p.Needs, ", "))
+	if len(p.Runtime.Needs) > 0 {
+		fmt.Fprintf(w, "  needs:       %s\n", strings.Join(sortedNeeds(p.Runtime.Needs), ", "))
 	}
-	if p.Network != "" && p.Network != "bridge" {
-		fmt.Fprintf(w, "  network:     %s\n", p.Network)
+	if p.Runtime.NetworkMode != "" && p.Runtime.NetworkMode != "bridge" {
+		fmt.Fprintf(w, "  network:     %s\n", p.Runtime.NetworkMode)
 	}
 	fmt.Fprintln(w)
 

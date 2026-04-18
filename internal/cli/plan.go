@@ -291,12 +291,16 @@ func buildExecutor(reg *providersupport.Registry) (probe.Executor, error) {
 		meta, _ := providersupport.ReadInstallMeta(dir) // absent file → Method:git (backward-compat)
 		switch meta.Method {
 		case providersupport.InstallMethodImage:
-			runners[p.Meta.Name] = probe.NewImageRunner(meta.Source, p.Needs, p.Network)
+			runners[p.Meta.Name] = probe.NewImageRunner(
+				meta.Source,
+				sortedNeeds(p.Runtime.Needs),
+				p.Runtime.NetworkMode,
+			)
 		default:
 			// git-installed (or legacy installs without metadata file)
-			if p.Meta.Command != "" {
+			if cmd := p.ResolveEntrypoint(providersupport.InstallMethodGit, providersupport.ProviderDir(p.Meta.Name)); cmd != "" {
 				runners[p.Meta.Name] = probe.NewExternalRunner(
-					resolveCommand(p.Meta.Command, p.Meta.Name))
+					resolveCommand(cmd, p.Meta.Name))
 			}
 		}
 	}

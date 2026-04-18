@@ -23,6 +23,23 @@ type Provider struct {
 	WritesNote string
 }
 
+// ResolveEntrypoint returns the binary invocation string mgtt should use
+// at probe time, honoring Runtime.Entrypoint when the author declared it
+// and falling back to the convention otherwise.
+//
+// providerDir is the directory the provider lives in on disk (for source
+// install) or empty (for image install — the caller is expected to use
+// the image's baked-in ENTRYPOINT when this returns "").
+func (p *Provider) ResolveEntrypoint(method InstallMethod, providerDir string) string {
+	if p.Runtime.Entrypoint != "" {
+		return p.Runtime.Entrypoint
+	}
+	if method == InstallMethodImage {
+		return ""
+	}
+	return providerDir + "/bin/mgtt-provider-" + p.Meta.Name
+}
+
 // ProviderMeta is the identity block — who this provider is.
 type ProviderMeta struct {
 	Name        string

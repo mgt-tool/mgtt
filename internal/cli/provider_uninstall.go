@@ -60,10 +60,11 @@ func uninstallProvider(w io.Writer, name string) error {
 		return os.RemoveAll(dir)
 	}
 
-	// Run uninstall hook if declared, but only for git-installed providers.
-	// Image-installed providers don't have hooks on disk — skip the hook entirely.
-	if p.Hooks.Uninstall != "" && meta.Method != providersupport.InstallMethodImage {
-		hookPath := filepath.Join(dir, p.Hooks.Uninstall)
+	// Run uninstall/clean script if declared, but only for source-installed
+	// providers. Image-installed providers don't have scripts on disk —
+	// skip the hook entirely.
+	if p.Install.Source != nil && p.Install.Source.Clean != "" && meta.Method != providersupport.InstallMethodImage {
+		hookPath := filepath.Join(dir, p.Install.Source.Clean)
 		if _, err := os.Stat(hookPath); err == nil {
 			fmt.Fprintf(w, "  running uninstall hook: %s\n", hookPath)
 			hookCmd := exec.Command("bash", hookPath)

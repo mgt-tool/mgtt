@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 
@@ -69,8 +70,8 @@ func renderProviderLs(w io.Writer, providers []*providersupport.Provider) {
 		// docker-run flags), but rendering them for git installs too is
 		// fine: it's still a declared part of the provider contract.
 		caps := "-"
-		if len(p.Needs) > 0 {
-			caps = "[" + joinNeeds(p.Needs) + "]"
+		if len(p.Runtime.Needs) > 0 {
+			caps = "[" + joinNeeds(sortedNeeds(p.Runtime.Needs)) + "]"
 		}
 		rows = append(rows, providerRow{
 			displayName: displayName,
@@ -120,5 +121,16 @@ func joinNeeds(needs []string) string {
 		}
 		out += n
 	}
+	return out
+}
+
+// sortedNeeds returns the keys of a Runtime.Needs map in lexicographic
+// order so `provider ls` output is deterministic.
+func sortedNeeds(needs map[string]string) []string {
+	out := make([]string, 0, len(needs))
+	for k := range needs {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }

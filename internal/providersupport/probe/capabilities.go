@@ -4,8 +4,8 @@
 // their manifest.yaml. At probe dispatch time mgtt expands each label
 // into the docker-run flags that actually grant the intent: bind mounts
 // for credential dirs, -e flags for env vars, socket mounts for daemon
-// access. Network mode (bridge/host/none) is a separate top-level
-// `network:` field on Provider, not a capability — see NewImageRunner
+// access. Network mode (bridge/host) is a separate field on
+// Provider.Runtime.NetworkMode, not a capability — see NewImageRunner
 // in runner.go for how the two are composed.
 //
 // The vocabulary is closed and lives here. Operators with non-default
@@ -34,8 +34,8 @@ type Capability []string
 // one-line append here. Prefer read-only bind mounts; env passthrough
 // only emits -e KEY=VALUE when KEY is set in the mgtt process.
 //
-// Note: network mode (bridge/host/none) lives on Provider.Network, not
-// here — it's a docker-run isolation setting, not a host-resource grant.
+// Note: network mode (bridge/host) lives on Provider.Runtime.NetworkMode,
+// not here — it's a docker-run isolation setting, not a host-resource grant.
 // See NewImageRunner in runner.go for how the two are composed.
 var builtins = map[string]func() Capability{
 	"kubectl": func() Capability {

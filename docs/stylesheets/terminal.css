@@ -351,7 +351,14 @@
 .md-footer { background: #111a2d; }
 .md-footer-meta { background: #111a2d; }
 
-/* ── Scenario block ────────────────────────────────────────────────── */
+/* ── Scenario + approach blocks ────────────────────────────────────── */
+
+/* These two paired blocks on the landing page exist to break the
+   "problem vs. solution" narrative visually:
+     .scenario  — chaotic 3am transcript; > prompts; dimmed asides.
+     .approach  — ordered systematic response; → arrows; teal accent.
+   Same frame / same list structure so the parallel reads at a glance. */
+
 
 /* Sets the "3am incident" narrative on the landing page apart from the
    framing prose. Reads as a terminal transcript: each action on its own
@@ -406,6 +413,58 @@
 .md-typeset .scenario em {
   color: var(--md-default-fg-color--lighter);
   font-style: italic;
+}
+
+.md-typeset .approach {
+  background: rgba(58, 203, 183, 0.06);
+  border-left: 2px solid var(--md-primary-fg-color);
+  border-radius: 2px;
+  padding: 1rem 1.3rem;
+  margin: 1.4rem 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .approach {
+  background: rgba(58, 203, 183, 0.08);
+}
+
+.md-typeset .approach > :first-child { margin-top: 0; }
+.md-typeset .approach > :last-child { margin-bottom: 0; }
+
+/* Lead line ("mgtt fixes this.") picks up the accent colour so it reads
+   as a confident statement, not just another bolded phrase. */
+.md-typeset .approach > p:first-child strong {
+  color: var(--md-primary-fg-color);
+  font-weight: 700;
+}
+
+.md-typeset .approach ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-typeset .approach ul li {
+  padding-left: 1.6rem;
+  position: relative;
+  margin: 0.3rem 0;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .approach ul li::marker { content: ""; }
+
+.md-typeset .approach ul li::before {
+  content: "→";
+  position: absolute;
+  left: 0.2rem;
+  color: var(--md-primary-fg-color);
+  font-weight: 500;
+}
+
+.md-typeset .approach ul li strong {
+  color: var(--md-default-fg-color);
+  font-weight: 600;
 }
 
 /* ── Misc ──────────────────────────────────────────────────────────── */

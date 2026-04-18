@@ -20,7 +20,15 @@ If you build or maintain anything with more than two components — a web app wi
 
 **The core problem:** troubleshooting distributed systems is slow, unstructured, and depends entirely on whoever happens to know the system. There's no map, no systematic narrowing, no way to know what you've already ruled out.
 
-**mgtt fixes this.** You describe your system's dependencies once in a YAML model. When something breaks, a constraint engine walks the dependency graph, probes components in order of information value, and eliminates healthy branches. It always knows what to check next and why.
+<div class="approach" markdown>
+
+**mgtt fixes this.**
+
+- **Describe once.** Your system's dependencies in a single YAML model.
+- **Walk the graph.** When something breaks, a constraint engine walks the dependency graph, probing components in order of information value and eliminating healthy branches.
+- **Know what's next.** Always — and why.
+
+</div>
 
 An SRE can drive the loop manually (press Y at each step). An AI agent can drive it autonomously via the same interface — mgtt is designed to be equally useful to humans and LLMs. The engine reasons; whoever's on call executes.
 

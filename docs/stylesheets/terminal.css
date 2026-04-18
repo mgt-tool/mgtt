@@ -27,23 +27,23 @@
 }
 
 [data-md-color-scheme="slate"] {
-  /* Deep cool-blue background — plays with the teal accent without
-     clashing. Slightly blueish dark so the page reads as "night", not
-     "sepia / warm dark". */
-  --md-default-bg-color: #0d1820;
-  --md-default-fg-color: #dae2e9;
-  --md-default-fg-color--light: #a8b5be;
-  --md-default-fg-color--lighter: #6f7e89;
-  --md-default-fg-color--lightest: #2a3640;
+  /* Dark navy-slate background — clearly blueish (lightness ~14%, strong
+     blue channel), not just "near-black with a hint". Plays well with
+     the teal accent (teal on navy = classic terminal ocean palette). */
+  --md-default-bg-color: #172338;
+  --md-default-fg-color: #dde4ef;
+  --md-default-fg-color--light: #a6b3c6;
+  --md-default-fg-color--lighter: #6f7e95;
+  --md-default-fg-color--lightest: #344260;
 
   --md-primary-fg-color: #3acbb7;
   --md-primary-fg-color--light: #55e0cc;
   --md-primary-fg-color--dark: #2ba090;
   --md-accent-fg-color: #3acbb7;
 
-  --mgtt-rule: #1f2c36;
-  --mgtt-code-bg: rgba(58, 203, 183, 0.09);
-  --mgtt-code-block-bg: #0a131b;
+  --mgtt-rule: #2b3654;
+  --mgtt-code-bg: rgba(58, 203, 183, 0.1);
+  --mgtt-code-block-bg: #111a2d;
 }
 
 /* ── Body ──────────────────────────────────────────────────────────── */
@@ -247,7 +247,7 @@
 }
 
 [data-md-color-scheme="slate"] .md-header {
-  background: #091218;
+  background: #111a2d;
   box-shadow: 0 1px 0 var(--mgtt-rule);
 }
 
@@ -348,8 +348,8 @@
 
 /* ── Footer ────────────────────────────────────────────────────────── */
 
-.md-footer { background: #091218; }
-.md-footer-meta { background: #091218; }
+.md-footer { background: #111a2d; }
+.md-footer-meta { background: #111a2d; }
 
 /* ── Misc ──────────────────────────────────────────────────────────── */
 

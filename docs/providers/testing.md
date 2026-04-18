@@ -72,7 +72,7 @@ The [kubernetes provider](https://github.com/mgt-tool/mgtt-provider-kubernetes) 
 
 - `manifest.yaml` — full vocabulary with 2 types, 5 facts, 4 states
 - `main.go` — binary using kubectl JSON output
-- `hooks/install.sh` — Go build script
+- `hooks/install.sh` — Go build script referenced from `install.source.build`
 
 The [aws provider](https://github.com/mgt-tool/mgtt-provider-aws) shows a minimal vocabulary-only provider (no binary).
 
@@ -82,4 +82,4 @@ The [aws provider](https://github.com/mgt-tool/mgtt-provider-aws) shows a minima
 
 - [Vocabulary](vocabulary.md) — writing manifest.yaml
 - [Binary Protocol](protocol.md) — implementing probe/validate/describe
-- [Install Hooks](hooks.md) — build scripts
+- [Writing install scripts](overview.md#writing-install-scripts) — build scripts

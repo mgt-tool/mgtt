@@ -160,5 +160,5 @@ Any language works — Go, Python, Bash, Rust. The only contract is: accept args
 ## Next steps
 
 - [Vocabulary](vocabulary.md) — writing manifest.yaml
-- [Install Hooks](hooks.md) — build scripts for Go, Python, pre-compiled
+- [Writing install scripts](overview.md#writing-install-scripts) — build scripts for Go, Python, pre-compiled
 - [Testing](testing.md) — validate, simulate, and live-test your provider

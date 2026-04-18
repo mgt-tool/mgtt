@@ -1,11 +1,13 @@
 # Provider Vocabulary
 
-The vocabulary (`manifest.yaml`) tells mgtt's constraint engine what your technology looks like — what component types exist, what facts can be observed, what states are possible, how failures propagate — plus the provider's own operational metadata (capabilities, network mode, compatibility binding, variables, auth, hooks).
+The vocabulary (`manifest.yaml` + optional `types/*.yaml`) tells mgtt's constraint engine what your technology looks like — what component types exist, what facts can be observed, what states are possible, how failures propagate — plus the provider's own operational metadata (identity, runtime needs, install methods, compatibility binding, variables).
+
+For the authoritative schema of the three top-level manifest blocks (`meta`, `runtime`, `install`), see [manifest.yaml reference](../reference/manifest.md). This page focuses on the *vocabulary* fields — `types:`, `variables:`, `compatibility:`, `read_only` / `writes_note` — that complement it.
 
 ## On this page
 
 - [Full schema](#full-schema)
-- [Section reference](#section-reference) — meta, needs, network, compatibility, hooks, read_only, writes_note, variables, types, facts, states, failure_modes
+- [Section reference](#section-reference) — meta, runtime, install, compatibility, read_only, writes_note, variables, types, facts, states, failure_modes
 - [Validate your vocabulary](#validate-your-vocabulary)
 - [Next steps](#next-steps)
 
@@ -16,15 +18,23 @@ The vocabulary (`manifest.yaml`) tells mgtt's constraint engine what your techno
 ```yaml
 meta:
   name: my-provider
-  version: 0.1.0
+  version: 1.0.0
   description: One-line description of what this provider covers
   tags: [databases, cloud]
   requires:
-    mgtt: ">=1.0"
-  command: "$MGTT_PROVIDER_DIR/bin/mgtt-provider-my-provider"
+    mgtt: ">=0.2.0"
 
-needs: [kubectl, aws]
-network: host
+runtime:
+  needs: [kubectl, aws]
+  network_mode: host
+  # entrypoint:  optional; convention-default resolves to bin/mgtt-provider-my-provider
+
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
+  # image:
+  #   repository: ghcr.io/my-org/mgtt-provider-my-provider
 
 compatibility:
   backend: my-backend
@@ -34,10 +44,6 @@ compatibility:
   notes: |
     Optional prose describing contract subtleties, response-shape changes
     across minor versions, etc.
-
-hooks:
-  install: hooks/install.sh
-  uninstall: hooks/uninstall.sh
 
 # read_only defaults to true; omit when you're read-only. Set to false
 # when the provider has side effects, and describe them in writes_note.
@@ -92,7 +98,7 @@ types:
         can_cause: [upstream_failure, connection_refused]
 ```
 
-Every top-level key above is optional except `meta`. Shell-fallback providers (vocabulary-only, no binary) omit `needs`, `network`, `hooks.install`, and set `meta.command: ""`.
+Every top-level key above is optional except `meta` and `install` (which must declare at least one method). Vocabulary-only providers (no binary) still need `install:` — typically `install.source.build` pointing at a no-op or host-tool-check script. See [Writing Providers](overview.md#vocabulary-only-providers-no-binary).
 
 ---
 
@@ -100,48 +106,47 @@ Every top-level key above is optional except `meta`. Shell-fallback providers (v
 
 ### `meta`
 
-Provider identity and binary location.
+Provider identity. See [manifest.yaml reference](../reference/manifest.md#meta--identity) for the full contract. Fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | yes | Lowercase, hyphen-separated. Unique across the ecosystem. |
+| `name` | yes | Lowercase, hyphen-separated, `^[a-z][a-z0-9-]*$`. Unique across the ecosystem. |
 | `version` | yes | Semver string. |
 | `description` | yes | One-line description. |
 | `tags` | no | Loose subject labels (`[databases, tracing, iac, …]`). Mirrored in the public registry for search. |
-| `requires.mgtt` | yes | Minimum mgtt version (semver range, e.g. `">=0.1.4"`). |
-| `command` | yes | Path to the provider binary. `$MGTT_PROVIDER_DIR` is substituted at runtime with the provider's install directory. Empty string (`""`) for vocabulary-only providers with inline shell probes. |
+| `requires.mgtt` | yes | Minimum mgtt version (semver range, e.g. `">=0.2.0"`). |
 
-### `needs`
+### `runtime`
 
-Optional. Capabilities the provider requires at probe time. Each label names a host-side package, credential chain, or socket.
+How the provider talks to its backend at probe time. See [manifest.yaml reference](../reference/manifest.md#runtime--how-the-provider-talks-to-its-backend) for the full contract.
+
+| Field | Description |
+|-------|-------------|
+| `needs` | Host-side capabilities (`kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`). List shorthand or map with version constraints. |
+| `backends` | Backend-service compatibility (e.g. `quickwit`, `tempo`). List shorthand or map with version ranges. |
+| `network_mode` | `bridge` (default) or `host`. Container network mode for image installs. |
+| `entrypoint` | Optional; convention-default resolves to `$MGTT_PROVIDER_DIR/bin/mgtt-provider-<name>` for source installs and the image's baked-in `ENTRYPOINT` for image installs. |
+
+See [Provider Capabilities](../reference/image-capabilities.md) for what each `needs:` label expands to.
+
+### `install`
+
+Declares which install methods the provider offers. See [manifest.yaml reference](../reference/manifest.md#install--how-the-provider-comes-to-exist-on-a-machine).
 
 ```yaml
-needs: [kubectl, aws]
+install:
+  source:
+    build: hooks/install.sh           # required if install.source is declared
+    clean: hooks/uninstall.sh         # recommended
+  image:
+    repository: ghcr.io/my-org/mgtt-provider-my-provider   # optional
 ```
 
-Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`. Omit entirely when the provider reads nothing from the host. Providers with no `meta.command` cannot declare `needs:`.
-
-See [Provider Capabilities](../reference/image-capabilities.md) for what each label expands to.
-
-### `network`
-
-Optional. Docker-run network mode for image-installed providers.
-
-```yaml
-network: host
-```
-
-| Value | Effect |
-|---|---|
-| `bridge` (default) | NAT'd external network. |
-| `host` | Container shares the host's network namespace. Required for in-cluster DNS, private endpoints, `host.docker.internal`. |
-| `none` | No network. |
-
-Git-installed providers ignore this field.
+At least one of `install.source` or `install.image` must be declared. See [Writing install scripts](overview.md#writing-install-scripts) for `build:` / `clean:` examples.
 
 ### `compatibility`
 
-Optional. Pins the provider to specific backend versions.
+Optional. Pins the provider to specific backend versions. Complements `runtime.backends:` with free-form context (tested digests, response-shape quirks).
 
 ```yaml
 compatibility:
@@ -164,16 +169,9 @@ compatibility:
 
 Omit for providers whose backend has a stable API across releases (e.g. the AWS API).
 
-### `hooks`
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `install` | no | Path to a script run during `mgtt provider install`. Typically builds the binary from source (`go build -o bin/…`). Image installs skip hooks entirely. See [Install Hooks](hooks.md). |
-| `uninstall` | no | Path to a script run during `mgtt provider uninstall <name>` before the provider directory is removed. Cleans build artifacts, deregisters credentials, etc. If the script fails, the directory is still removed — uninstall must always succeed. |
-
 ### `read_only` and `writes_note`
 
-Write posture. Both fields optional.
+Write posture. Both fields optional, at the top level of the manifest.
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -184,7 +182,8 @@ Default read-only case — omit both fields:
 
 ```yaml
 meta: {…}
-needs: [aws]
+runtime:
+  needs: [aws]
 ```
 
 Provider with side effects:
@@ -251,7 +250,7 @@ facts:
 | `cost` | `low`, `medium`, `high`. |
 | `access` | Human-readable access description. |
 
-A provider can be **vocabulary-only** (no binary, no install hook) if all facts have inline `probe.cmd` definitions. This is the quick-start path for prototyping. Vocabulary-only providers cannot be installed via `--image` — there's no entrypoint for mgtt to invoke.
+A provider can be **vocabulary-only** (no binary) if all facts have inline `probe.cmd` definitions. This is the quick-start path for prototyping. Vocabulary-only providers cannot be installed via `--image` — there's no entrypoint for mgtt to invoke.
 
 #### `types.<name>.healthy`
 
@@ -311,13 +310,14 @@ Values from the [standard failure mode vocabulary](../reference/type-catalog.md#
 mgtt provider validate ./my-provider
 ```
 
-Checks: YAML syntax, state ordering, fact types resolve against stdlib, failure_modes reference declared states, expressions parse correctly, every `needs:` entry is in the capability vocabulary, `network:` value is one of `bridge`/`host`/`none`, shell-fallback providers don't declare `needs:`, `meta.requires.mgtt` is satisfied.
+Checks: YAML syntax, state ordering, fact types resolve against stdlib, failure_modes reference declared states, expressions parse correctly, every `runtime.needs:` entry is in the capability vocabulary, `runtime.network_mode:` value is one of `bridge`/`host`, `install:` declares at least one method, vocabulary-only providers don't declare `runtime.needs:`, `meta.requires.mgtt` is satisfied.
 
 ---
 
 ## Next steps
 
+- [manifest.yaml reference](../reference/manifest.md) — authoritative three-block schema
 - [Binary Protocol](protocol.md) — implementing the probe/validate/describe commands
-- [Install Hooks](hooks.md) — Go, Python, and pre-compiled examples
+- [Writing install scripts](overview.md#writing-install-scripts) — Go, Python, and pre-compiled examples
 - [Testing](testing.md) — validate, simulate, and live-test your provider
 - [Provider Capabilities](../reference/image-capabilities.md) — full built-in vocabulary and operator-override mechanics

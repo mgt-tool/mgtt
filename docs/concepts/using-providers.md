@@ -6,7 +6,7 @@ How to install, run, audit, and control providers with mgtt.
 
 - [Lifecycle](#lifecycle)
 - [Invocation](#invocation) — how mgtt calls a provider
-- [What mgtt forwards](#what-mgtt-forwards) — `needs`, `network`, `read_only`
+- [What mgtt forwards](#what-mgtt-forwards) — `runtime.needs`, `runtime.network_mode`, `read_only`
 - [Operator controls](#operator-controls)
 - [Auditing installed providers](#auditing-installed-providers)
 - [Troubleshooting](#troubleshooting)
@@ -54,27 +54,28 @@ docker run --rm [--network <mode>] [<cap flags…>] <image-ref> \
   probe <component> <fact> --type <type> [--var val …]
 ```
 
-The `--network`, cap flags, and image ref all come from the provider's `manifest.yaml` and `.mgtt-install.json`. Container starts with an empty environment unless `needs:` grants host-side resources explicitly.
+The `--network`, cap flags, and image ref all come from the provider's `manifest.yaml` and `.mgtt-install.json`. Container starts with an empty environment unless `runtime.needs:` grants host-side resources explicitly.
 
 ---
 
 ## What mgtt forwards
 
-Image-installed providers declare their runtime requirements in `manifest.yaml`:
+Image-installed providers declare their runtime requirements in `manifest.yaml` under `runtime:`:
 
 ```yaml
-needs: [kubectl, aws]
-network: host
+runtime:
+  needs: [kubectl, aws]
+  network_mode: host
 read_only: true
 ```
 
 | Field | Values | What it controls |
 |---|---|---|
-| `needs` | `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure` | Bind mounts and env forwards for host tools, credential chains, and sockets. |
-| `network` | `bridge` (default), `host`, `none` | Container network mode. `host` is required to reach in-cluster DNS or host-local services. |
+| `runtime.needs` | `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure` | Bind mounts and env forwards for host tools, credential chains, and sockets. |
+| `runtime.network_mode` | `bridge` (default), `host` | Container network mode. `host` is required to reach in-cluster DNS or host-local services. |
 | `read_only` | `true` (default), `false` | Provider's write posture. `false` requires a `writes_note:` string describing the side effect. |
 
-Each capability in `needs:` expands into specific `docker run` flags. Example for `needs: [kubectl]`:
+Each capability in `runtime.needs:` expands into specific `docker run` flags. Example for `needs: [kubectl]`:
 
 ```
 -v $HOME/.kube:/root/.kube:ro -e KUBECONFIG=<your value>
@@ -172,10 +173,10 @@ The [public registry](../reference/registry.md) lists every mgt-tool provider wi
 
 ### Probe can't reach the cluster
 
-Image-installed providers need `network: host` to resolve in-cluster DNS or reach private API endpoints. Check the provider's declaration:
+Image-installed providers need `runtime.network_mode: host` to resolve in-cluster DNS or reach private API endpoints. Check the provider's declaration:
 
 ```bash
-grep ^network: $MGTT_HOME/providers/kubernetes/manifest.yaml
+grep -A2 '^runtime:' $MGTT_HOME/providers/kubernetes/manifest.yaml
 ```
 
 ### A capability isn't being applied
@@ -184,7 +185,7 @@ Check, in order:
 
 1. Is `MGTT_IMAGE_CAPS_DENY` set and listing the capability?
 2. Was the provider installed via git? Capabilities only apply to image installs; `mgtt provider ls` shows the method.
-3. Did the provider's `needs:` list change after install? Reinstall the provider.
+3. Did the provider's `runtime.needs:` list change after install? Reinstall the provider.
 
 ### Refuse the Docker socket
 
@@ -192,7 +193,7 @@ Check, in order:
 export MGTT_IMAGE_CAPS_DENY=docker
 ```
 
-Any provider declaring `needs: [docker]` runs without the socket mount. Relevant mainly for `mgtt-provider-docker`.
+Any provider declaring `runtime.needs: [docker]` runs without the socket mount. Relevant mainly for `mgtt-provider-docker`.
 
 ### An env var isn't being forwarded
 
@@ -210,7 +211,8 @@ The provider's `manifest.yaml` declares a label not in the merged vocabulary. Ad
 
 ## See also
 
-- [Provider Install Methods](provider-install-methods.md) — git vs image, digest pinning, on-disk layout
+- [Provider Install Methods](provider-install-methods.md) — source vs image, digest pinning, on-disk layout
 - [Provider Capabilities](../reference/image-capabilities.md) — full capability vocabulary and override schema
-- [Writing Providers](../providers/overview.md) — authoring `manifest.yaml`, binary protocol, hooks
+- [Writing Providers](../providers/overview.md) — authoring `manifest.yaml`, binary protocol, install scripts
+- [manifest.yaml reference](../reference/manifest.md) — three-block schema, invariants, defaults
 - [Configuration](../reference/configuration.md) — every `MGTT_*` env var

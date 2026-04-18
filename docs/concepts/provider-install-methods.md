@@ -1,6 +1,8 @@
 # Provider Install Methods
 
-Two ways to install a provider — git clone and build, or pull a Docker image. Both produce the same `~/.mgtt/providers/<name>/` layout; `mgtt plan` doesn't care which method was used.
+Two ways to install a provider — source (git clone and build) or image (pull a Docker image). Both produce the same `~/.mgtt/providers/<name>/` layout; `mgtt plan` doesn't care which method was used.
+
+Which methods are available for a given provider is declared in its `manifest.yaml` under `install:` — `install.source` enables `mgtt provider install <name>`, `install.image` enables `mgtt provider install --image <ref>`. Methods not declared are rejected up-front. See the [manifest.yaml reference](../reference/manifest.md) for the full schema.
 
 ## On this page
 
@@ -18,7 +20,7 @@ Two ways to install a provider — git clone and build, or pull a Docker image. 
 
 Three ways to install a provider. Pick the one that fits your workflow.
 
-### 1. Install from the registry (git — default)
+### 1. Install from the registry (source — default)
 
 Fastest for discovery. The registry lookup happens for you.
 
@@ -43,7 +45,7 @@ Same as above, but you specify the URL directly. Useful when you've forked a pro
 No local build needed. The binary lives in the image; `mgtt` invokes it via `docker run`.
 
 ```bash
-mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
+mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abc123...
 ```
 
 The `@sha256:` digest is required — see [Digest pinning](#digest-pinning).
@@ -52,8 +54,9 @@ The `@sha256:` digest is required — see [Digest pinning](#digest-pinning).
 
 ## Comparison: when to use which
 
-| | Git (build from source) | Docker image |
+| | Source (build from git) | Docker image |
 |---|---|---|
+| **Declared in manifest** | `install.source.build` | `install.image` |
 | **Requires on host** | Go toolchain, git | Docker daemon only |
 | **Distribution** | git repo (+ registry for name lookup) | container registry (ghcr, dockerhub, private) |
 | **Digest pinning** | commit SHA (if you use it) | image `@sha256:` digest (required) |
@@ -71,8 +74,8 @@ The `@sha256:` digest is required — see [Digest pinning](#digest-pinning).
 Find the current digest of a tag from a registry:
 
 ```bash
-# GHCR, for a tag like :0.2.0
-docker buildx imagetools inspect ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0 \
+# GHCR, for a tag like :1.0.0
+docker buildx imagetools inspect ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0 \
   --format '{{ .Manifest.Digest }}'
 ```
 
@@ -84,11 +87,11 @@ Use the returned `sha256:…` in the `--image` ref.
 
 Both methods write into `~/.mgtt/providers/<name>/`, but what ends up on disk differs:
 
-**Git install:**
+**Source install:**
 ```
 ~/.mgtt/providers/tempo/
 ├── .mgtt-install.json     # metadata: method, source URL, timestamp
-├── probe                  # the compiled executable (built from source)
+├── bin/provider           # the compiled executable (built from source)
 └── <maybe other files>    # manifest.yaml, docs, examples, etc.
 ```
 
@@ -104,20 +107,20 @@ The `.mgtt-install.json` file records:
 ```json
 {
   "method": "image",
-  "source": "ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abcdef...",
+  "source": "ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abcdef...",
   "installed_at": "2026-04-17T10:30:00Z",
-  "version": "0.2.0"
+  "version": "1.0.0"
 }
 ```
 
-Or for git:
+Or for source:
 
 ```json
 {
-  "method": "git",
+  "method": "source",
   "source": "https://github.com/mgt-tool/mgtt-provider-tempo",
   "installed_at": "2026-04-17T10:30:00Z",
-  "version": "0.2.0"
+  "version": "1.0.0"
 }
 ```
 
@@ -125,23 +128,24 @@ The `mgtt provider list` command surfaces this:
 
 ```bash
 $ mgtt provider list
-✓ tempo    v0.2.0    git     Per-span SLO checks against Grafana Tempo
-✓ quickwit v0.1.5    image   Cross-span tracing checks against Quickwit
+  tempo    v1.0.0    source  Per-span SLO checks against Grafana Tempo
+  quickwit v1.0.0    image   Cross-span tracing checks against Quickwit
 ```
 
 ---
 
 ## What the image gets at runtime
 
-Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `manifest.yaml`:
+Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `manifest.yaml` under `runtime:`:
 
 ```yaml
-needs: [kubectl, aws]
-network: host
+runtime:
+  needs: [kubectl, aws]
+  network_mode: host
 ```
 
-- `needs:` — named capabilities (host tools, credential chains, sockets). Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`.
-- `network:` — container network mode. `bridge` (default), `host`, or `none`.
+- `runtime.needs:` — named capabilities (host tools, credential chains, sockets). Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`.
+- `runtime.network_mode:` — container network mode. `bridge` (default) or `host`.
 
 Both fields show up in `mgtt provider install --image` output, in `mgtt provider ls`, and in the [public registry](../reference/registry.md).
 
@@ -160,7 +164,7 @@ Both methods use the same local directory structure, so switching is straightfor
 
 2. **Reinstall** using the new method:
    ```bash
-   mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
+   mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abc123...
    ```
 
 Uninstalling from an image prints a `docker rmi` hint for cleanup:
@@ -168,7 +172,7 @@ Uninstalling from an image prints a `docker rmi` hint for cleanup:
 ```
 Uninstalled tempo (image method)
 To clean up the image:
-  docker rmi ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
+  docker rmi ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abc123...
 ```
 
 Optional — the image won't interfere with future installs.
@@ -182,18 +186,18 @@ The public registry (`docs/registry.yaml`) supports an optional `image:` field a
 ```yaml
 tempo:
   url: https://github.com/mgt-tool/mgtt-provider-tempo
-  image: ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...
+  image: ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abc123...
   description: Per-span SLO checks against Grafana Tempo
   tags:
     - tracing
     - otel
 ```
 
-When you run `mgtt provider install tempo`, it uses the git URL by default. The `image:` field in the registry is a placeholder for future enhancements — today `--image` requires an explicit, fully-qualified image ref with a digest:
+When you run `mgtt provider install tempo`, it uses the git URL by default (if the provider's manifest declares `install.source`). The `image:` field in the registry is a placeholder for future enhancements — today `--image` requires an explicit, fully-qualified image ref with a digest:
 
 ```bash
-mgtt provider install tempo           # uses url: (git clone and build)
-mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:0.2.0@sha256:abc123...   # requires full ref with @sha256: digest
+mgtt provider install tempo           # source install (requires install.source in the manifest)
+mgtt provider install --image ghcr.io/mgt-tool/mgtt-provider-tempo:1.0.0@sha256:abc123...   # image install (requires install.image in the manifest)
 ```
 
 ---

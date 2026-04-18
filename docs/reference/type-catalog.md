@@ -214,16 +214,16 @@ meta:
   version: 0.1.0
   description: Additional AWS types for my project
   requires:
-    mgtt: ">=1.0"
-  command: ""
+    mgtt: ">=0.2.0"
 
-hooks:
-  install: ""
+install:
+  source:
+    build: hooks/install.sh        # no-op script for vocabulary-only providers
 
-# read_only defaults to true; shell-fallback vocabulary-only providers
-# are inherently read-only. Document the AWS credential chain this
-# provider uses in a README rather than in manifest.yaml — that's
-# narrative that doesn't fit a structured field.
+# read_only defaults to true; vocabulary-only providers are inherently
+# read-only. Document the AWS credential chain this provider uses in a
+# README rather than in manifest.yaml — that's narrative that doesn't fit
+# a structured field.
 
 types:
   elasticache_cluster:

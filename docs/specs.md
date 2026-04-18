@@ -572,15 +572,22 @@ mgtt-provider-kubernetes/            (separate git repository)
 ```yaml
 meta:
   name:        kubernetes
-  version:     1.2.0
+  version:     3.0.0
   description: Kubernetes workload and networking components
   requires:
-    mgtt: ">=1.0"
-  command:     "$MGTT_PROVIDER_DIR/bin/mgtt-provider-kubernetes"
+    mgtt: ">=0.2.0"
 
-hooks:
-  install:     hooks/install.sh
-  update:      hooks/install.sh
+runtime:
+  needs: [kubectl]
+  network_mode: host
+  # entrypoint: optional; convention-default resolves to bin/mgtt-provider-kubernetes
+
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
+  image:
+    repository: ghcr.io/mgt-tool/mgtt-provider-kubernetes
 
 data_types:
   <name>:
@@ -600,28 +607,40 @@ types:
 ```
 
 A provider may split its `types` block across multiple files under `types/*.yaml`,
-loaded and merged at provider load time.
+loaded and merged at provider load time. For the authoritative schema of the
+three top-level blocks (`meta`, `runtime`, `install`) see
+[manifest.yaml reference](reference/manifest.md).
 
 ### 8.2 The `meta` Block
 
 | field       | required | description                                    |
 |-------------|----------|------------------------------------------------|
-| name        | yes      | unique, lowercase, hyphen-separated            |
+| name        | yes      | unique, lowercase, hyphen-separated, `^[a-z][a-z0-9-]*$` |
 | version     | yes      | semver                                         |
 | description | yes      | one line                                       |
 | tags        | no       | loose subject/topic labels (e.g. `workloads`, `storage`, `rbac`) — surfaced by `mgtt provider inspect` and mirrored by the community registry |
 | requires    | yes      | `mgtt: "<version_constraint>"`                 |
-| command     | no       | path to provider binary; `$MGTT_PROVIDER_DIR` is substituted |
 
-### 8.2.1 The `hooks` Block
+### 8.2.1 The `runtime` Block
 
-| field   | required | description                                            |
-|---------|----------|--------------------------------------------------------|
-| install | no       | script to run during `mgtt provider install`           |
-| update  | no       | script to run during `mgtt provider update`            |
-| delete  | no       | cleanup script for `mgtt provider uninstall`           |
+| field          | required | description                                              |
+|----------------|----------|----------------------------------------------------------|
+| needs          | no       | host-side capabilities (list or map form). See [Provider Capabilities](reference/image-capabilities.md). |
+| backends       | no       | backend-service compatibility (list or map form).        |
+| network_mode   | no       | `bridge` (default) or `host`.                            |
+| entrypoint     | no       | path to provider binary; `$MGTT_PROVIDER_DIR` substituted. Convention-default resolves to `bin/mgtt-provider-<name>` for source installs and the image's baked-in `ENTRYPOINT` for image installs. |
 
-Install hooks run with these environment variables:
+### 8.2.2 The `install` Block
+
+Declares which install methods the provider offers. At least one of `install.source` or `install.image` must be declared.
+
+| field                   | required | description                                      |
+|-------------------------|----------|--------------------------------------------------|
+| source.build            | yes, if `install.source` declared | script run during `mgtt provider install` |
+| source.clean            | no       | cleanup script run during `mgtt provider uninstall <name>` |
+| image.repository        | no       | image repository; optional (defaults derive from the registry entry) |
+
+Install scripts run with these environment variables:
 
 | variable            | value                                             |
 |---------------------|---------------------------------------------------|
@@ -629,7 +648,7 @@ Install hooks run with these environment variables:
 | `MGTT_PROVIDER_NAME`| provider name                                     |
 | `MGTT_BIN`          | path to the mgtt binary                           |
 
-### 8.2.2 The Provider Binary Protocol
+### 8.2.3 The Provider Binary Protocol
 
 The provider binary is a black box. mgtt calls it with args; it returns JSON
 on stdout. The protocol has three commands:
@@ -683,7 +702,8 @@ Provider-defined types built on stdlib primitives.
 | probe   | no       | probe metadata (see 8.5)                              |
 | default | no       | suggested threshold for use in healthy conditions     |
 
-When the provider has a binary (`meta.command`), the binary handles all
+When the provider has a binary (`runtime.entrypoint` resolves to one, either
+via the convention-default or an explicit override), the binary handles all
 probing. The `probe` block in facts becomes metadata for the engine (cost,
 access description) rather than an executable command. The binary receives
 the component name and fact name as args and decides how to collect the data.
@@ -954,14 +974,14 @@ A provider consists of three things:
 **1. The vocabulary (manifest.yaml):** fill in mgtt's schema with the
 technology's specifics — `types`, `facts`, `states`, `healthy`, `failure_modes`.
 
-**2. The binary:** implement the three-command protocol (§8.2.2): `probe`,
+**2. The binary:** implement the three-command protocol (§8.2.3): `probe`,
 `validate`, `describe`. Any language. For Go providers, mgtt publishes a
 convenience SDK (`mgtt/sdk`) with arg parsing and JSON serialization; it is
 not required.
 
-**3. The install hook:** a script that produces the binary. For Go providers:
-`go build`. For Python: venv + pip install. For pre-compiled: curl the right
-platform binary.
+**3. The install script (`install.source.build`):** produces the binary. For
+Go providers: `go build`. For Python: venv + pip install. For pre-compiled:
+curl the right platform binary.
 
 ### 10.3 Provider Test Sandbox
 
@@ -978,8 +998,11 @@ Probes that fail the read-only sandbox are rejected from the community registry.
 ### 10.4 Provider Validation Rules
 
 ```
-meta:         name lowercase+hyphen, version semver, requires.mgtt valid
-              command path resolves, hooks.install exists if declared
+meta:         name matches ^[a-z][a-z0-9-]*$, version semver, requires.mgtt valid
+runtime:      needs entries resolve against capability vocabulary,
+              network_mode is bridge|host|omitted
+install:      at least one of install.source / install.image declared;
+              install.source.build script exists if source declared
 data_types:   base is mgtt stdlib, default satisfies unit and range
 types:        at least one declared
 facts:        types resolve, healthy refs declared facts
@@ -1014,19 +1037,21 @@ environment    ->   owns credentials (env vars, files, instance roles)
 
 ### 11.2 Provider Write Posture + Capability Needs
 
-Two top-level fields on `manifest.yaml` tell mgtt what a provider requires at probe time and what (if anything) it writes. Both are provider-level properties — they're declared the same way regardless of install method.
+`manifest.yaml` tells mgtt what a provider requires at probe time (inside `runtime:`) and what (if anything) it writes (top-level `read_only` / `writes_note`). Both are provider-level properties — they're declared the same way regardless of install method.
 
 ```yaml
 # mgtt-provider-kubernetes/manifest.yaml
-needs:    [kubectl]         # host-side capabilities the provider wants
-network:  host              # docker-run network mode for image installs
+runtime:
+  needs: [kubectl]          # host-side capabilities the provider wants
+  network_mode: host        # docker-run network mode for image installs
 read_only: true             # default; omit the field in pure-reader providers
 ```
 
 ```yaml
 # mgtt-provider-terraform/manifest.yaml
-needs:    [terraform, aws]
-network:  host
+runtime:
+  needs: [terraform, aws]
+  network_mode: host
 read_only: false
 writes_note: |
   The `drifted` fact runs `terraform plan` which refreshes state —
@@ -1037,7 +1062,7 @@ writes_note: |
 
 Credential-chain details (which env vars, which config-file paths the provider actually reads) live in each provider's README, where they can be narrative and accurate — not in a structured field that tools must pretend to parse.
 
-See [Provider Capabilities](./reference/image-capabilities.md) for the `needs:` vocabulary, the operator-override file, and the `MGTT_IMAGE_CAPS_DENY` opt-out; see [Using Providers](./concepts/using-providers.md) for how mgtt composes these declarations into the `docker run` line for image-installed providers.
+See [Provider Capabilities](./reference/image-capabilities.md) for the `runtime.needs:` vocabulary, the operator-override file, and the `MGTT_IMAGE_CAPS_DENY` opt-out; see [Using Providers](./concepts/using-providers.md) for how mgtt composes these declarations into the `docker run` line for image-installed providers.
 
 ### 11.3 Probe Execution Modes
 
@@ -1045,7 +1070,7 @@ All modes feed the same engine — it receives a typed fact value either way.
 The constraint engine and CLI never know which mode produced a fact.
 
 **Provider binary (primary)** — mgtt calls the provider's binary via the
-protocol defined in §8.2.2. The binary handles authentication, connection,
+protocol defined in §8.2.3. The binary handles authentication, connection,
 parsing, and type conversion internally.
 
 **Shell fallback** — for providers without a binary, mgtt executes the

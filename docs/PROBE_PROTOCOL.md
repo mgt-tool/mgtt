@@ -21,7 +21,7 @@ mgtt invokes the runner as:
 
     <runner> probe <component-name> <fact-name> [--<key> <value> ...]
 
-- `<runner>` is `meta.command` from the provider's `manifest.yaml`.
+- `<runner>` is `runtime.entrypoint` from the provider's `manifest.yaml` (or the convention-default: `bin/mgtt-provider-<name>` for source installs, the image's `ENTRYPOINT` for image installs).
 - All entries from `Command.Vars` and `Command.Extra` are passed as `--<key> <value>` pairs in alphabetical order. Core does not privilege any key (no special `--namespace`, `--cluster`, etc.). Providers declare which flags they expect in their own README.
 - `--type <T>` is reserved by core when the model declares a typed component.
 - A key appearing in both `Vars` and `Extra` is a usage error — the runner reports `ErrUsage`.

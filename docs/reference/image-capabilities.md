@@ -1,15 +1,30 @@
 # Provider Capabilities
 
-Reference for the `needs:` and `network:` fields in `manifest.yaml` and how mgtt expands them at probe time.
+Reference for the `runtime.needs:` and `runtime.network_mode:` fields in `manifest.yaml` and how mgtt expands them at probe time.
 
 ## Declaring
 
 ```yaml
-needs: [kubectl, aws]
-network: host
+runtime:
+  needs: [kubectl, aws]
+  network_mode: host
 ```
 
-Both fields are optional. Providers that don't talk to host resources omit `needs:` entirely.
+Both fields are optional. Providers that don't talk to host resources omit `needs:` entirely. The full authoritative schema lives in [manifest.yaml reference](manifest.md).
+
+`runtime.needs:` accepts two forms:
+
+```yaml
+runtime:
+  needs: [kubectl, aws]              # list shorthand — no version constraints
+
+# — OR —
+
+runtime:
+  needs:
+    kubectl: ">=1.28"                # map form — per-tool version constraint
+    aws:     ">=2.13"
+```
 
 ## `needs` vocabulary
 
@@ -24,15 +39,14 @@ Both fields are optional. Providers that don't talk to host resources omit `need
 
 Env forwards emit `-e KEY=VALUE` only when `KEY` is set in the caller.
 
-## `network` values
+## `network_mode` values
 
 | Value | Effect |
 |---|---|
 | `bridge` (default) | NAT'd virtual NIC. Reaches the internet; cannot reach host localhost, private interfaces, or in-cluster DNS. |
 | `host` | Container shares the host's network namespace. Required for in-cluster DNS (`*.svc`), private API endpoints, `host.docker.internal`. |
-| `none` | No network. |
 
-Omitting `network:` is equivalent to `bridge`. Non-default values add `--network <mode>` to the docker-run line.
+Omitting `network_mode:` is equivalent to `bridge`. Non-default values add `--network <mode>` to the docker-run line.
 
 ## Operator overrides
 
@@ -73,6 +87,6 @@ Comma-separated list of capabilities mgtt refuses to inject. Applies at probe ti
 
 `mgtt provider validate` and `mgtt provider install --image`:
 
-- Each entry in `needs:` must resolve against the merged vocabulary (built-ins ∪ operator file ∪ env).
-- `network:` must be one of `bridge`, `host`, `none`, or omitted.
-- Providers with no `meta.command` cannot declare `needs:`.
+- Each entry in `runtime.needs:` must resolve against the merged vocabulary (built-ins ∪ operator file ∪ env).
+- `runtime.network_mode:` must be one of `bridge`, `host`, or omitted.
+- Vocabulary-only providers (no binary, no `install.source` / `install.image`) cannot declare `runtime.needs:`.

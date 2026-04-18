@@ -196,10 +196,106 @@ func TestDeriveSatisfyingAssignments(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := deriveSatisfyingAssignments(tc.node, true)
+			got, err := deriveSatisfyingAssignments(tc.node, true, nil)
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
 			if !tc.check(got) {
 				t.Errorf("assignments = %v; check failed", got)
 			}
 		})
 	}
+}
+
+// 1a. Fact-on-RHS: `ready_replicas < desired_replicas` — RHS names a
+// peer fact in the same type. Synthesizer should bind both facts to
+// an integer pair satisfying the comparison.
+func TestSynthesize_FactOnRHS(t *testing.T) {
+	// Build a type with two int-valued facts. The state's When
+	// compares them against each other.
+	knownFacts := map[string]*providersupport.FactSpec{
+		"ready_replicas":   {},
+		"desired_replicas": {},
+	}
+	node := &expr.CmpNode{
+		Fact:  "ready_replicas",
+		Op:    expr.OpLt,
+		Value: "desired_replicas",
+	}
+	got, err := deriveSatisfyingAssignments(node, true, knownFacts)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	lv, lok := got["ready_replicas"]
+	rv, rok := got["desired_replicas"]
+	if !lok || !rok {
+		t.Fatalf("want both facts bound; got %v", got)
+	}
+	li, lints := asInt(lv)
+	ri, rints := asInt(rv)
+	if !lints || !rints {
+		t.Fatalf("want int bindings; got %v (%T), %v (%T)", lv, lv, rv, rv)
+	}
+	if !(li < ri) {
+		t.Errorf("want ready_replicas < desired_replicas; got %d vs %d", li, ri)
+	}
+}
+
+// 1b. OR-branch rebalance: when left branch conflicts with an
+// existing binding, prefer the right branch.
+func TestSynthesize_OrBranchAvoidsConflict(t *testing.T) {
+	// AND(fact_a == 5, OR(fact_a == 3, fact_b == 7)).
+	// Left branch of OR binds fact_a=3 which conflicts with AND's
+	// fact_a=5; right branch binds fact_b=7 which has no conflict.
+	node := &expr.AndNode{
+		L: &expr.CmpNode{Fact: "fact_a", Op: expr.OpEq, Value: 5},
+		R: &expr.OrNode{
+			L: &expr.CmpNode{Fact: "fact_a", Op: expr.OpEq, Value: 3},
+			R: &expr.CmpNode{Fact: "fact_b", Op: expr.OpEq, Value: 7},
+		},
+	}
+	got, err := deriveSatisfyingAssignments(node, true, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got["fact_a"] != 5 {
+		t.Errorf("fact_a = %v; want 5 (AND-sibling must win)", got["fact_a"])
+	}
+	if got["fact_b"] != 7 {
+		t.Errorf("fact_b = %v; want 7 (OR right branch picked to avoid conflict)", got["fact_b"])
+	}
+}
+
+// 1c. Cross-state ref: a `state == "..."` predicate cannot be
+// synthesized by writing a fact; the walker must return
+// ErrCrossStateRef with a recognizable message.
+func TestSynthesize_CrossStateRefReturnsError(t *testing.T) {
+	// `state == "stopped"` — a self-state reference (the walker
+	// treats any "state" fact as the derived-state sentinel).
+	node := &expr.CmpNode{
+		Fact:  "state",
+		Op:    expr.OpEq,
+		Value: "stopped",
+	}
+	_, err := deriveSatisfyingAssignments(node, true, nil)
+	if err == nil {
+		t.Fatal("want error for cross-state ref; got nil")
+	}
+	if !strings.Contains(err.Error(), "cross-state reference") {
+		t.Errorf("err = %q; want message identifying cross-state ref", err.Error())
+	}
+}
+
+func asInt(v any) (int, bool) {
+	switch x := v.(type) {
+	case int:
+		return x, true
+	case int64:
+		return int(x), true
+	case float64:
+		if x == float64(int(x)) {
+			return int(x), true
+		}
+	}
+	return 0, false
 }

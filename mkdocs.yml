@@ -48,9 +48,12 @@ nav:
     - Simulation: concepts/simulation.md
     - Troubleshooting: concepts/troubleshooting.md
     - Multi-File Models: concepts/multi-file-models.md
+  - Working with Providers:
     - Using Providers: concepts/using-providers.md
-    - Provider Install Methods: concepts/provider-install-methods.md
-    - Provider Names and Versions: concepts/provider-fqn-and-versions.md
+    - Install Methods: concepts/provider-install-methods.md
+    - Names and Versions: concepts/provider-fqn-and-versions.md
+    - Capabilities: reference/image-capabilities.md
+  - Provider Registry: reference/registry.md
   - Writing Providers:
     - Overview: providers/overview.md
     - Vocabulary: providers/vocabulary.md
@@ -64,8 +67,6 @@ nav:
     - Scenario Schema: reference/scenario-schema.md
     - Type Catalog: reference/type-catalog.md
     - Specification: reference/spec.md
-    - Provider Registry: reference/registry.md
-    - Provider Capabilities: reference/image-capabilities.md
 
 markdown_extensions:
   - pymdownx.highlight:

@@ -18,7 +18,9 @@ An SRE can drive the loop manually (press Y at each step). An AI agent can drive
 - [What mgtt gives you](#what-mgtt-gives-you)
 - [Get started](#get-started) — install + quickstart
 - [Learn](#learn) — concepts + simulation + troubleshooting walkthroughs
-- [Reference](#reference) — schemas, CLI, configuration, registry
+- [Working with Providers](#working-with-providers) — invoke providers, manage install + capabilities
+- [Provider Registry](#provider-registry) — official and community providers
+- [Reference](#reference) — schemas, CLI, configuration
 - [Extend](#extend) — write your own provider
 
 ## See it in action
@@ -104,7 +106,17 @@ $ mgtt plan
 - [How It Works](concepts/how-it-works.md) — the constraint engine and dependency graph
 - [Simulation walkthrough](concepts/simulation.md) — design-time model validation
 - [Troubleshooting walkthrough](concepts/troubleshooting.md) — runtime incident response
-- [Using Providers](concepts/using-providers.md) — how mgtt invokes providers, capability forwarding, operator controls
+
+## Working with Providers
+
+- [Using Providers](concepts/using-providers.md) — how mgtt invokes providers at probe time
+- [Install Methods](concepts/provider-install-methods.md) — git build vs. pre-built Docker image
+- [Names and Versions](concepts/provider-fqn-and-versions.md) — FQN + version constraint resolution
+- [Provider Capabilities](reference/image-capabilities.md) — `needs:` vocabulary and operator overrides
+
+## Provider Registry
+
+- [Official and community providers](reference/registry.md) — browse what's available, copy the install line
 
 ## Reference
 
@@ -112,7 +124,6 @@ $ mgtt plan
 - [Scenario Schema](reference/scenario-schema.md) — every field in scenario files
 - [Type Catalog](reference/type-catalog.md) — all provider types, facts, states, and failure modes
 - [CLI Reference](reference/cli.md) — every command
-- [Provider Registry](reference/registry.md) — official and community providers
 - [Full Specification](reference/spec.md) — the v1.0 spec
 
 ## Extend

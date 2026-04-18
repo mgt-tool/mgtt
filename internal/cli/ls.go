@@ -8,7 +8,6 @@ import (
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/incident"
 	"github.com/mgt-tool/mgtt/internal/model"
-	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -50,7 +49,10 @@ func lsComponents(cmd *cobra.Command) error {
 		return fmt.Errorf("load model: %w", err)
 	}
 
-	reg := providersupport.LoadAllEmbedded()
+	reg, err := loadRegistryAll()
+	if err != nil {
+		return err
+	}
 
 	store := facts.NewInMemory()
 	if inc, err := incident.Current(); err == nil {

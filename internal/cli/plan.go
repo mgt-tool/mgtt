@@ -57,7 +57,10 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load model: %w", err)
 	}
 
-	reg := providersupport.LoadAllForUse()
+	reg, err := loadRegistryForUse()
+	if err != nil {
+		return err
+	}
 
 	// 2. Resolve model's provider refs against installed providers.
 	if err := resolveModelProviders(m, os.Stderr); err != nil {

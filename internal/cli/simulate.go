@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/model"
-	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/simulate"
 
 	"github.com/spf13/cobra"
@@ -58,7 +57,10 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	reg := providersupport.LoadAllForUse()
+	reg, err := loadRegistryForUse()
+	if err != nil {
+		return err
+	}
 
 	w := cmd.OutOrStdout()
 

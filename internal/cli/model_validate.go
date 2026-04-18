@@ -55,7 +55,10 @@ func runSingleModelValidate(cmd *cobra.Command, path string, writeScenarios bool
 		return err
 	}
 
-	reg := providersupport.LoadAllForUse()
+	reg, err := loadRegistryForUse()
+	if err != nil {
+		return err
+	}
 
 	// Warn on legacy bare-name provider refs before running validation.
 	for _, entry := range m.Meta.Providers {
@@ -169,7 +172,10 @@ func runWorkspaceWriteScenarios(cmd *cobra.Command) error {
 		return fmt.Errorf("no model.yaml files found under current directory")
 	}
 
-	reg := providersupport.LoadAllForUse()
+	reg, err := loadRegistryForUse()
+	if err != nil {
+		return err
+	}
 	entries := make([]scenarios.IndexEntry, 0, len(modelPaths))
 	for _, mp := range modelPaths {
 		m, err := model.Load(mp)

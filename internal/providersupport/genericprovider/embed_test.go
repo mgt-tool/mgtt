@@ -40,3 +40,31 @@ func TestRegister_LoadsComponentType(t *testing.T) {
 		t.Error("meta.version is empty")
 	}
 }
+
+func TestResolveType_FallsBackToGenericComponent(t *testing.T) {
+	reg := providersupport.NewRegistry()
+	if err := Register(reg); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	// Unknown type + unknown provider — fallback MUST kick in.
+	t1, prov, err := reg.ResolveType([]string{"nonexistent-provider"}, "whatever-type")
+	if err != nil {
+		t.Fatalf("ResolveType (fallback): %v", err)
+	}
+	if prov != Name {
+		t.Errorf("want fallback to %q; got provider=%q", Name, prov)
+	}
+	if t1.Name != "component" {
+		t.Errorf("want type=component; got %q", t1.Name)
+	}
+}
+
+func TestResolveType_NoFallbackWithoutRegister(t *testing.T) {
+	// Without Register, unknown types still produce an error — the
+	// fallback is explicitly opt-in.
+	reg := providersupport.NewRegistry()
+	if _, _, err := reg.ResolveType([]string{"x"}, "whatever"); err == nil {
+		t.Fatal("ResolveType on empty registry should fail; fallback must be opt-in")
+	}
+}

@@ -7,7 +7,6 @@ import (
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/incident"
 	"github.com/mgt-tool/mgtt/internal/model"
-	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -24,7 +23,10 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("load model: %w", err)
 		}
 
-		reg := providersupport.LoadAllForUse()
+		reg, err := loadRegistryForUse()
+		if err != nil {
+			return err
+		}
 
 		var store *facts.Store
 		if inc, err := incident.Current(); err == nil {

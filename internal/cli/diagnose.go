@@ -201,7 +201,10 @@ func loadModelAndScenarios(path string) (*model.Model, *providersupport.Registry
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("load model: %w", err)
 	}
-	reg := providersupport.LoadAllForUse()
+	reg, err := loadRegistryForUse()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := resolveModelProviders(m, os.Stderr); err != nil {
 		return nil, nil, nil, err
 	}

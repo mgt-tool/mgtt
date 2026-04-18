@@ -38,7 +38,7 @@ install:
 
 compatibility:
   backend: my-backend
-  versions: ">=2.6.0,<2.7.0"
+  versions: ">=2.6.0 <2.7.0"
   tested_against:
     - "my-backend:2.6.0@sha256:abc…"
   notes: |
@@ -151,7 +151,7 @@ Optional. Pins the provider to specific backend versions. Complements `runtime.b
 ```yaml
 compatibility:
   backend: tempo
-  versions: ">=2.6.0,<2.7.0"
+  versions: ">=2.6.0 <2.7.0"
   tested_against:
     - "grafana/tempo:2.6.0@sha256:f55a8a…"
   notes: |

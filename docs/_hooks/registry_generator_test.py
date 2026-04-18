@@ -184,6 +184,23 @@ class GHCRDigestTest(_StubServerTestCase):
 
 
 class ParseProviderTest(unittest.TestCase):
+    def test_null_install_subblock_not_advertised(self):
+        """A manifest with `install: {source: null, image: {...}}` must
+        not list 'source' as an offered method — the subblock being
+        explicitly null means the author opted out."""
+        yml = (
+            "meta:\n"
+            "  name: x\n"
+            "  version: 0.1.0\n"
+            "  description: d\n"
+            "install:\n"
+            "  source: ~\n"
+            "  image:\n"
+            "    repository: ghcr.io/x/y\n"
+        )
+        info = parse_provider(yml)
+        self.assertEqual(info["methods"], ["image"])
+
     def test_extracts_meta_and_runtime_fields(self):
         yml = (
             "meta:\n"

@@ -68,12 +68,48 @@ func renderProviderOverview(w io.Writer, p *providersupport.Provider) {
 	if !p.ReadOnly && strings.TrimSpace(p.WritesNote) != "" {
 		fmt.Fprintf(w, "  writes-note: %s\n", firstLine(p.WritesNote))
 	}
+
+	// Needs — render name + constraint (when present). Map form:
+	//   needs:
+	//       aws >=2.13
+	//       kubectl
 	if len(p.Runtime.Needs) > 0 {
-		fmt.Fprintf(w, "  needs:       %s\n", strings.Join(sortedNeedNames(p.Runtime.Needs), ", "))
+		fmt.Fprintln(w, "  needs:")
+		for _, name := range sortedMapKeys(p.Runtime.Needs) {
+			fmt.Fprintf(w, "      %s\n", formatNameConstraint(name, p.Runtime.Needs[name]))
+		}
 	}
+
+	// Backends — same shape as needs.
+	if len(p.Runtime.Backends) > 0 {
+		fmt.Fprintln(w, "  backends:")
+		for _, name := range sortedMapKeys(p.Runtime.Backends) {
+			fmt.Fprintf(w, "      %s\n", formatNameConstraint(name, p.Runtime.Backends[name]))
+		}
+	}
+
+	// Install methods — derived from which subblocks were declared.
+	methods := installMethodLines(p)
+	if len(methods) > 0 {
+		fmt.Fprintln(w, "  install methods:")
+		for _, line := range methods {
+			fmt.Fprintf(w, "      %s\n", line)
+		}
+	}
+
 	if p.Runtime.NetworkMode != "" && p.Runtime.NetworkMode != "bridge" {
-		fmt.Fprintf(w, "  network:     %s\n", p.Runtime.NetworkMode)
+		fmt.Fprintf(w, "  network_mode: %s\n", p.Runtime.NetworkMode)
 	}
+
+	// Requires — e.g. mgtt ≥ X.Y.Z. Rendered as a sub-block for
+	// symmetry with needs/backends; most providers only have one entry.
+	if len(p.Meta.Requires) > 0 {
+		fmt.Fprintln(w, "  requires:")
+		for _, name := range sortedMapKeys(p.Meta.Requires) {
+			fmt.Fprintf(w, "      %s: %s\n", name, p.Meta.Requires[name])
+		}
+	}
+
 	fmt.Fprintln(w)
 
 	// Sorted type names.
@@ -181,4 +217,43 @@ func firstLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// sortedMapKeys returns map keys in lexicographic order — deterministic
+// rendering for any string-keyed map.
+func sortedMapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// formatNameConstraint joins a capability/backend name with its optional
+// version constraint: "aws >=2.13" or just "kubectl" when the author
+// left the constraint empty (list-shorthand form).
+func formatNameConstraint(name, constraint string) string {
+	if constraint == "" {
+		return name
+	}
+	return name + " " + constraint
+}
+
+// installMethodLines returns a short description line per declared
+// install method. Empty when neither is set (the parser rejects that
+// case, so callers should see at least one line in practice).
+func installMethodLines(p *providersupport.Provider) []string {
+	var out []string
+	if s := p.Install.Source; s != nil {
+		out = append(out, fmt.Sprintf("source  (build: %s; clean: %s)", s.Build, s.Clean))
+	}
+	if img := p.Install.Image; img != nil {
+		repo := img.Repository
+		if repo == "" {
+			repo = "(resolved from registry)"
+		}
+		out = append(out, fmt.Sprintf("image   (%s)", repo))
+	}
+	return out
 }

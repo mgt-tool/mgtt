@@ -285,10 +285,13 @@ def parse_provider(yaml_text: str) -> dict:
     if isinstance(backends, list):
         backends = {k: "" for k in backends}
 
+    # `.get()` returns None for missing keys AND explicit null; the
+    # truthiness check drops both so `install: {source: null, image: {...}}`
+    # doesn't wrongly advertise source.
     methods = []
-    if "source" in install:
+    if install.get("source"):
         methods.append("source")
-    if "image" in install:
+    if install.get("image"):
         methods.append("image")
 
     return {
@@ -341,8 +344,12 @@ def render_card(*, entry_name: str, repo_url: str, image_ref: str,
         f"- **Backends**: {backends}",
         f"- **Posture**: {posture}",
     ]
-    if not info["read_only"] and info["writes_note"]:
-        parts.append(f"- **Writes**: {info['writes_note'].strip().splitlines()[0]}")
+    # Guard against whitespace-only writes_note: .strip() would return
+    # "" and .splitlines()[0] would IndexError. The Go parser rejects
+    # this for valid providers, but harden defensively.
+    if not info["read_only"] and info["writes_note"].strip():
+        first_line = info["writes_note"].strip().splitlines()[0]
+        parts.append(f"- **Writes**: {first_line}")
     parts += [
         f"- **Tags**: {tags}",
         f"- **Requires mgtt**: `{info['requires_mgtt']}`",

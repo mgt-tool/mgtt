@@ -1,7 +1,9 @@
 package providersupport
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -779,6 +781,104 @@ install:
 	}
 	if p.Install.Source == nil || p.Install.Image != nil {
 		t.Errorf("want source-only install; got %+v", p.Install)
+	}
+}
+
+func TestLoadFromBytes_BackendsListShorthand(t *testing.T) {
+	y := []byte(`
+meta:
+  name: p
+  version: 0.1.0
+  description: d
+runtime:
+  backends: [quickwit, prometheus]
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
+`)
+	p, err := LoadFromBytes(y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Runtime.Backends; got["quickwit"] != "" || got["prometheus"] != "" {
+		t.Errorf("list shorthand should produce empty-string values; got %v", got)
+	}
+	if len(p.Runtime.Backends) != 2 {
+		t.Errorf("want 2 entries; got %d", len(p.Runtime.Backends))
+	}
+}
+
+func TestLoadFromBytes_RejectsBadShortname(t *testing.T) {
+	cases := []struct {
+		name string
+		bad  string
+	}{
+		{"empty", ""},
+		{"uppercase", "aWS"},
+		{"leading-digit", "0abc"},
+		{"underscore", "p_q"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			y := []byte(fmt.Sprintf(`
+meta:
+  name: %q
+  version: 0.1.0
+  description: d
+install:
+  image:
+    repository: ghcr.io/x/y
+`, tc.bad))
+			_, err := LoadFromBytes(y)
+			if err == nil {
+				t.Fatalf("expected error for name %q", tc.bad)
+			}
+		})
+	}
+}
+
+func TestLoadFromBytes_RejectsReadOnlyFalseWithoutWritesNote(t *testing.T) {
+	y := []byte(`
+meta:
+  name: p
+  version: 0.1.0
+  description: d
+install:
+  image:
+    repository: ghcr.io/x/y
+read_only: false
+`)
+	_, err := LoadFromBytes(y)
+	if err == nil {
+		t.Fatal("expected error for read_only: false without writes_note")
+	}
+	if !strings.Contains(err.Error(), "writes_note") {
+		t.Errorf("error should mention writes_note; got %v", err)
+	}
+}
+
+func TestLoadFromBytes_RejectsMixedListAndMapInNeeds(t *testing.T) {
+	// YAML syntax forbids a sequence entry being a mapping at the same
+	// level without a dash, but we can catch the case where a sequence
+	// contains a mapping item — decodeNameVersionMap must reject it.
+	y := []byte(`
+meta:
+  name: p
+  version: 0.1.0
+  description: d
+runtime:
+  needs:
+    - aws
+    - kubectl: ">=1.25"
+install:
+  image:
+    repository: ghcr.io/x/y
+`)
+	_, err := LoadFromBytes(y)
+	if err == nil {
+		t.Fatal("expected error for mixed list+map in needs")
 	}
 }
 

@@ -58,11 +58,11 @@ nav:
     - Overview: providers/overview.md
     - Vocabulary: providers/vocabulary.md
     - Binary Protocol: providers/protocol.md
-    - Install Hooks: providers/hooks.md
     - Testing: providers/testing.md
   - Reference:
     - CLI: reference/cli.md
     - Configuration: reference/configuration.md
+    - Manifest Schema: reference/manifest.md
     - Model Schema: reference/model-schema.md
     - Scenario Schema: reference/scenario-schema.md
     - Type Catalog: reference/type-catalog.md

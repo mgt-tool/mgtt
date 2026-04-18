@@ -98,26 +98,22 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 	}
 
 	// Stage 5 — Probe suggestion.
-	// Pick the next fact to collect. When scenarios are available for
-	// this model (loaded from scenarios.yaml beside it, if any), delegate
-	// to strategy.Occam which prefers shortest scenarios and tie-breaks
-	// by --suspect / cross-elimination count. When no scenarios are
-	// available, keep the legacy path-tree-aware BFS behavior so existing
-	// engine tests pass bit-for-bit.
+	// Single code path: load scenarios (possibly empty), dispatch via
+	// strategy.AutoSelect. AutoSelect returns Occam when scenarios are
+	// present (shortest-first, tie-break on --suspect / cross-
+	// elimination) and BFS otherwise (graph traversal from the entry
+	// point). The engine no longer keeps a bespoke path-tree-aware
+	// suggestProbe — BFS is the canonical no-scenarios implementation.
 	scs := loadScenariosIfPresent(m)
-	if len(scs) > 0 {
-		input := strategy.Input{
-			Model:     m,
-			Registry:  reg,
-			Store:     store,
-			Scenarios: scs,
-		}
-		strat := strategy.AutoSelect(input)
-		dec := strat.SuggestProbe(input)
-		tree.Suggested = decisionToProbe(dec)
-	} else {
-		tree.Suggested = suggestProbe(m, reg, store, tree)
+	input := strategy.Input{
+		Model:     m,
+		Registry:  reg,
+		Store:     store,
+		Scenarios: scs,
 	}
+	strat := strategy.AutoSelect(input)
+	dec := strat.SuggestProbe(input)
+	tree.Suggested = decisionToProbe(dec)
 
 	return tree
 }
@@ -276,93 +272,6 @@ func ResolveDefaultActive(comp *model.Component, metaProviders []string, reg *pr
 // resolveDefaultActive is the package-internal alias kept for call sites here.
 func resolveDefaultActive(comp *model.Component, metaProviders []string, reg *providersupport.Registry) string {
 	return ResolveDefaultActive(comp, metaProviders, reg)
-}
-
-// suggestProbe picks the next fact to collect. It walks all components that
-// appear on surviving (non-eliminated) paths — starting from the entry point
-// and proceeding inward — and returns the first uncollected fact it finds.
-//
-// If no surviving paths exist or every reachable component already has all
-// facts collected, nil is returned (nothing left to probe).
-func suggestProbe(m *model.Model, reg *providersupport.Registry, store *facts.Store, tree *PathTree) *Probe {
-	// Collect unique components from surviving paths in BFS order.
-	// Include entry even if it's not the terminal of any path (it may have uncollected facts).
-	seen := map[string]bool{}
-	var candidates []string
-
-	// Entry first.
-	if store.FactsFor(tree.Entry) == nil {
-		candidates = append(candidates, tree.Entry)
-		seen[tree.Entry] = true
-	}
-
-	// Then components from surviving paths, shallowest first.
-	for _, p := range tree.Paths {
-		for _, c := range p.Components {
-			if !seen[c] {
-				seen[c] = true
-				candidates = append(candidates, c)
-			}
-		}
-	}
-
-	// If no surviving paths and no entry to probe, nothing to suggest.
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	for _, compName := range candidates {
-		comp := m.Components[compName]
-		if comp == nil {
-			continue
-		}
-		providers := comp.Providers
-		if len(providers) == 0 {
-			providers = m.Meta.Providers
-		}
-		t, providerName, err := reg.ResolveType(providers, comp.Type)
-		if err != nil {
-			continue
-		}
-
-		// Sort fact names for deterministic ordering.
-		var factNames []string
-		for fn := range t.Facts {
-			factNames = append(factNames, fn)
-		}
-		sort.Strings(factNames)
-
-		for _, fn := range factNames {
-			if store.Latest(compName, fn) != nil {
-				continue // already collected
-			}
-			fs := t.Facts[fn]
-
-			// Determine which paths this probe would help eliminate.
-			var eliminates []string
-			for _, p := range tree.Paths {
-				for _, c := range p.Components {
-					if c == compName {
-						eliminates = append(eliminates, p.ID)
-						break
-					}
-				}
-			}
-
-			return &Probe{
-				Component:  compName,
-				Fact:       fn,
-				Provider:   providerName,
-				ParseMode:  fs.Probe.Parse,
-				Eliminates: eliminates,
-				Cost:       fs.Probe.Cost,
-				Access:     fs.Probe.Access,
-				Command:    fs.Probe.Cmd,
-			}
-		}
-	}
-
-	return nil
 }
 
 // isEliminated determines whether a path's deepest component should be eliminated.

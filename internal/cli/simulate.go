@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/model"
+	"github.com/mgt-tool/mgtt/internal/scenarios"
 	"github.com/mgt-tool/mgtt/internal/simulate"
 
 	"github.com/spf13/cobra"
@@ -19,10 +21,11 @@ var simulateCmd = &cobra.Command{
 }
 
 var (
-	simulateModel    string
-	simulateScenario string
-	simulateAll      bool
-	scenariosDir     string
+	simulateModel         string
+	simulateScenario      string
+	simulateAll           bool
+	scenariosDir          string
+	simulateFromScenarios bool
 )
 
 func init() {
@@ -30,13 +33,14 @@ func init() {
 	simulateCmd.Flags().StringVar(&simulateScenario, "scenario", "", "path to a single scenario YAML file")
 	simulateCmd.Flags().BoolVar(&simulateAll, "all", false, "run all scenarios in the scenarios directory")
 	simulateCmd.Flags().StringVar(&scenariosDir, "scenarios-dir", "scenarios", "directory containing scenario YAML files")
+	simulateCmd.Flags().BoolVar(&simulateFromScenarios, "from-scenarios", false, "iterate enumerated scenarios as test cases; assert Occam identifies each root")
 	simulateCmd.SilenceErrors = true
 	rootCmd.AddCommand(simulateCmd)
 }
 
 func runSimulate(cmd *cobra.Command, args []string) error {
-	if !simulateAll && simulateScenario == "" {
-		return fmt.Errorf("specify --scenario <file> or --all")
+	if !simulateAll && simulateScenario == "" && !simulateFromScenarios {
+		return fmt.Errorf("specify --scenario <file>, --all, or --from-scenarios")
 	}
 
 	// Load model.
@@ -64,14 +68,31 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 
 	w := cmd.OutOrStdout()
 
+	// Enumerated-scenarios iteration (Task F1).
+	if simulateFromScenarios {
+		scs, err := loadEnumeratedScenariosForModel(simulateModel)
+		if err != nil {
+			return err
+		}
+		p, f, details := simulate.RunFromScenarios(m, reg, scs)
+		for _, d := range details {
+			fmt.Fprintln(w, d)
+		}
+		fmt.Fprintf(w, "%d/%d scenarios passed\n", p, p+f)
+		if f > 0 {
+			return fmt.Errorf("%d scenario(s) failed", f)
+		}
+		return nil
+	}
+
 	if simulateAll {
-		scenarios, err := simulate.LoadAllScenarios(scenariosDir)
+		cases, err := simulate.LoadAllScenarios(scenariosDir)
 		if err != nil {
 			return err
 		}
 
 		var results []*simulate.Result
-		for _, sc := range scenarios {
+		for _, sc := range cases {
 			results = append(results, simulate.Run(m, reg, sc))
 		}
 
@@ -136,4 +157,24 @@ func renderSimulateAll(w io.Writer, results []*simulate.Result) {
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  %d/%d scenarios passed\n", passed, len(results))
+}
+
+// loadEnumeratedScenariosForModel reads the sibling scenarios.yaml for
+// the given model path. Returns an empty list (no error) when the file
+// is missing — the caller decides whether that's fatal.
+func loadEnumeratedScenariosForModel(modelPath string) ([]scenarios.Scenario, error) {
+	scPath := filepath.Join(filepath.Dir(modelPath), "scenarios.yaml")
+	f, err := os.Open(scPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("open %s: %w", scPath, err)
+	}
+	defer f.Close()
+	scs, _, err := scenarios.Read(f)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", scPath, err)
+	}
+	return scs, nil
 }

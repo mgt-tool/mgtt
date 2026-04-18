@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `mgtt provider install --image` rejects providers without an `install.image` block; `mgtt provider install` (source) rejects providers without `install.source`. No more deep-in-build failures.
 
+### Known issues
+
+- `mgtt-provider-docker`'s `container` type declares a `healthy:` expression comparing a string literal (`health_status != "unhealthy"`). The current `internal/expr` parser does not tokenize string literals, so loading that specific type fails at runtime. The rest of the docker provider's manifest is v1.0-valid and the migration commit is on main; a follow-up will extend the expression tokenizer to accept double-quoted string literals.
+
 ## [Unreleased]
 
 ### Added

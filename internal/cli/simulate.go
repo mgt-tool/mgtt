@@ -196,9 +196,20 @@ func renderSimulateAll(w io.Writer, results []*simulate.Result) {
 }
 
 // emitGapWarning prints a warning when a hand-authored simulate case
-// expects a root cause that no enumerated scenario chains to. Silenced
+// expects a root cause that no enumerated scenario chains to with a
+// terminal symptom on one of the case's injected components. Silenced
 // when the case sets `unenumerated_intentional: true` or when no
 // enumerated scenarios are available.
+//
+// A scenario "matches" the case only when:
+//   - its root component equals the case's expect.root_cause, AND
+//   - its terminal step (the one with Observes) is on a component the
+//     case has injected facts for
+//
+// Rationale: an enumerated scenario with the right root but chaining
+// through a different symptom path (terminal on a component the case
+// never touches) isn't exercising the path this case is set up for;
+// treating it as a match would silently accept gaps in coverage.
 func emitGapWarning(w io.Writer, c *simulate.Scenario, enumerated []scenarios.Scenario) {
 	if c == nil || c.UnenumeratedIntentional || len(enumerated) == 0 {
 		return
@@ -206,13 +217,39 @@ func emitGapWarning(w io.Writer, c *simulate.Scenario, enumerated []scenarios.Sc
 	if c.Expect.RootCause == "" || c.Expect.RootCause == "none" {
 		return
 	}
+	injected := map[string]bool{}
+	for comp := range c.Inject {
+		injected[comp] = true
+	}
 	for _, e := range enumerated {
-		if e.Root.Component == c.Expect.RootCause {
+		if e.Root.Component != c.Expect.RootCause {
+			continue
+		}
+		terminal := scenarioTerminalComponent(e)
+		// If the case has no injected components at all, fall back to
+		// the root-only check — otherwise we'd warn on every case even
+		// when an obvious match exists.
+		if len(injected) == 0 {
+			return
+		}
+		if terminal != "" && injected[terminal] {
 			return
 		}
 	}
-	fmt.Fprintf(w, "WARN: simulate case %q expects root=%s, but no enumerated scenario chains that root to an observed symptom path. Add triggered_by labels, or mark the case with `unenumerated_intentional: true`.\n",
+	fmt.Fprintf(w, "WARN: simulate case %q expects root=%s, but no enumerated scenario chains that root to an observed symptom on an injected component. Add triggered_by labels, or mark the case with `unenumerated_intentional: true`.\n",
 		c.Name, c.Expect.RootCause)
+}
+
+// scenarioTerminalComponent returns the component of the step marked
+// terminal (has Observes). Returns "" when the scenario has no
+// terminal step.
+func scenarioTerminalComponent(s scenarios.Scenario) string {
+	for _, step := range s.Chain {
+		if step.IsTerminal() {
+			return step.Component
+		}
+	}
+	return ""
 }
 
 // loadEnumeratedScenariosForModel reads the sibling scenarios.yaml for

@@ -84,3 +84,54 @@ func TestEmitGapWarning_RootCauseNone_Silent(t *testing.T) {
 		t.Errorf("want silent for root=none; got %q", buf.String())
 	}
 }
+
+// Right root, wrong terminal — scenario chains db→cache but the case
+// injects on web. A root-only match would silently accept this; the
+// terminal-aware check surfaces it as a gap.
+func TestEmitGapWarning_RightRootWrongTerminal_Warns(t *testing.T) {
+	c := &simulate.Scenario{
+		Name:   "db-outage-via-web",
+		Inject: map[string]map[string]any{"web": {"status": "down"}},
+		Expect: simulate.Expectation{RootCause: "db"},
+	}
+	enum := []scenarios.Scenario{
+		{
+			ID:   "s-db-to-cache",
+			Root: scenarios.RootRef{Component: "db", State: "down"},
+			Chain: []scenarios.Step{
+				{Component: "db", State: "down", EmitsOnEdge: "db_down"},
+				{Component: "cache", State: "down", Observes: []string{"status"}},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	emitGapWarning(&buf, c, enum)
+	if !strings.Contains(buf.String(), "WARN:") {
+		t.Errorf("want WARN when scenario terminal (cache) doesn't match injected component (web); got %q", buf.String())
+	}
+}
+
+// Right root, matching terminal — scenario chains db→web and the case
+// injects on web. Terminal-aware check should accept this.
+func TestEmitGapWarning_RightRootMatchingTerminal_Silent(t *testing.T) {
+	c := &simulate.Scenario{
+		Name:   "db-outage-via-web",
+		Inject: map[string]map[string]any{"web": {"status": "down"}},
+		Expect: simulate.Expectation{RootCause: "db"},
+	}
+	enum := []scenarios.Scenario{
+		{
+			ID:   "s-db-to-web",
+			Root: scenarios.RootRef{Component: "db", State: "down"},
+			Chain: []scenarios.Step{
+				{Component: "db", State: "down", EmitsOnEdge: "db_down"},
+				{Component: "web", State: "down", Observes: []string{"status"}},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	emitGapWarning(&buf, c, enum)
+	if buf.Len() != 0 {
+		t.Errorf("want silent when scenario terminal (web) matches injected component; got %q", buf.String())
+	}
+}

@@ -258,9 +258,18 @@
 
 /* Append the tagline to the header site-name topic only. site_name stays
    short ("mgtt") so browser tab + drawer header don't carry the full
-   phrase; the top bar gets the expanded form via ::after. Suppressed on
-   narrow viewports where there's no room. */
+   phrase; the top bar gets the expanded form via ::after. Material's
+   .md-ellipsis has overflow:hidden + text-overflow:ellipsis which was
+   clipping the ::after — drop both on the site-name topic (the
+   page-title topic keeps its clipping since it's not ours to customise).
+   Suppressed below 60em where there's no room. */
 @media screen and (min-width: 60em) {
+  .md-header__title .md-header__topic:first-child,
+  .md-header__title .md-header__topic:first-child .md-ellipsis {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+  }
   .md-header__title .md-header__topic:first-child .md-ellipsis::after {
     content: " — model guided troubleshooting tool";
     color: var(--md-default-fg-color--lighter);

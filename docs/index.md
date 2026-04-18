@@ -1,7 +1,5 @@
 ![mgtt](images/mgtt_full_lockup.png)
 
-#
-
 If you build or maintain anything with more than two components — a web app with a frontend, an API, and a database; a set of microservices behind a load balancer; a data pipeline with queues, workers, and storage — you know the drill:
 
 <div class="scenario" markdown>
@@ -38,18 +36,7 @@ If you build or maintain anything with more than two components — a web app wi
 
 </div>
 
-An SRE can drive the loop manually (press Y at each step). An AI agent can drive it autonomously via the same interface — mgtt is designed to be equally useful to humans and LLMs. The engine reasons; whoever's on call executes.
-
-## On this page
-
-- [See it in action](#see-it-in-action) — simulation + troubleshooting demos
-- [What mgtt gives you](#what-mgtt-gives-you)
-- [Get started](#get-started) — install + quickstart
-- [Learn](#learn) — concepts + simulation + troubleshooting walkthroughs
-- [Working with Providers](#working-with-providers) — invoke providers, manage install + capabilities
-- [Provider Registry](#provider-registry) — official and community providers
-- [Reference](#reference) — schemas, CLI, configuration
-- [Extend](#extend) — write your own provider
+Press Y at each step yourself, or let an AI agent drive the same loop autonomously through the same interface. **The engine reasons; whoever's on call executes.**
 
 ## See it in action
 
@@ -68,7 +55,7 @@ $ mgtt simulate --all
   4/4 scenarios passed
 ```
 
-No running system. No credentials. Runs on every PR.
+> No running system. No credentials. Runs on every PR.
 
 [Full simulation walkthrough](concepts/simulation.md)
 
@@ -105,7 +92,7 @@ $ mgtt plan
   Eliminated: frontend, rds
 ```
 
-4 components probed, 2 eliminated, root cause found. You didn't need to know the system — the model knew it for you. An AI agent could run this same loop autonomously.
+> **4 components probed. 2 eliminated. Root cause found.** You didn't need to know the system — the model knew it for you. An AI agent could run the same loop autonomously.
 
 [Full troubleshooting walkthrough](concepts/troubleshooting.md)
 
@@ -113,16 +100,18 @@ $ mgtt plan
 
 ## What mgtt gives you
 
-1. **Model once** — describe components, dependencies, and what "healthy" means in YAML
-2. **Simulate in CI** — inject synthetic failures, assert the engine reasons correctly, catch model gaps before production
-3. **Troubleshoot at 3am** — press Y (or let an AI agent drive), the engine picks the most informative probe at every step
+One model, three moments:
 
-| | Design time | At 3am |
-|---|---|---|
-| Command | `mgtt simulate` | `mgtt plan` |
-| Facts from | Scenario YAML | Real probes (kubectl, aws) |
-| Driven by | CI pipeline | SRE or AI agent |
-| Output | Pass/fail assertions | Guided root cause |
+- **Model once** — describe components, dependencies, and what "healthy" means in YAML.
+- **Simulate in CI** — inject synthetic failures; assert the engine reasons correctly; catch model gaps before production.
+- **Troubleshoot at 3am** — press Y (or let an AI agent drive); the engine picks the most informative probe at every step.
+
+|             | Design time     | At 3am                       |
+|-------------|-----------------|------------------------------|
+| Command     | `mgtt simulate` | `mgtt plan`                  |
+| Facts from  | scenario YAML   | real probes (kubectl, aws)   |
+| Driven by   | CI pipeline     | SRE or AI agent              |
+| Output      | pass/fail       | guided root cause            |
 
 ## Get started
 

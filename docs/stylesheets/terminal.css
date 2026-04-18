@@ -510,6 +510,12 @@
 /* Keep images from ever blowing out the content column */
 .md-typeset img { max-width: 100%; height: auto; }
 
+/* Cap the hero logo so it reads as a wordmark, not a billboard */
+.md-typeset > p:first-child img {
+  max-width: 360px;
+  margin: 0.5rem 0 1.5rem;
+}
+
 /* Empty-H1 spacer on index.md — invisible but preserves flow */
 .md-typeset h1:empty { display: none; }
 .md-typeset h1:empty::before { display: none; }

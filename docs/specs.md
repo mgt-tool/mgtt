@@ -370,6 +370,7 @@ omitted at component    ->   inherits meta.providers
 |---------------|----------|--------------------------------------------------|
 | providers     | no       | overrides meta.providers for this component      |
 | type          | yes      | component type, resolved against provider list   |
+| resource      | no       | upstream resource id the provider probes; falls back to the component key when empty; supports `{key}` placeholders from `meta.vars` |
 | depends       | no       | list of dependency declarations                  |
 | healthy       | no       | overrides or extends provider healthy defaults   |
 | failure_modes | no       | overrides or extends provider failure modes      |

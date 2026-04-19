@@ -52,6 +52,8 @@ meta:
 components:
   <component-name>:
     type: <type-name>       # required — a type defined by a provider
+    resource: <string>      # optional — upstream resource id the provider probes
+                            #   (supports {key} placeholders from meta.vars)
     providers:              # optional — override meta.providers for this component
       - <provider-name>
     depends:                # optional — components this one depends on

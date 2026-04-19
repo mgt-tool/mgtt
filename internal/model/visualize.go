@@ -32,6 +32,11 @@ func Render(m *Model, reg *providersupport.Registry, installed []InstalledProvid
 	}
 
 	names := sortedComponentNames(m)
+	if len(names) == 0 {
+		sb.WriteString("  %% no components\n")
+		sb.WriteString("```\n")
+		return sb.String(), nil
+	}
 
 	// Resolve each component's owning-provider FQN.
 	componentsByFQN := make(map[string][]string)

@@ -243,3 +243,27 @@ func TestRender_CycleTolerated(t *testing.T) {
 		t.Errorf("want cycle warning comment; got:\n%s", got)
 	}
 }
+
+// TestRender_EmptyModel — a model with 0 components renders a
+// placeholder comment, not malformed mermaid.
+func TestRender_EmptyModel(t *testing.T) {
+	m := &model.Model{
+		Meta:       model.Meta{Name: "empty", Version: "1.0"},
+		Components: map[string]*model.Component{},
+		Order:      []string{},
+	}
+	reg := providersupport.NewRegistry()
+	installed := []model.InstalledProvider{}
+
+	got, err := model.Render(m, reg, installed)
+	if err != nil {
+		t.Fatalf("empty model should not error; got %v", err)
+	}
+	if !strings.Contains(got, "%% no components") {
+		t.Errorf("want 'no components' comment; got:\n%s", got)
+	}
+	// No edges, no subgraphs.
+	if strings.Contains(got, "-->") {
+		t.Errorf("empty model shouldn't have edges; got:\n%s", got)
+	}
+}

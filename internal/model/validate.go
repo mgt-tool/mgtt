@@ -17,6 +17,7 @@ func Validate(m *Model, reg *providersupport.Registry) *ValidationResult {
 	if reg != nil {
 		pass2TypeResolution(m, reg, result)
 		pass5TriggeredBy(m, reg, result)
+		pass6DuplicateResource(m, reg, result)
 	}
 	pass3DepRefs(m, result)
 	pass4Cycles(m, result)
@@ -264,6 +265,41 @@ func levenshtein(a, b string) int {
 		}
 	}
 	return dp[la][lb]
+}
+
+// pass6DuplicateResource warns when two components share the same
+// (owning-provider, type, resource) triple — almost always a
+// copy-paste mistake. Components with empty Resource are skipped:
+// they fall back to Name at probe time, and key uniqueness is
+// already enforced by pass1Structural.
+func pass6DuplicateResource(m *Model, reg *providersupport.Registry, result *ValidationResult) {
+	type seenKey struct{ owner, typ, resource string }
+	seen := map[seenKey]string{} // first component owning each triple
+
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		if comp == nil || comp.Resource == "" {
+			continue
+		}
+		providers := comp.Providers
+		if len(providers) == 0 {
+			providers = m.Meta.Providers
+		}
+		_, owner, err := reg.ResolveType(providers, comp.Type)
+		if err != nil {
+			continue
+		}
+		key := seenKey{owner: owner, typ: comp.Type, resource: comp.Resource}
+		if prior, ok := seen[key]; ok {
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Component: name,
+				Field:     "resource",
+				Message:   fmt.Sprintf("duplicate resource %q — same (type %q) as component %q", comp.Resource, comp.Type, prior),
+			})
+			continue
+		}
+		seen[key] = name
+	}
 }
 
 func pass4Cycles(m *Model, result *ValidationResult) {

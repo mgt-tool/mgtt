@@ -41,14 +41,26 @@ type Decision struct {
 	Reason    string              // human-readable explanation
 }
 
+// metaVars returns Input.Model.Meta.Vars safely (nil-tolerant). Used by
+// the strategies to forward vars onto the Probe struct so the runner
+// can substitute `{key}` placeholders at probe time.
+func metaVars(in Input) map[string]string {
+	if in.Model == nil {
+		return nil
+	}
+	return in.Model.Meta.Vars
+}
+
 // Probe describes the concrete next probe to run.
 type Probe struct {
 	Component  string
 	Fact       string
 	Provider   string
+	Type       string            // resolved component type — required by the provider binary
 	Cost       string
 	Access     string
 	Command    string
 	ParseMode  string
-	Eliminates []string // scenario IDs this probe would invalidate (display only)
+	Vars       map[string]string // model.meta.vars forwarded for {key} substitution
+	Eliminates []string          // scenario IDs this probe would invalidate (display only)
 }

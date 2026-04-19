@@ -470,7 +470,7 @@ type shellProbeRunner struct {
 }
 
 func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *facts.Store) (string, error) {
-	rendered := probe.Substitute(p.Command, p.Component, nil, nil)
+	rendered := probe.Substitute(p.Command, p.Component, p.Vars, nil)
 	if err := probe.ValidateCommand(rendered, p.Command); err != nil {
 		return "", err
 	}
@@ -481,6 +481,8 @@ func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *fa
 		Provider:  p.Provider,
 		Component: p.Component,
 		Fact:      p.Fact,
+		Type:      p.Type,
+		Vars:      p.Vars,
 		Timeout:   probeTimeout(),
 	})
 	if err != nil {

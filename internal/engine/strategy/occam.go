@@ -167,10 +167,12 @@ func pickSymptomInward(s scenarios.Scenario, store *facts.Store, m *model.Model,
 			Component: step.Component,
 			Fact:      factName,
 			Provider:  providerName,
+			Type:      t.Name,
 			Cost:      fs.Probe.Cost,
 			Access:    fs.Probe.Access,
 			Command:   fs.Probe.Cmd,
 			ParseMode: fs.Probe.Parse,
+			Vars:      m.Meta.Vars,
 		}
 	}
 	return nil

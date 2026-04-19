@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -407,6 +408,111 @@ func TestDiagnose_GenericComponentPrompt(t *testing.T) {
 	// The operator-answer trail line must appear in the final report.
 	if !strings.Contains(out, "operator-answered: n") {
 		t.Errorf("want 'operator-answered: n' in trail; got:\n%s", out)
+	}
+}
+
+// TestDiagnose_EOFStdinRecordsSkipMarker verifies that when stdin
+// delivers EOF before any answer, the generic-component prompt loop
+// bails out with a partial report instead of spinning on empty reads
+// until --max-probes is exhausted. The skip-marker fact is recorded so
+// pickSymptomInward doesn't re-select the same step in the same loop
+// iteration set.
+func TestDiagnose_EOFStdinRecordsSkipMarker(t *testing.T) {
+	genericProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "generic"},
+		Types: map[string]*providersupport.Type{
+			"thing": {
+				Name: "thing",
+				Facts: map[string]*providersupport.FactSpec{
+					"operator_says_healthy": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "free", Access: "none"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "operator_says_healthy", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(genericProv)
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"generic"}},
+		Components: map[string]*model.Component{
+			"widget": {Name: "widget", Type: "thing"},
+		},
+		Order: []string{"widget"},
+	}
+	m.BuildGraph()
+
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{}})
+	// Empty reader → immediate EOF.
+	withStdin(t, strings.NewReader(""))
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 20, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("EOF must not error; got %v\nout:\n%s", err, out)
+	}
+	if !strings.Contains(out, "stdin closed") {
+		t.Errorf("want 'stdin closed' in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Stopped:") {
+		t.Errorf("want 'Stopped:' in output; got:\n%s", out)
+	}
+}
+
+// TestDiagnose_NonTTYStdinRejectedForGeneric verifies diagnose fails fast
+// when the model has generic components AND stdin is a real non-TTY
+// file. Using /dev/null here simulates the redirect-from-file case.
+func TestDiagnose_NonTTYStdinRejectedForGeneric(t *testing.T) {
+	genericProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "generic"},
+		Types: map[string]*providersupport.Type{
+			"thing": {
+				Name: "thing",
+				Facts: map[string]*providersupport.FactSpec{
+					"operator_says_healthy": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "free", Access: "none"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "operator_says_healthy", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(genericProv)
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"generic"}},
+		Components: map[string]*model.Component{
+			"widget": {Name: "widget", Type: "thing"},
+		},
+		Order: []string{"widget"},
+	}
+	m.BuildGraph()
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{}})
+
+	devnull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("no %s on this platform: %v", os.DevNull, err)
+	}
+	t.Cleanup(func() { devnull.Close() })
+	withStdin(t, devnull)
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 20, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err == nil {
+		t.Fatalf("non-TTY stdin + generic must error fast; got nil\nout:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Errorf("error should explain the TTY requirement; got %v", err)
 	}
 }
 

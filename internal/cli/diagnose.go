@@ -19,6 +19,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 type diagnoseFlags struct {
@@ -70,7 +71,7 @@ func newDiagnoseCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&f.modelPath, "model", "", "path to model.yaml (default: auto-detect in cwd)")
-	cmd.Flags().StringSliceVar(&f.suspect, "suspect", nil, "comma-separated components (or component.state) that seem broken — soft prior, not a filter")
+	cmd.Flags().StringSliceVar(&f.suspect, "suspect", nil, "comma-separated components (or component.state tuples) that seem broken — soft prior, not a filter; splits on the first '.' so component names containing a dot will mis-parse")
 	cmd.Flags().BoolVar(&f.readonlyOnly, "readonly-only", true, "only run probes whose provider declares read_only: true")
 	cmd.Flags().IntVar(&f.maxProbes, "max-probes", 20, "probe budget")
 	cmd.Flags().DurationVar(&f.deadline, "deadline", 5*time.Minute, "wall-clock deadline")
@@ -112,6 +113,13 @@ func runDiagnose(cmd *cobra.Command, f diagnoseFlags) error {
 	start := time.Now()
 	probesRun := 0
 
+	// Non-TTY stdin + generic components = infinite skip loop (EOF on
+	// every prompt) that silently burns the probe budget. Reject early
+	// when we can tell the operator can't actually answer.
+	if !stdinLooksInteractive(diagnoseStdin) && modelUsesGenericComponent(m, reg) {
+		return fmt.Errorf("mgtt diagnose requires an interactive terminal for generic components: stdin is not a TTY and at least one component resolves to the built-in generic fallback; rerun from a terminal or replace generic components with typed ones")
+	}
+
 	for probesRun < f.maxProbes {
 		if ctx.Err() != nil {
 			reportPartial(cmd, trail, "deadline exceeded", probesRun, f.maxProbes, start, f.deadline)
@@ -139,6 +147,15 @@ func runDiagnose(cmd *cobra.Command, f diagnoseFlags) error {
 		if isGenericComponent(m, reg, p.Component) {
 			answer, err := promptYesNoSkip(cmd, p.Component)
 			if err != nil {
+				if err == errNoMoreAnswers {
+					// Stdin closed mid-session; don't re-prompt forever.
+					// Record a sentinel so Occam sees the step as
+					// "verified-but-skipped" and won't re-select it.
+					applyOperatorAnswer(store, p.Component, "skip")
+					trail = append(trail, probeRecord{probe: p, outcome: "operator-answered: skip (stdin closed)"})
+					reportPartial(cmd, trail, "no more operator input (stdin closed)", probesRun+1, f.maxProbes, start, f.deadline)
+					return nil
+				}
 				return err
 			}
 			applyOperatorAnswer(store, p.Component, answer)
@@ -283,14 +300,27 @@ func isGenericComponent(m *model.Model, reg *providersupport.Registry, compName 
 	return providerName == "generic"
 }
 
+// errNoMoreAnswers signals that the prompt reader ran out of input
+// (EOF) before the operator could answer. The diagnose loop treats this
+// as "skip forever" — record a skip-marker fact and bail out cleanly
+// rather than loop on every subsequent generic prompt.
+var errNoMoreAnswers = fmt.Errorf("no more operator input")
+
 // promptYesNoSkip asks the operator whether a component looks healthy
 // and returns one of "y", "n", or "skip". Any other input is an error so
-// we don't silently eat a typo mid-incident.
+// we don't silently eat a typo mid-incident. EOF on stdin (e.g. running
+// under `mgtt diagnose < /dev/null`) returns errNoMoreAnswers so the
+// caller can break out of the generic-component loop.
 func promptYesNoSkip(cmd *cobra.Command, compName string) (string, error) {
 	w := cmd.OutOrStdout()
 	fmt.Fprintf(w, "Is '%s' healthy? [y/n/skip]: ", compName)
 	reader := bufio.NewReader(diagnoseStdin)
 	line, err := reader.ReadString('\n')
+	if err == io.EOF && strings.TrimSpace(line) == "" {
+		// True end-of-input, nothing buffered — caller should stop
+		// re-prompting rather than treat empty-EOF as "skip".
+		return "", errNoMoreAnswers
+	}
 	if err != nil && err != io.EOF {
 		return "", err
 	}
@@ -307,10 +337,18 @@ func promptYesNoSkip(cmd *cobra.Command, compName string) (string, error) {
 	}
 }
 
+// operatorSkippedKey is the synthetic fact key recorded when an operator
+// explicitly skips a generic-component prompt (or stdin closes during
+// one). Occam's fact-level verified-gate recognises this key as
+// "verified-but-skipped", so the same component+fact isn't re-selected
+// on subsequent iterations.
+const operatorSkippedKey = "__operator_skipped"
+
 // applyOperatorAnswer records the operator's verdict as a fact so the
-// strategy can prune downstream scenarios. "skip" intentionally leaves
-// the step unverified — an operator who doesn't know shouldn't be forced
-// to guess.
+// strategy can prune downstream scenarios. "skip" records a marker fact
+// under operatorSkippedKey so the strategy treats the step as verified-
+// but-skipped and doesn't re-select it next iteration (which would
+// silently burn --max-probes).
 func applyOperatorAnswer(store *facts.Store, compName, answer string) {
 	switch answer {
 	case "y":
@@ -327,7 +365,63 @@ func applyOperatorAnswer(store *facts.Store, compName, answer string) {
 			Collector: "operator",
 			At:        time.Now(),
 		})
+	case "skip":
+		store.Append(compName, facts.Fact{
+			Key:       operatorSkippedKey,
+			Value:     true,
+			Collector: "operator",
+			At:        time.Now(),
+			Note:      "operator skipped prompt",
+		})
+		// Also record the canonical fact the occam scenario is probing
+		// so pickSymptomInward's fact-level gate treats this step as
+		// verified. Without this, every loop iteration re-selects the
+		// same generic component and the budget is burned on prompts
+		// the operator has already declined.
+		store.Append(compName, facts.Fact{
+			Key:       "operator_says_healthy",
+			Value:     nil,
+			Collector: "operator",
+			At:        time.Now(),
+			Note:      "skipped",
+		})
 	}
+}
+
+// modelUsesGenericComponent returns true if any component in the model
+// resolves to the built-in generic provider. Used to short-circuit
+// non-TTY runs where the operator can't actually answer the prompt.
+func modelUsesGenericComponent(m *model.Model, reg *providersupport.Registry) bool {
+	if m == nil || reg == nil {
+		return false
+	}
+	for name := range m.Components {
+		if isGenericComponent(m, reg, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// stdinLooksInteractive reports whether r appears safe to prompt on.
+// The check returns true in two cases:
+//   - r is *os.File and its fd passes term.IsTerminal (real TTY).
+//   - r is a non-*os.File reader swapped in by tests or an embedder.
+//     In that case the caller is driving the stream deliberately and
+//     we defer to errNoMoreAnswers handling on EOF rather than refuse
+//     upfront.
+//
+// Returns false for pipes, /dev/null, and redirected regular files —
+// all cases where the operator genuinely cannot answer prompts.
+// (os.ModeCharDevice alone is insufficient: /dev/null is a character
+// device too, so the check must use the TCGETS-based term.IsTerminal.)
+func stdinLooksInteractive(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		// Swapped (test) reader; let the caller manage EOF.
+		return true
+	}
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // defaultNewProbeRunner returns the production runner that shells out to
@@ -369,6 +463,7 @@ func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *fa
 			Collector: "probe",
 			At:        time.Now(),
 			Note:      "not_found",
+			Status:    facts.FactStatusNotFound,
 		})
 		return fmt.Sprintf("%s.%s = <not_found>", p.Component, p.Fact), nil
 	}

@@ -659,4 +659,3 @@ func suspectReport(suspects []strategy.SuspectHint, root *scenarios.Scenario) st
 	}
 	return strings.Join(parts, "; ")
 }
-

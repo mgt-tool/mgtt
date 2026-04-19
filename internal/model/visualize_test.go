@@ -311,8 +311,8 @@ func TestRender_MultiTargetDependency(t *testing.T) {
 	m := &model.Model{
 		Meta: model.Meta{Name: "fanout", Version: "1.0", Providers: []string{"p"}},
 		Components: map[string]*model.Component{
-			"api": {Name: "api", Type: "service", Depends: []model.Dependency{{On: []string{"db", "cache"}}}},
-			"db":  {Name: "db", Type: "service"},
+			"api":   {Name: "api", Type: "service", Depends: []model.Dependency{{On: []string{"db", "cache"}}}},
+			"db":    {Name: "db", Type: "service"},
 			"cache": {Name: "cache", Type: "service"},
 		},
 		Order: []string{"api", "db", "cache"},

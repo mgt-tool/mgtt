@@ -189,7 +189,11 @@ func buildArgs(cmd Command) ([]string, error) {
 	}
 	sort.Strings(keys)
 
-	args := []string{"probe", cmd.Component, cmd.Fact}
+	name := cmd.Resource
+	if name == "" {
+		name = cmd.Component
+	}
+	args := []string{"probe", name, cmd.Fact}
 	if cmd.Type != "" {
 		args = append(args, "--type", cmd.Type)
 	}

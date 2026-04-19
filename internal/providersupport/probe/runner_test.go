@@ -368,3 +368,42 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestBuildArgs_ResourceUsedWhenSet — when Command.Resource is set
+// the runner uses it as args[1] instead of Component. args[1] is
+// what the provider SDK reads as `Name`.
+func TestBuildArgs_ResourceUsedWhenSet(t *testing.T) {
+	got, err := buildArgs(Command{
+		Provider:  "aws",
+		Component: "rds",
+		Resource:  "flowers-stage-rds",
+		Fact:      "available",
+		Type:      "rds_instance",
+	})
+	if err != nil {
+		t.Fatalf("buildArgs error: %v", err)
+	}
+	if len(got) < 2 {
+		t.Fatalf("got too few args: %v", got)
+	}
+	if got[1] != "flowers-stage-rds" {
+		t.Errorf("args[1] = %q, want %q (Resource should override Component)", got[1], "flowers-stage-rds")
+	}
+}
+
+// TestBuildArgs_ResourceFallbackWhenEmpty — Resource is optional;
+// empty means keep today's behavior of passing Component as the name.
+func TestBuildArgs_ResourceFallbackWhenEmpty(t *testing.T) {
+	got, err := buildArgs(Command{
+		Provider:  "aws",
+		Component: "rds",
+		Fact:      "available",
+		Type:      "rds_instance",
+	})
+	if err != nil {
+		t.Fatalf("buildArgs error: %v", err)
+	}
+	if got[1] != "rds" {
+		t.Errorf("args[1] = %q, want %q (fallback to Component)", got[1], "rds")
+	}
+}

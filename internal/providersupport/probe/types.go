@@ -19,8 +19,8 @@ type Executor interface {
 }
 
 // Command describes a single probe to execute. The shell executor consumes
-// Raw; runner-based backends consume Provider / Component / Fact / Type /
-// Vars / Extra and ignore Raw.
+// Raw; runner-based backends consume Provider / Component / Resource / Fact /
+// Type / Vars / Extra and ignore Raw.
 //
 // Layering invariant: core does not privilege any key in Vars or Extra.
 // Both maps are passed to the runner as --<key> <value> flags in
@@ -33,6 +33,7 @@ type Command struct {
 	Component string
 	Fact      string
 	Type      string            // component type, passed to runner backends as --type
+	Resource  string            // upstream resource id; empty -> fall back to Component
 	Vars      map[string]string // model-level variables
 	Extra     map[string]string // additional flags; key collision with Vars is a usage error
 	Timeout   time.Duration     // 0 = default (30s)

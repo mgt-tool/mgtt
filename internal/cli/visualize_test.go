@@ -82,3 +82,24 @@ func TestVisualize_CommandDefaultOutputPath(t *testing.T) {
 		t.Errorf("default output file missing: %v", err)
 	}
 }
+
+// TestVisualize_CommandMissingModel — explicit --model pointing at a
+// non-existent file produces a clear error and non-zero exit.
+func TestVisualize_CommandMissingModel(t *testing.T) {
+	t.Cleanup(func() {
+		visualizeFlags.modelPath = ""
+		visualizeFlags.outputPath = ""
+	})
+	var buf bytes.Buffer
+	cmd := RootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"visualize", "--model", "/tmp/does-not-exist-visualize-test.yaml"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error for missing model; got nil")
+	}
+	if !strings.Contains(err.Error(), "load model") {
+		t.Errorf("error should mention load model; got %v", err)
+	}
+}

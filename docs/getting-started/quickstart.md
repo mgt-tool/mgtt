@@ -82,7 +82,7 @@ components:
 - `meta.providers` — which providers supply the types used in this model
 - `meta.vars` — variables substituted into probe commands (e.g., `{namespace}`)
 - `components.<name>.type` — a type defined by a provider (see [Type Catalog](../reference/type-catalog.md))
-- `components.<name>.resource` — optional upstream resource id the provider probes. Lets you keep readable component keys (`rds:`) while the probe hits the real backing resource (`flowers-stage-rds`). Supports `{key}` placeholders from `meta.vars`.
+- `components.<name>.resource` — optional upstream resource id the provider probes. Lets you keep readable component keys (`rds:`) while the probe hits the real backing resource (`my-database-name`). Supports `{key}` placeholders from `meta.vars`.
 - `components.<name>.depends` — list of components this one depends on
 - `components.<name>.healthy` — override conditions (in addition to the provider's defaults)
 - `components.<name>.providers` — per-component provider override (rds uses `aws`, not `kubernetes`)

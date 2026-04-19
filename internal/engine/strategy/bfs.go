@@ -81,6 +81,7 @@ func (s bfsStrategy) SuggestProbe(in Input) Decision {
 				Fact:      fn,
 				Provider:  providerName,
 				Type:      t.Name,
+				Resource:  comp.Resource,
 				Cost:      fs.Probe.Cost,
 				Access:    fs.Probe.Access,
 				Command:   fs.Probe.Cmd,

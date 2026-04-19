@@ -57,6 +57,7 @@ type Probe struct {
 	Fact       string
 	Provider   string
 	Type       string            // resolved component type — required by the provider binary
+	Resource   string            // upstream resource id; empty = fall back to Component
 	Cost       string
 	Access     string
 	Command    string

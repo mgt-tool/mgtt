@@ -3,6 +3,7 @@ package strategy
 import (
 	"testing"
 
+	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
@@ -106,5 +107,43 @@ func TestBFS_DoneWhenAllFactsCollected(t *testing.T) {
 func TestBFS_Name(t *testing.T) {
 	if BFS().Name() != "bfs" {
 		t.Errorf("want bfs; got %s", BFS().Name())
+	}
+}
+
+// TestBFS_ProbeCarriesResource — when the component has a non-empty
+// Resource, the suggested Probe must carry it so shellProbeRunner
+// forwards it to the provider binary as --name.
+func TestBFS_ProbeCarriesResource(t *testing.T) {
+	m := &model.Model{
+		Meta: model.Meta{Name: "r", Version: "1.0", Providers: []string{"aws"}},
+		Components: map[string]*model.Component{
+			"rds": {Name: "rds", Type: "rds_instance", Resource: "flowers-stage-rds"},
+		},
+		Order: []string{"rds"},
+	}
+	m.BuildGraph()
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "aws"},
+		Types: map[string]*providersupport.Type{
+			"rds_instance": {
+				Name: "rds_instance",
+				Facts: map[string]*providersupport.FactSpec{
+					"available": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "low", Access: "read"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "stopped", When: expr.CmpNode{Fact: "available", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+	})
+	store := facts.NewInMemory()
+
+	dec := BFS().SuggestProbe(Input{Model: m, Registry: reg, Store: store})
+	if dec.Probe == nil {
+		t.Fatalf("BFS suggested no probe; decision=%+v", dec)
+	}
+	if dec.Probe.Resource != "flowers-stage-rds" {
+		t.Errorf("Probe.Resource = %q, want %q", dec.Probe.Resource, "flowers-stage-rds")
 	}
 }

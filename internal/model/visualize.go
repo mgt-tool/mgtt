@@ -22,7 +22,8 @@ func Render(m *Model, reg *providersupport.Registry, installed []InstalledProvid
 	for _, n := range names {
 		c := m.Components[n]
 		label := fmt.Sprintf("%s<br/>%s", n, c.Type)
-		fmt.Fprintf(&sb, "  %s[%q]\n", n, label)
+		openBracket, closeBracket := shapeFor(c.Type)
+		fmt.Fprintf(&sb, "  %s%s%q%s\n", n, openBracket, label, closeBracket)
 	}
 
 	// Edges. Dependency.On is []string — a single clause can name
@@ -58,4 +59,31 @@ func sortedComponentNames(m *Model) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// shapeFor returns the mermaid bracket pair for a given component type.
+// Match order is intentional: DB patterns win over generic substrings
+// (e.g. "cache" in "elasticache" shouldn't be caught by something more
+// general). First match wins.
+func shapeFor(typ string) (openBracket, closeBracket string) {
+	t := strings.ToLower(typ)
+	switch {
+	case containsAny(t, "bucket", "rds", "database", "cache", "elasticache"):
+		return "[(", ")]"
+	case containsAny(t, "broker", "queue"):
+		return "[/", "\\]"
+	case containsAny(t, "cdn", "ingress"):
+		return "([", "])"
+	default:
+		return "[", "]"
+	}
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }

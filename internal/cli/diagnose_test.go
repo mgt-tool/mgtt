@@ -15,6 +15,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 
 	"github.com/spf13/cobra"
@@ -517,6 +518,84 @@ func TestDiagnose_NonTTYStdinRejectedForGeneric(t *testing.T) {
 }
 
 // TestDiagnose_ParseSuspectHints spot-checks the hint parser.
+// TestShellProbeRunner_ForwardsTypeAndVars is the regression guard for the
+// bug where diagnose built probe.Command without Type or Vars — the
+// provider binary rejected with "unknown type \"\"" and {key}
+// placeholders in commands never expanded.
+//
+// End-to-end: build a strategy.Probe as the engine would (Type + Vars
+// populated by the Occam/BFS constructors), feed it through the real
+// shellProbeRunner, and capture the probe.Command the runner hands to
+// the Executor. Assert Type is forwarded, Vars is forwarded, AND the
+// Raw command has had its {namespace} placeholder expanded from Vars.
+func TestShellProbeRunner_ForwardsTypeAndVars(t *testing.T) {
+	var captured probe.Command
+	captor := capturingExecutor{
+		capture: &captured,
+		result:  probe.Result{Raw: "3", Parsed: int64(3), Status: probe.StatusOk},
+	}
+	runner := &shellProbeRunner{
+		exec: captor,
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+
+	p := &strategy.Probe{
+		Component: "api",
+		Fact:      "ready_replicas",
+		Provider:  "kubernetes",
+		Type:      "deployment",
+		Command:   "kubectl -n {namespace} get deployment api -o json",
+		ParseMode: "int",
+		Vars:      map[string]string{"namespace": "prod"},
+	}
+
+	out, err := runner.Run(context.Background(), p, store)
+	if err != nil {
+		t.Fatalf("runner.Run: %v", err)
+	}
+	if !strings.Contains(out, "api.ready_replicas") {
+		t.Errorf("expected output to mention probe key; got %q", out)
+	}
+
+	// The runner must forward Type to the Executor; buildArgs drops
+	// --type otherwise and the provider binary rejects.
+	if captured.Type != "deployment" {
+		t.Errorf("Command.Type = %q, want \"deployment\" (regression: forgot to forward)", captured.Type)
+	}
+	// Vars must be forwarded for runner backends that re-expand at
+	// probe time (not just substituted into Raw).
+	if got := captured.Vars["namespace"]; got != "prod" {
+		t.Errorf("Command.Vars[\"namespace\"] = %q, want \"prod\"", got)
+	}
+	// Substitute must see the Vars so {namespace} expands in Raw.
+	// Nil Vars was the other half of the same bug.
+	if !strings.Contains(captured.Raw, "-n prod ") {
+		t.Errorf("Raw should have {namespace} expanded to 'prod'; got %q", captured.Raw)
+	}
+	// Sanity: the trivial identity fields were already correct before
+	// the fix — include them so a future rewrite can't silently drop
+	// the whole payload.
+	if captured.Component != "api" || captured.Fact != "ready_replicas" || captured.Provider != "kubernetes" {
+		t.Errorf("unexpected identity fields: %+v", captured)
+	}
+
+	// And the collected fact must land in the store.
+	if f := store.Latest("api", "ready_replicas"); f == nil || f.Value != int64(3) {
+		t.Errorf("expected store.Latest(api, ready_replicas) = 3; got %+v", f)
+	}
+}
+
+type capturingExecutor struct {
+	capture *probe.Command
+	result  probe.Result
+}
+
+func (c capturingExecutor) Run(_ context.Context, cmd probe.Command) (probe.Result, error) {
+	*c.capture = cmd
+	return c.result, nil
+}
+
 func TestDiagnose_ParseSuspectHints(t *testing.T) {
 	got := parseSuspectHints([]string{"api", "db.down", "", "  "})
 	if len(got) != 2 {

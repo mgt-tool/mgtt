@@ -182,3 +182,36 @@ func TestRender_SingleProviderFlat(t *testing.T) {
 		t.Errorf("edge missing; got:\n%s", got)
 	}
 }
+
+// TestRender_Deterministic — calling Render twice with the same
+// inputs must produce byte-identical output. Guards against map
+// iteration order leaking into the diagram.
+func TestRender_Deterministic(t *testing.T) {
+	m := &model.Model{
+		Meta: model.Meta{Name: "det", Version: "1.0", Providers: []string{"a", "b", "c"}},
+		Components: map[string]*model.Component{
+			"z": {Name: "z", Type: "service", Depends: []model.Dependency{{On: []string{"m"}}, {On: []string{"a"}}}},
+			"m": {Name: "m", Type: "service", Depends: []model.Dependency{{On: []string{"a"}}}},
+			"a": {Name: "a", Type: "service"},
+		},
+		Order: []string{"z", "m", "a"},
+	}
+	reg := providersupport.NewRegistry()
+	for _, p := range []string{"a", "b", "c"} {
+		reg.Register(&providersupport.Provider{
+			Meta:  providersupport.ProviderMeta{Name: p},
+			Types: map[string]*providersupport.Type{"service": {Name: "service"}},
+		})
+	}
+	installed := []model.InstalledProvider{
+		{Name: "a", Namespace: "ns"}, {Name: "b", Namespace: "ns"}, {Name: "c", Namespace: "ns"},
+	}
+
+	first, _ := model.Render(m, reg, installed)
+	for i := 0; i < 20; i++ {
+		got, _ := model.Render(m, reg, installed)
+		if got != first {
+			t.Fatalf("Render non-deterministic on iteration %d:\nfirst:\n%s\ngot:\n%s", i, first, got)
+		}
+	}
+}

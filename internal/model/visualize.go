@@ -21,11 +21,9 @@ func Render(m *Model, reg *providersupport.Registry, installed []InstalledProvid
 	names := sortedComponentNames(m)
 
 	// Resolve each component's owning-provider FQN.
-	fqnByComponent := make(map[string]string, len(names))
 	componentsByFQN := make(map[string][]string)
 	for _, n := range names {
 		fqn := resolveFQN(m, reg, installed, n)
-		fqnByComponent[n] = fqn
 		componentsByFQN[fqn] = append(componentsByFQN[fqn], n)
 	}
 

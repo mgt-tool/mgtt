@@ -1,6 +1,7 @@
 package model
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -438,5 +439,37 @@ func TestValidate_UnknownType(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected error on svc.type (unknown type), errors=%v", result.Errors)
+	}
+}
+
+// TestLoad_ComponentResourceField — model.Load parses the optional
+// `resource:` scalar on a component and surfaces it via
+// Component.Resource. Absent resource leaves the field as "".
+func TestLoad_ComponentResourceField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.yaml")
+	body := []byte("" +
+		"meta:\n" +
+		"  name: r\n" +
+		"  version: \"1.0\"\n" +
+		"components:\n" +
+		"  rds:\n" +
+		"    type: rds_instance\n" +
+		"    resource: flowers-magento-stage-rds\n" +
+		"  api:\n" +
+		"    type: service\n")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if got := m.Components["rds"].Resource; got != "flowers-magento-stage-rds" {
+		t.Errorf("rds.Resource = %q, want %q", got, "flowers-magento-stage-rds")
+	}
+	if got := m.Components["api"].Resource; got != "" {
+		t.Errorf("api.Resource = %q, want empty", got)
 	}
 }

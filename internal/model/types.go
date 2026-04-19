@@ -40,8 +40,13 @@ type Meta struct {
 
 // Component represents a single infrastructure component.
 type Component struct {
-	Name         string
-	Type         string
+	Name string
+	Type string
+	// Resource is the upstream resource identifier the provider should
+	// probe (e.g. an AWS RDS DB instance id or a k8s resource name).
+	// Empty falls back to Name at probe time, preserving the historical
+	// "component key is the resource name" behavior.
+	Resource     string
 	Providers    []string // nil → inherit Meta.Providers
 	Depends      []Dependency
 	HealthyRaw   []string            // raw expression strings, compiled in Phase 2

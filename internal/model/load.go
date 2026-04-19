@@ -28,6 +28,7 @@ type rawMeta struct {
 // rawComponent mirrors the YAML component block.
 type rawComponent struct {
 	Type         string                 `yaml:"type"`
+	Resource     string                 `yaml:"resource"`
 	Providers    []string               `yaml:"providers"`
 	Depends      []rawDependency        `yaml:"depends"`
 	Healthy      []string               `yaml:"healthy"`
@@ -93,6 +94,7 @@ func Load(path string) (*Model, error) {
 		comp := &Component{
 			Name:       name,
 			Type:       rc.Type,
+			Resource:   rc.Resource,
 			Providers:  rc.Providers,
 			HealthyRaw: rc.Healthy,
 		}

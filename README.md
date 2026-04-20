@@ -10,28 +10,9 @@ And before the system even exists, you can simulate failures against the model t
 
 ## See it in action
 
-### Troubleshooting at 3am: root cause in 6 probes (`mgtt plan`)
+### Troubleshooting at 3am: `mgtt diagnose`
 
-This is mgtt's reason for being. Alert fires. You run `mgtt plan` and press Y:
-
-```
-$ mgtt plan
-
-  -> probe nginx upstream_count         ✓ nginx.upstream_count = 0   ✗ unhealthy
-  -> probe api restart_count            ✓ api.restart_count = 47     ✗ unhealthy
-  -> probe rds available                ✓ rds.available = true       ✓ healthy  ← eliminated
-  -> probe frontend ready_replicas      ✓ frontend.ready_replicas = 2  ✓ healthy  ← eliminated
-
-  Root cause: api
-  Path:       nginx <- api
-  Eliminated: frontend, rds
-```
-
-4 components probed, 2 eliminated, root cause found. The engine ranked probes by information value, so every call moved the answer forward. You didn't need to know the system — the model knew it for you.
-
-### Autopilot: hand the loop over (`mgtt diagnose`)
-
-Same engine, no prompts. Point it at a probe budget and a deadline:
+This is mgtt's reason for being. Alert fires. You trigger `mgtt diagnose` — from a GitLab/GitHub Actions job, a Slack slash-command, an LLM agent, or your laptop — and get a structured report back:
 
 ```
 $ mgtt diagnose --suspect api --max-probes 10
@@ -46,7 +27,9 @@ $ mgtt diagnose --suspect api --max-probes 10
   Probes run: 4/10
 ```
 
-Ideal for scheduled GitLab/GitHub Actions runs, Slack bots, LLM agents, and anywhere you want unattended root-cause analysis. Structured output is easy to parse; partial visibility (RBAC refusals, transient throttles) surfaces as a visible flag in the report rather than an abort.
+4 components probed, 2 eliminated, root cause named. The engine ranks probes by information value, so every call moves the answer forward — you didn't need to know the system, the model knew it for you. Partial visibility (RBAC refusals, transient throttles) surfaces as a visible flag in the report rather than aborting the session.
+
+If you want to *watch* the engine pick each probe — for debugging the model, teaching, or a demo — `mgtt plan` is the interactive press-Y variant on the same engine. See [Troubleshooting](./docs/concepts/troubleshooting.md) for both.
 
 ### Simulation in CI: catch model drift before it matters (`mgtt simulate`)
 
@@ -86,17 +69,20 @@ Or: `go install github.com/mgt-tool/mgtt/cmd/mgtt@latest` | Or: `docker run --rm
 mgtt init                          # scaffold system.model.yaml
 mgtt model validate                # check the model
 mgtt provider install kubernetes   # install providers
-mgtt simulate --all                # run failure scenarios
-mgtt plan                          # troubleshoot a live system
+mgtt simulate --all                # run failure scenarios (in CI)
+mgtt diagnose                      # troubleshoot a live system
 ```
 
-**Three moments, one model:**
+**Two moments, one model:**
 
-| | Design time | At 3am (interactive) | At 3am (autopilot) |
-|---|---|---|---|
-| Command | `mgtt simulate` | `mgtt plan` | `mgtt diagnose` |
-| Facts from | Scenario YAML | Real probes + Y/n | Real probes, no prompts |
-| Output | Pass/fail | Guided root cause | Final report + chain |
+| | Design time | At 3am |
+|---|---|---|
+| Command | `mgtt simulate` | `mgtt diagnose` |
+| Facts from | Scenario YAML | Real probes |
+| Driven by | CI pipeline | On-call engineer, CI job, Slack bot, or AI agent |
+| Output | Pass/fail | Root cause + chain + eliminated components |
+
+`mgtt plan` exists too — same engine, interactive press-Y mode. Useful for debugging models, teaching, or watching the reasoning unfold. Not the daily driver.
 
 ---
 

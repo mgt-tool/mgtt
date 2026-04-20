@@ -63,6 +63,23 @@ func runModelBuild(ctx context.Context, f modelBuildFlags, stdout, stderr io.Wri
 		}
 	}
 
+	// Carry tombstoned components forward from prev. --tombstone means
+	// "this component is still there, just not discovered right now"
+	// (e.g. air-gapped infra, partial discovery failure) — preserve it
+	// verbatim so the written model is the merged reality.
+	if prev != nil && len(f.tombstone) > 0 {
+		for _, name := range f.tombstone {
+			pc, ok := prev.Components[name]
+			if !ok {
+				continue // nothing to preserve — unknown tombstone name
+			}
+			if _, alreadyInNext := next.Components[name]; alreadyInNext {
+				continue // discovery did return it — use the fresh version
+			}
+			next.Components[name] = pc
+		}
+	}
+
 	// Diff + gate.
 	diff := build.ComputeDiff(prev, next)
 	if err := build.GateDeletions(diff, build.GateFlags{
@@ -150,7 +167,7 @@ func newModelBuildCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.mgttHome, "mgtt-home", "", "override $MGTT_HOME for discovery (default: $MGTT_HOME or ~/.mgtt)")
 	cmd.Flags().StringVar(&f.output, "output", "", "output path (default: system.model.yaml)")
 	cmd.Flags().BoolVar(&f.allowDeletes, "allow-deletes", false, "accept removal of components no longer returned by discovery")
-	cmd.Flags().StringSliceVar(&f.tombstone, "tombstone", nil, "components that can be removed silently (comma-separated)")
+	cmd.Flags().StringSliceVar(&f.tombstone, "tombstone", nil, "components to preserve across rebuilds when discovery no longer returns them (comma-separated)")
 	return cmd
 }
 

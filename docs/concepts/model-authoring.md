@@ -5,7 +5,7 @@ Two ways to get a `system.model.yaml`:
 - **Hand-author** — write it yourself, commit it. What mgtt has always supported.
 - **Generate from discovery** — `mgtt model build` invokes installed providers' `discover` subcommand and writes the YAML for you.
 
-Both produce the same file format. You can start with one and switch, or mix them. Hand-authored components that aren't in any provider's discovery output continue to live in the file unchanged.
+Both produce the same file format. You can start with one and switch, or mix them. `mgtt model build` writes exactly what current discovery reports. Components that prior builds discovered but aren't returned this run are treated as deletions — either explicit (`--allow-deletes`) or preserved (`--tombstone=<name>`). Hand-authored components that were never discovered by any provider are currently lost on rebuild; see the _Hand-authored parts_ section below for the workaround.
 
 ## The flow
 
@@ -36,7 +36,7 @@ A partial discovery failure LOOKS like an intentional decommissioning. The gate 
 
 ## What about hand-authored parts?
 
-`mgtt model build` only knows about components its discover sources returned. Anything else in the file (external SaaS dependencies, legacy systems, cross-provider wiring) is preserved if it was already there — otherwise you add it in a follow-up edit. A future plan adds catalog sources (Backstage, OpsLevel, etc.) that cover more of the graph; what's left after that is the irreducible hand-authored surface.
+`mgtt model build` only writes components returned by at least one provider's `discover`. Components you hand-add to `system.model.yaml` (external SaaS dependencies, legacy systems, cross-provider wiring) will be flagged for removal on the next `model build` unless you pass `--tombstone=<name1>,<name2>` to carry them forward, or `--allow-deletes` to accept the removal. A future plan adds catalog sources (Backstage, OpsLevel) that cover more of the graph automatically; what's left after that is the irreducible hand-authored surface — which the tombstone workflow handles today.
 
 ## See also
 

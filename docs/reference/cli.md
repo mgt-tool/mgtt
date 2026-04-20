@@ -30,7 +30,7 @@ mgtt model build --output custom-path.yaml
 | `--mgtt-home` | `$MGTT_HOME` / `~/.mgtt` | Where to look for installed providers |
 | `--output` | `system.model.yaml` | Destination file |
 | `--allow-deletes` | `false` | Accept removal of components no longer returned by discovery |
-| `--tombstone` | `[]` | Components that can be silently removed (partial-discovery cases) |
+| `--tombstone` | `[]` | Components to preserve across rebuilds (air-gapped, partial discovery) |
 
 **Safety**
 

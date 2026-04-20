@@ -52,6 +52,12 @@ type Component struct {
 	HealthyRaw   []string            // raw expression strings, compiled in Phase 2
 	Healthy      []expr.Node         // compiled from HealthyRaw
 	FailureModes map[string][]string // state → can_cause list
+	// Vars override Meta.Vars on a per-component basis for probe
+	// substitution and provider argv. Use this when a component lives
+	// in a different namespace/region/etc from the model-wide default.
+	// Precedence (high → low): component.Vars > Meta.Vars. Keys absent
+	// here fall through to Meta.Vars unchanged.
+	Vars map[string]string
 }
 
 // Dependency captures a single depends-on clause with an optional while guard.

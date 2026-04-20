@@ -86,7 +86,7 @@ func (s bfsStrategy) SuggestProbe(in Input) Decision {
 				Access:    fs.Probe.Access,
 				Command:   fs.Probe.Cmd,
 				ParseMode: fs.Probe.Parse,
-				Vars:      metaVars(in),
+				Vars:      componentVars(in, compName),
 			}}
 		}
 	}

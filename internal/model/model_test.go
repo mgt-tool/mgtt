@@ -443,6 +443,40 @@ func TestValidate_UnknownType(t *testing.T) {
 	}
 }
 
+// TestLoad_ComponentVars — model.Load parses the optional per-component
+// `vars:` block. The parsed map is carried on Component.Vars verbatim;
+// callers merge it over meta.vars at probe-construction time.
+func TestLoad_ComponentVars(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.yaml")
+	body := []byte("" +
+		"meta:\n" +
+		"  name: r\n" +
+		"  version: \"1.0\"\n" +
+		"  vars:\n" +
+		"    namespace: default\n" +
+		"components:\n" +
+		"  app:\n" +
+		"    type: deployment\n" +
+		"  eso:\n" +
+		"    type: operator\n" +
+		"    vars:\n" +
+		"      namespace: external-secrets\n")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if got := m.Components["app"].Vars; got != nil {
+		t.Errorf("app.Vars = %v, want nil (no override block)", got)
+	}
+	if got := m.Components["eso"].Vars["namespace"]; got != "external-secrets" {
+		t.Errorf("eso.Vars[namespace] = %q, want external-secrets", got)
+	}
+}
+
 // TestLoad_ComponentResourceField — model.Load parses the optional
 // `resource:` scalar on a component and surfaces it via
 // Component.Resource. Absent resource leaves the field as "".

@@ -57,6 +57,7 @@ type rawComponent struct {
 	Depends      []rawDependency        `yaml:"depends"`
 	Healthy      []string               `yaml:"healthy"`
 	FailureModes map[string]rawFailMode `yaml:"failure_modes"`
+	Vars         map[string]string      `yaml:"vars"`
 }
 
 // rawDependency mirrors depends list entries.
@@ -121,6 +122,7 @@ func Load(path string) (*Model, error) {
 			Resource:   rc.Resource,
 			Providers:  rc.Providers,
 			HealthyRaw: rc.Healthy,
+			Vars:       rc.Vars,
 		}
 
 		// failure_modes: map state → can_cause

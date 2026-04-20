@@ -173,7 +173,7 @@ func pickSymptomInward(s scenarios.Scenario, store *facts.Store, m *model.Model,
 			Access:    fs.Probe.Access,
 			Command:   fs.Probe.Cmd,
 			ParseMode: fs.Probe.Parse,
-			Vars:      m.Meta.Vars,
+			Vars:      mergeVars(m.Meta.Vars, comp.Vars),
 		}
 	}
 	return nil

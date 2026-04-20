@@ -51,6 +51,46 @@ func metaVars(in Input) map[string]string {
 	return in.Model.Meta.Vars
 }
 
+// componentVars returns the effective var map for a component: a copy
+// of meta.vars with the component's own Vars merged on top
+// (component wins on key collision). Safe to call with empty or nil
+// maps. Used when constructing a Probe so the probe runner receives
+// per-component overrides (e.g. namespace, region) rather than the
+// model-wide default.
+func componentVars(in Input, componentName string) map[string]string {
+	if in.Model == nil {
+		return nil
+	}
+	return mergeVars(in.Model.Meta.Vars, componentVarsFromModel(in.Model, componentName))
+}
+
+func componentVarsFromModel(m *model.Model, componentName string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	c := m.Components[componentName]
+	if c == nil {
+		return nil
+	}
+	return c.Vars
+}
+
+// mergeVars merges two var maps with the second argument winning on
+// key collision. Returns nil if both are empty.
+func mergeVars(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(override))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range override {
+		out[k] = v
+	}
+	return out
+}
+
 // Probe describes the concrete next probe to run.
 type Probe struct {
 	Component  string

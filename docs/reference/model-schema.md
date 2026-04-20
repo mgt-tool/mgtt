@@ -60,6 +60,8 @@ components:
       - on: <component-name>
     healthy:                # optional — additional health conditions
       - <expression>
+    vars:                   # optional — per-component overrides of meta.vars
+      <key>: <value>
 ```
 
 ---
@@ -86,6 +88,7 @@ Each key under `components` is the component name. Names must be unique within t
 | `providers` | no | Override `meta.providers` for this component. Use when one component belongs to a provider different from the model's default set (e.g., a single RDS instance in a model whose defaults are Kubernetes). |
 | `depends` | no | List of dependency entries. See [Dependencies](#dependencies) below. |
 | `healthy` | no | Additional health conditions beyond the provider's defaults. See [Health expressions](#health-expressions) below. |
+| `vars` | no | Per-component overrides of `meta.vars`. Merged on top of `meta.vars` at probe time — component keys win on collision, missing keys fall through to the model-wide default. Use when a single component lives in a different namespace, region, or cluster from the rest. Example: an ExternalSecrets operator in namespace `external-secrets` in a model whose other components live in `default`. |
 
 ### Readable component keys vs. provider resource identifiers
 

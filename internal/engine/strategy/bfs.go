@@ -90,5 +90,13 @@ func (s bfsStrategy) SuggestProbe(in Input) Decision {
 			}}
 		}
 	}
+	// BFS has probed every reachable fact. Before declaring "all
+	// healthy", check whether any component is standalone unhealthy
+	// (its healthy predicate is definitively false) — otherwise a
+	// broken upstream with no observed downstream symptom gets
+	// silently reported as healthy.
+	if root := standaloneUnhealthyRoot(in); root != nil {
+		return Decision{Done: true, RootCause: root, Reason: "standalone unhealthy component"}
+	}
 	return Decision{Done: true, Reason: "bfs coverage exhausted"}
 }

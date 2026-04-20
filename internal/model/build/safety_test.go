@@ -55,3 +55,15 @@ func TestGateDeletions_TombstoneFullyCovers(t *testing.T) {
 		t.Errorf("fully-tombstoned removals must pass; got: %v", err)
 	}
 }
+
+// A Tombstone entry for a component that isn't being removed must be
+// harmless — silently ignored, doesn't accidentally block or count.
+// Guards against a future refactor that might try to validate
+// tombstone names against the known model.
+func TestGateDeletions_TombstoneIgnoresUnknownName(t *testing.T) {
+	d := Diff{Removed: []string{"a"}}
+	err := GateDeletions(d, GateFlags{Tombstone: []string{"a", "never-existed"}})
+	if err != nil {
+		t.Errorf("unknown tombstone name should be silently ignored; got: %v", err)
+	}
+}

@@ -1,12 +1,20 @@
 # Simulation
 
-Simulation tests the **model's reasoning**, not the system's behavior. You inject facts, the engine reasons over them, and you assert the conclusion. No running system, no credentials, runs in CI.
+Simulation tests the **model's reasoning**, not the system's behavior. You inject facts, the engine reasons over them, and you assert the conclusion. No running system, no credentials, runs anywhere Go runs.
 
 ```
 what it tests:     given these facts, does the engine find the right root cause?
 what it doesn't:   whether the system will actually fail this way
 scope:             same as a unit test — tests the thing it tests, nothing more
 ```
+
+## What you can do with it
+
+- **Model drift detection** — when the real system evolves (new services, renamed components, changed dependencies), a stale model silently diverges from reality. Running `mgtt simulate` on every PR and every nightly catches the drift before the model is needed at 3am. A scenario that once passed and now fails tells you exactly which dependency assumption became wrong.
+- **Architecture unit tests** — each scenario is a declarative assertion (*"if rds goes down and api crash-loops, root cause is rds"*). Refactor the model, break a conclusion, the suite fails. Safe renames, safe dependency moves, safe restructuring.
+- **Design-time validation** — write the model before the system exists. Reason about who-depends-on-whom, find the holes in your dependency graph, rule out "can this even be diagnosed?" before committing to an implementation. The engine treats your design as executable logic.
+- **Regression harness for incidents** — the next time a real incident happens, encode it as a scenario. The engine must now identify that chain forever. Your postmortems become tests. Every incident you handle permanently widens the coverage of the engine that'll help with the next one.
+- **Scenario-family coverage** — `--from-scenarios` iterates every enumerated failure chain, and `--fuzz` truncates fact trails at random points to test convergence under partial information. Both complement hand-authored scenarios: one sweeps the combinatorial space, the other guards against probe-budget-ran-out cases.
 
 ## On this page
 
@@ -15,6 +23,7 @@ scope:             same as a unit test — tests the thing it tests, nothing mor
 - [Step 2 — Write failure scenarios](#step-2-write-failure-scenarios)
 - [Step 3 — Run simulations](#step-3-run-simulations)
 - [What a failing scenario teaches you](#what-a-failing-scenario-teaches-you)
+- [Generated scenarios](#generated-scenarios-from-scenarios-and-fuzz) — `--from-scenarios` and `--fuzz`
 - [Add to CI](#add-to-ci)
 - [Design time / runtime duality](#design-time-runtime-duality)
 - [Reference](#reference)

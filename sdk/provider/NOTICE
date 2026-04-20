@@ -1,0 +1,19 @@
+mgtt provider SDK
+Copyright (c) 2026 Oleksandr Kunich <alex.kunich@gmail.com>
+
+This directory (`sdk/provider/`) and everything under it is licensed
+under the Apache License, Version 2.0. See the accompanying LICENSE
+file or https://www.apache.org/licenses/LICENSE-2.0 for the full text.
+
+The rest of the mgtt repository is licensed under the GNU Affero
+General Public License, Version 3 (AGPL-3.0). See the LICENSE file at
+the repository root.
+
+The two licenses are intentionally different: the SDK is permissively
+licensed so that third-party providers — which link against it — can
+be released under any license the provider author chooses. The core
+engine is copyleft to keep hosted forks of mgtt itself open.
+
+When in doubt about which license applies to a given file:
+  - `sdk/provider/**`         → Apache-2.0 (this directory)
+  - everything else in mgtt/  → AGPL-3.0

@@ -120,4 +120,9 @@ Same idea — write the spec, let the tool do the thinking — pointed at a diff
 
 ## License
 
-MIT
+mgtt is dual-licensed:
+
+- **Core engine and CLI** (everything outside `sdk/provider/`) — [GNU Affero General Public License v3.0](LICENSE). Deploy mgtt internally however you like, but if you run it as a hosted service that users interact with over a network, you must publish any modifications you've made.
+- **Provider SDK** (`sdk/provider/`) — [Apache License 2.0](sdk/provider/LICENSE). Third-party providers link against this code; permissive licensing so authors can release providers under whatever licence they choose.
+
+See [`sdk/provider/NOTICE`](sdk/provider/NOTICE) for the full rationale, and [`LICENSES/`](LICENSES/) for both licence texts side-by-side.

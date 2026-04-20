@@ -1,42 +1,16 @@
 ![mgtt](images/mgtt_full_lockup.png)
 
-If you build or maintain anything with more than two components — a web app with a frontend, an API, and a database; a set of microservices behind a load balancer; a data pipeline with queues, workers, and storage — you know the drill:
-
-<div class="scenario" markdown>
-
-**Something stops working.**
-
-- You check the logs. *Nothing obvious.*
-- You check the database. *Looks fine.*
-- You check the API. *Restarting. Why?*
-- You check the config.
-- You check the deploy history.
-- You ask the person who wrote it. *They're asleep.*
-- You open three terminals and start guessing.
-
-</div>
-
-<div class="problem" markdown>
-
-**The core problem.** Troubleshooting distributed systems is slow, unstructured, and depends entirely on whoever happens to know the system.
-
-- No map.
-- No systematic narrowing.
-- No way to know what you've already ruled out.
-
-</div>
+When something breaks in a distributed system — and the person who built it is asleep — you open three terminals and start guessing. **mgtt replaces the guessing with a constraint engine.**
 
 <div class="approach" markdown>
 
-**mgtt fixes this.**
-
 - **Describe once.** Your system's dependencies in a single YAML model.
-- **Walk the graph.** When something breaks, a constraint engine walks the dependency graph, probing components in order of information value and eliminating healthy branches.
+- **Walk the graph.** At 3am, the engine probes components in order of information value and eliminates healthy branches.
 - **Know what's next.** Always — and why.
 
 </div>
 
-Press Y at each step yourself, or let an AI agent drive the same loop autonomously through the same interface. **The engine reasons; whoever's on call executes.**
+Press Y at each step yourself, or hand the loop to an AI agent — same interface either way.
 
 ## See it in action
 

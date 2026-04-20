@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -25,13 +27,18 @@ func TestDiscoveryResult_JSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(back.Components) != 2 || back.Components[0].Name != "api" {
-		t.Errorf("components corrupted: %+v", back.Components)
+	if !reflect.DeepEqual(orig, back) {
+		t.Errorf("round-trip mismatch\norig: %+v\nback: %+v", orig, back)
 	}
-	if back.Components[0].Metadata["owner"] != "team-backend" {
-		t.Errorf("metadata lost: %+v", back.Components[0].Metadata)
+
+	// Verify that omitempty actually omits empty optional fields on the wire.
+	minimal, err := json.Marshal(DiscoveredComponent{Name: "x", Type: "y"})
+	if err != nil {
+		t.Fatalf("marshal minimal: %v", err)
 	}
-	if len(back.Dependencies) != 1 || back.Dependencies[0].From != "api" || back.Dependencies[0].To != "rds" {
-		t.Errorf("dependencies corrupted: %+v", back.Dependencies)
+	for _, omitted := range []string{`"health_facts":`, `"metadata":`} {
+		if bytes.Contains(minimal, []byte(omitted)) {
+			t.Errorf("omitempty failed: %s present in %s", omitted, minimal)
+		}
 	}
 }

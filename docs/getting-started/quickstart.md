@@ -84,7 +84,7 @@ components:
 - `components.<name>.type` — a type defined by a provider (see [Type Catalog](../reference/type-catalog.md))
 - `components.<name>.resource` — optional upstream resource id the provider probes. Lets you keep readable component keys (`rds:`) while the probe hits the real backing resource (`my-database-name`). Supports `{key}` placeholders from `meta.vars`.
 - `components.<name>.depends` — list of components this one depends on
-- `components.<name>.healthy` — override conditions (in addition to the provider's defaults)
+- `components.<name>.healthy` — health rules for this component. When set, replaces the provider type's defaults; doesn't merge. See [model schema](../reference/model-schema.md#override-semantics--replace-dont-merge).
 - `components.<name>.providers` — per-component provider override (rds uses `aws`, not `kubernetes`)
 
 Full schema: [Model Schema Reference](../reference/model-schema.md)

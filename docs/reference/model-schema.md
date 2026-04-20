@@ -58,7 +58,8 @@ components:
       - <provider-name>
     depends:                # optional — components this one depends on
       - on: <component-name>
-    healthy:                # optional — additional health conditions
+    healthy:                # optional — replaces the provider type's default
+                            #            healthy rules (does not merge)
       - <expression>
     vars:                   # optional — per-component overrides of meta.vars
       <key>: <value>
@@ -87,7 +88,7 @@ Each key under `components` is the component name. Names must be unique within t
 | `resource` | no | Upstream resource identifier. When set, the provider looks up `<resource>` instead of the component key at probe time. Lets you keep readable component keys (e.g. `rds:`) while probing the real backing resource (e.g. an RDS DB instance id, a kubectl-named Deployment, a Docker container name — whatever the owning provider expects). Supports `{key}` placeholders that expand against `meta.vars` at load time — a model shipped across environments can use `resource: my-database-{env}`. Unresolved placeholders are a load-time error. |
 | `providers` | no | Override `meta.providers` for this component. Use when one component belongs to a provider different from the model's default set (e.g., a single RDS instance in a model whose defaults are Kubernetes). |
 | `depends` | no | List of dependency entries. See [Dependencies](#dependencies) below. |
-| `healthy` | no | Additional health conditions beyond the provider's defaults. See [Health expressions](#health-expressions) below. |
+| `healthy` | no | Health conditions for this component. When set, **replaces** the provider type's default healthy rules (does not merge). See [Health expressions](#health-expressions) below for semantics and a common pitfall. |
 | `vars` | no | Per-component overrides of `meta.vars`. Merged on top of `meta.vars` at probe time — component keys win on collision, missing keys fall through to the model-wide default. Use when a single component lives in a different namespace, region, or cluster from the rest. Example: an ExternalSecrets operator in namespace `external-secrets` in a model whose other components live in `default`. |
 
 ### Readable component keys vs. provider resource identifiers
@@ -145,13 +146,51 @@ The engine uses the dependency graph to:
 
 ### Health expressions
 
-The `healthy` field adds conditions beyond the provider's built-in defaults. The provider already defines default health conditions for each type (e.g., `ready_replicas == desired_replicas` for a Kubernetes deployment). Your `healthy` overrides add to these.
+The `healthy` field sets the health rules for the component. When omitted, the provider type's default healthy rules apply (e.g. `deployment` defaults to `ready_replicas == desired_replicas`; `elasticache_cluster` defaults to `available == true && cache_hit_ratio > 80`).
 
 ```yaml
 healthy:
   - connection_count < 500
   - response_time < 1000
 ```
+
+#### Override semantics — replace, don't merge
+
+A component-level `healthy:` block **replaces** the type's default rules; it does not merge with them. This is the most common mgtt modelling pitfall, so it's worth stating loudly:
+
+> If you set `healthy:` on a component, the provider type's default rules for that component are no longer evaluated.
+
+Concretely: the `elasticache_cluster` type defaults to `available == true && cache_hit_ratio > 80`. If your model says —
+
+```yaml
+redis:
+  type: elasticache_cluster
+  healthy:
+    - cache_hit_ratio > 70          # intended: "prod baseline"
+```
+
+— you've lost the `available == true` check. A redis with `available=false` but some residual cache hits could pass your rule.
+
+The fix is to restate every rule you want enforced, in full:
+
+```yaml
+redis:
+  type: elasticache_cluster
+  healthy:
+    - available == true
+    - cache_hit_ratio > 70
+```
+
+Or, on environments where a stricter default is itself a false-positive (idle stage has `cache_hit_ratio = 0`), narrow the rule to only what's meaningful:
+
+```yaml
+redis:
+  type: elasticache_cluster
+  healthy:
+    - available == true               # cache_hit_ratio omitted on purpose
+```
+
+Component-level rules win because per-environment health criteria vary: a 70% cache-hit ratio is great on prod, meaningless on an idle stage. Merging the provider's prod-shaped default with a per-env override would produce confusing AND-conjunctions that fail in ways the operator didn't author. See the [Type Catalog](type-catalog.md) for each provider type's default rules — read before overriding.
 
 #### Expression syntax
 

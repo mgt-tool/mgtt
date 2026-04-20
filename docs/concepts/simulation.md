@@ -10,11 +10,10 @@ scope:             same as a unit test — tests the thing it tests, nothing mor
 
 ## What you can do with it
 
-- **Model drift detection** — when the real system evolves (new services, renamed components, changed dependencies), a stale model silently diverges from reality. Running `mgtt simulate` on every PR and every nightly catches the drift before the model is needed at 3am. A scenario that once passed and now fails tells you exactly which dependency assumption became wrong.
-- **Architecture unit tests** — each scenario is a declarative assertion (*"if rds goes down and api crash-loops, root cause is rds"*). Refactor the model, break a conclusion, the suite fails. Safe renames, safe dependency moves, safe restructuring.
-- **Design-time validation** — write the model before the system exists. Reason about who-depends-on-whom, find the holes in your dependency graph, rule out "can this even be diagnosed?" before committing to an implementation. The engine treats your design as executable logic.
-- **Regression harness for incidents** — the next time a real incident happens, encode it as a scenario. The engine must now identify that chain forever. Your postmortems become tests. Every incident you handle permanently widens the coverage of the engine that'll help with the next one.
-- **Scenario-family coverage** — `--from-scenarios` iterates every enumerated failure chain, and `--fuzz` truncates fact trails at random points to test convergence under partial information. Both complement hand-authored scenarios: one sweeps the combinatorial space, the other guards against probe-budget-ran-out cases.
+- **Model drift detection** — when the real system evolves, a stale model silently diverges from reality. A scenario that once passed and now fails tells you exactly which dependency assumption became wrong, before the model is needed at 3am.
+- **Regression harness for incidents** — encode each real incident as a scenario. The engine must now identify that chain forever. Your postmortems become tests.
+
+Additional uses ride on the same primitives: architecture unit tests (scenarios assert that refactoring doesn't break the engine's reasoning), design-time validation (write the model before the system exists), and scenario-family coverage (`--from-scenarios` iterates every enumerated chain; `--fuzz` truncates trails to test partial-information convergence).
 
 ## On this page
 

@@ -35,8 +35,6 @@ $ mgtt diagnose --suspect api --max-probes 10
 
 Failure chains are pre-enumerated into a committed `scenarios.yaml` at design time, so diagnose eliminates whole branches before running a probe.
 
-If you want to *watch* the engine pick each probe — for debugging the model, teaching, or a demo — `mgtt plan` is the interactive press-Y variant on the same engine.
-
 [Full troubleshooting walkthrough](concepts/troubleshooting.md) | [`mgtt diagnose` reference](concepts/troubleshooting.md#autopilot-mode-mgtt-diagnose) | [scenarios.yaml](reference/scenarios-yaml.md)
 
 ### Simulation in CI: catch model drift before it matters (`mgtt simulate`)

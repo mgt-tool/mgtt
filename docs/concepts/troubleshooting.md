@@ -1,14 +1,11 @@
 # Troubleshooting
 
-Troubleshooting is mgtt's whole reason for being. You wrote the model once, calmly. The alert fires at 3am. You run `mgtt plan` (or `mgtt diagnose` if you're handing it to a bot) and the engine eliminates healthy branches of the dependency graph until exactly one root cause remains — in 4 to 6 probes, not the 20+ guesses a cold brain would make at that hour.
+Troubleshooting is mgtt's whole reason for being. Alert fires at 3am; you run `mgtt diagnose` and the engine eliminates healthy branches of the dependency graph until one root cause remains — 4 to 6 probes, not the 20+ guesses a cold brain would make at that hour.
 
 ## What you can do with it
 
-- **Find root cause in minutes, not hours** — the constraint engine walks your dependency graph, probing in order of information value. Typical incidents resolve in 4–6 probes instead of the manual "SSH into everything and guess" pattern. The engine ranks probes by cost and eliminating power, so it never wastes a call.
-- **Works without tribal knowledge** — the model *is* the institutional memory. Someone who didn't build the system can run `mgtt plan`, answer yes/no, and land on the same root cause the architect would. Juniors stop paging seniors at 3am.
-- **Hand it to an agent** (`mgtt diagnose`) — autopilot mode with a probe budget and a wall-clock deadline, no prompts. Scheduled GitLab / GitHub Actions job, Slack bot, LLM agent — anywhere you want unattended root-cause analysis. Output is structured: root cause, chain, eliminated components, budget consumed.
-- **Safe by default** — read-only probes only; `--on-write fail` enforces it at the engine level. Wire it into CI, run it from an underprivileged role, hand it to an intern. It can't mutate.
-- **Partial visibility, not partial crashes** — when a probe hits an RBAC hole or a throttled upstream, the fact degrades to unresolved and the engine keeps going. The final report flags how much of the picture was blocked instead of aborting the whole session. A locked-down read-only SRE still gets useful output.
+- **Find root cause in minutes, not hours** — the constraint engine walks your dependency graph, probing in order of information value. Typical incidents resolve in 4–6 probes. The model *is* the institutional memory, so someone who didn't build the system can run diagnose and land on the same root cause the architect would.
+- **Safe by default, even under partial visibility** — read-only probes only (`--on-write fail` enforces it); when a probe hits an RBAC hole or a transient throttle the fact degrades to unresolved and the engine keeps going, flagging how much of the picture was blocked rather than aborting. A locked-down SRE, a CI role, an LLM agent — all work against the same engine.
 
 ## On this page
 

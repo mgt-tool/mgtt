@@ -29,8 +29,6 @@ $ mgtt diagnose --suspect api --max-probes 10
 
 4 components probed, 2 eliminated, root cause named. The engine ranks probes by information value, so every call moves the answer forward — you didn't need to know the system, the model knew it for you. Partial visibility (RBAC refusals, transient throttles) surfaces as a visible flag in the report rather than aborting the session.
 
-If you want to *watch* the engine pick each probe — for debugging the model, teaching, or a demo — `mgtt plan` is the interactive press-Y variant on the same engine. See [Troubleshooting](./docs/concepts/troubleshooting.md) for both.
-
 ### Simulation in CI: catch model drift before it matters (`mgtt simulate`)
 
 Before the system is even running, `mgtt simulate` verifies the model's reasoning with hand-authored scenarios (`"if rds goes down and api crash-loops, root cause is rds"`). Wire it into every PR:

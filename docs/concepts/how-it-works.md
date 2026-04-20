@@ -35,18 +35,19 @@ The engine is mgtt's core. It takes four inputs:
 
 It produces a **ranked failure path tree**: which paths are still possible, which are eliminated, and which single probe would narrow the search the most.
 
-The engine is pure — no I/O, no credentials, no side effects. The same engine powers both `mgtt simulate` and `mgtt plan`. Only the source of facts differs.
+The engine is pure — no I/O, no credentials, no side effects. The same engine powers both `mgtt simulate` and `mgtt diagnose`. Only the source of facts differs.
+
+For the full internals (strategies, probe-selection heuristics, termination conditions, complexity math), see the **[Engine Reference](../reference/engine.md)**. This page stays at concept level.
 
 ## Two modes, same model
 
 | | Simulation | Troubleshooting |
 |---|---|---|
-| Command | `mgtt simulate` | `mgtt plan` |
+| Command | `mgtt simulate` | `mgtt diagnose` |
 | Facts from | Scenario YAML (authored) | Live probes via installed providers |
 | Needs | Nothing | Environment credentials |
-| Runs in | CI pipeline | On-call engineer's laptop |
-| Output | Pass/fail assertions | Guided root cause |
-| Driven by | Automation | SRE or AI agent |
+| Runs in | CI pipeline | On-call laptop, CI job, Slack bot, or AI agent |
+| Output | Pass/fail assertions | Structured root-cause report |
 
 ### Simulation (`mgtt simulate`)
 
@@ -60,15 +61,15 @@ If someone removes a dependency from the model, the scenario fails. The PR is bl
 
 [Full simulation walkthrough →](simulation.md)
 
-### Troubleshooting (`mgtt plan`)
+### Troubleshooting (`mgtt diagnose`)
 
-The engine walks the dependency graph from the outermost component inward. At each step it suggests the single highest-value, lowest-cost probe to run. You (or an AI agent) execute the probe and feed the result back.
+The engine walks the dependency graph from the outermost component inward. At each step it picks the single highest-value, lowest-cost probe, runs it, and continues until one failure path remains or the probe budget is hit.
 
 ```
 model.yaml + live probes → engine → root cause
 ```
 
-The loop repeats until one failure path remains — that's your root cause.
+`mgtt plan` is the interactive press-Y variant for debugging models or teaching — same engine, prompts at each step.
 
 [Full troubleshooting walkthrough →](troubleshooting.md)
 
@@ -80,7 +81,7 @@ Not all probes are equal. The engine ranks each candidate by:
 2. **Cost** — how expensive/slow is this probe? (low/medium/high, declared by the provider)
 3. **Access** — what credentials or permissions does it need?
 
-The engine always suggests the probe that eliminates the most uncertainty for the least cost.
+The engine always suggests the probe that eliminates the most uncertainty for the least cost. See [Engine Reference — Probe selection heuristics](../reference/engine.md#probe-selection-heuristics) for the exact algorithm.
 
 ## Providers
 

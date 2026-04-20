@@ -30,7 +30,8 @@ type ProbeFn func(ctx context.Context, req Request) (Result, error)
 
 // Registry maps a type name to its set of fact probe functions.
 type Registry struct {
-	types map[string]map[string]ProbeFn
+	types      map[string]map[string]ProbeFn
+	discoverFn func() (DiscoveryResult, error)
 }
 
 // NewRegistry creates an empty registry. Providers register each type from
@@ -83,4 +84,19 @@ func (r *Registry) Facts(typ string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// RegisterDiscover installs an optional discovery function. Providers
+// that want to participate in `mgtt model build` call this from
+// main() before invoking provider.Main. Calling twice replaces the
+// previous function (matches Register's semantics for types).
+func (r *Registry) RegisterDiscover(fn func() (DiscoveryResult, error)) {
+	r.discoverFn = fn
+}
+
+// Discover returns the registered discovery function and a bool
+// indicating whether one was registered. Callers use the bool to
+// decide whether this provider participates in model-build.
+func (r *Registry) Discover() (func() (DiscoveryResult, error), bool) {
+	return r.discoverFn, r.discoverFn != nil
 }

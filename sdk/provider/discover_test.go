@@ -7,6 +7,39 @@ import (
 	"testing"
 )
 
+// A Registry with no discover function registered must report it
+// wasn't configured — mgtt-core treats this as "provider doesn't
+// support discovery, skip".
+func TestRegistry_DiscoverNotRegistered(t *testing.T) {
+	r := NewRegistry()
+	_, ok := r.Discover()
+	if ok {
+		t.Error("fresh registry must report discover not registered")
+	}
+}
+
+// When a provider registers a discover fn, Registry.Discover() invokes
+// it and returns the result.
+func TestRegistry_DiscoverRegistered(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterDiscover(func() (DiscoveryResult, error) {
+		return DiscoveryResult{
+			Components: []DiscoveredComponent{{Name: "api", Type: "deployment"}},
+		}, nil
+	})
+	fn, ok := r.Discover()
+	if !ok {
+		t.Fatal("registered discover must be reported")
+	}
+	res, err := fn()
+	if err != nil {
+		t.Fatalf("fn err: %v", err)
+	}
+	if len(res.Components) != 1 || res.Components[0].Name != "api" {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
+
 // DiscoveryResult must round-trip through JSON unchanged — it's the
 // wire format between the provider binary and mgtt-core.
 func TestDiscoveryResult_JSONRoundTrip(t *testing.T) {

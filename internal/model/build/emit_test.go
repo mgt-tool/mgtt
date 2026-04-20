@@ -79,6 +79,44 @@ func TestEmitYAML_DependenciesSorted(t *testing.T) {
 	}
 }
 
+// If two models encode the same graph (same components, deps,
+// providers, everything) but were built by inserting components in
+// different orders into their underlying maps, the emitted YAML must
+// still be byte-identical. This guards against future refactors that
+// could accidentally pick up Go's map-iteration-order randomness as
+// output order.
+func TestEmitYAML_PermutationDeterminism(t *testing.T) {
+	// Build two semantically-identical models by inserting components
+	// in reverse orders.
+	mA := &model.Model{
+		Meta: model.Meta{Name: "fixture", Version: "1.0"},
+		Components: map[string]*model.Component{},
+	}
+	names := []string{"alpha", "mid", "zeta"}
+	for _, n := range names {
+		mA.Components[n] = &model.Component{Name: n, Type: "deployment"}
+	}
+	mB := &model.Model{
+		Meta: model.Meta{Name: "fixture", Version: "1.0"},
+		Components: map[string]*model.Component{},
+	}
+	for i := len(names) - 1; i >= 0; i-- {
+		n := names[i]
+		mB.Components[n] = &model.Component{Name: n, Type: "deployment"}
+	}
+
+	var outA, outB bytes.Buffer
+	if err := EmitYAML(mA, &outA); err != nil {
+		t.Fatal(err)
+	}
+	if err := EmitYAML(mB, &outB); err != nil {
+		t.Fatal(err)
+	}
+	if outA.String() != outB.String() {
+		t.Errorf("permutation produced different output:\nA (insertion: alpha, mid, zeta):\n%s\nB (insertion: zeta, mid, alpha):\n%s", outA.String(), outB.String())
+	}
+}
+
 func makeFixtureModel() *model.Model {
 	return &model.Model{
 		Meta: model.Meta{Name: "fixture", Version: "1.0", Providers: []string{"kubernetes", "aws"}},

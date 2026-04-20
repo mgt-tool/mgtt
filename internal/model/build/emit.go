@@ -167,6 +167,13 @@ type emitComponent struct {
 	Depends    []emitDep
 }
 
+// emitDep serializes a Dependency's target list. We intentionally
+// drop Dependency.WhileRaw (the `while:` key) here: generated models
+// don't carry while-guards. while-guards are a hand-authored
+// refinement; running `mgtt model build` against a model with
+// while-guards would overwrite them. That risk is the operator's to
+// manage (commit the generated model, review the diff) — not
+// something the emitter silently round-trips.
 type emitDep struct {
-	On []string
+	On []string `yaml:"on"`
 }

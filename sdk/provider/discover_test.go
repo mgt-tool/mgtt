@@ -2,8 +2,11 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +76,65 @@ func TestDiscoveryResult_JSONRoundTrip(t *testing.T) {
 		if bytes.Contains(minimal, []byte(omitted)) {
 			t.Errorf("omitempty failed: %s present in %s", omitted, minimal)
 		}
+	}
+}
+
+// Run dispatching to `discover` must invoke the registered function
+// and emit JSON on stdout. Exit code 0.
+func TestRun_DiscoverEmitsJSON(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterDiscover(func() (DiscoveryResult, error) {
+		return DiscoveryResult{
+			Components:   []DiscoveredComponent{{Name: "api", Type: "deployment"}},
+			Dependencies: []DiscoveredDependency{{From: "api", To: "rds"}},
+		}, nil
+	})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), r, []string{"discover"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code %d; stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"name":"api"`) {
+		t.Errorf("stdout missing component: %s", out)
+	}
+	if !strings.Contains(out, `"from":"api"`) {
+		t.Errorf("stdout missing dependency: %s", out)
+	}
+}
+
+// If no discover function is registered, the subcommand exits with
+// usage error (exit 1) — mgtt-core treats this as "skip this
+// provider" and continues. Stderr carries an explanation.
+func TestRun_DiscoverNotRegistered(t *testing.T) {
+	r := NewRegistry()
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), r, []string{"discover"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("expected exit 1 (usage); got %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout should be empty; got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "discover") {
+		t.Errorf("stderr should explain; got %q", stderr.String())
+	}
+}
+
+// A discover function returning an error → exit 1 (usage). Error
+// message on stderr. Same exit convention as the probe's unknown-type
+// error since discovery failures are also caller-actionable.
+func TestRun_DiscoverError(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterDiscover(func() (DiscoveryResult, error) {
+		return DiscoveryResult{}, fmt.Errorf("backend API timeout")
+	})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), r, []string{"discover"}, &stdout, &stderr)
+	if code == 0 {
+		t.Error("discover error must not exit 0")
+	}
+	if !strings.Contains(stderr.String(), "backend API timeout") {
+		t.Errorf("stderr should carry the error; got %q", stderr.String())
 	}
 }

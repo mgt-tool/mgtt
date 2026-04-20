@@ -36,6 +36,8 @@ func Run(ctx context.Context, r *Registry, args []string, stdout, stderr io.Writ
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
+	case "discover":
+		return runDiscover(r, stdout, stderr)
 	case "probe":
 		// fall through
 	default:
@@ -76,6 +78,29 @@ func Run(ctx context.Context, r *Registry, args []string, stdout, stderr io.Writ
 	res, err := r.Probe(ctx, req)
 	if err != nil {
 		return exitFor(err, stderr)
+	}
+	if err := json.NewEncoder(stdout).Encode(res); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 5
+	}
+	return 0
+}
+
+// runDiscover handles the `discover` subcommand. Emits the registered
+// discovery function's DiscoveryResult as JSON on stdout. Providers
+// that didn't register a discovery function produce a usage error —
+// callers are expected to invoke `discover` only after checking the
+// provider opts in.
+func runDiscover(r *Registry, stdout, stderr io.Writer) int {
+	fn, ok := r.Discover()
+	if !ok {
+		fmt.Fprintln(stderr, "discover: this provider does not implement discovery (no RegisterDiscover call)")
+		return 1
+	}
+	res, err := fn()
+	if err != nil {
+		fmt.Fprintf(stderr, "discover: %v\n", err)
+		return 1
 	}
 	if err := json.NewEncoder(stdout).Encode(res); err != nil {
 		fmt.Fprintln(stderr, err)

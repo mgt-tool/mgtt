@@ -132,7 +132,7 @@ The loop also exits if the probe budget runs out (`--max-probes`) or the wall-cl
 
 Occam, once it picks a chain, walks it **terminal → root** and returns a probe for the first step not yet fact-level verified. A step is verified iff every fact it directly relies on is already in the store — `Observes` for terminal steps, or every fact named in the state's `when` predicate for non-terminal steps. The old component-level check (any fact → skip) was too coarse: it skipped a step even when only one of its four state-facts was known.
 
-This matters because symptoms are cheap and unambiguous — checking `nginx.ready_replicas` once tells you whether the whole chain's terminal assertion holds. You don't want to probe three upstream layers only to discover the symptom never materialised.
+This matters because symptoms are cheap and unambiguous — checking `web.ready_replicas` once tells you whether the whole chain's terminal assertion holds. You don't want to probe three upstream layers only to discover the symptom never materialised.
 
 ### Cross-elimination ranking
 
@@ -210,46 +210,46 @@ Practical cost per round is dominated by `filter_live`. For a 10 000-chain model
 
 ## Worked example
 
-Taking the `magento-platform` model at the time of writing — 22 components, 6 AWS types + 5 Kubernetes types + 3 generic:
+A mid-sized reference model — call it **blue-green HTTP service** — 22 components, covering an edge/CDN layer, an ALB ingress, service + deployment tiers for two colors (blue and green), a managed data layer (relational DB, cache, message queue, object store), a search node, a config operator, and two business-process components on top of cron and async workers:
 
 ```
 N = 22 components
-F ≈ 5 facts/component (operator has 4, deployment has 8, rds_instance has 2, ...)
+F ≈ 5 facts/component (operator has 4, deployment has 8, db has 2, …)
 N × F = 110     theoretical max probes under pure BFS
 ```
 
-A real run against a clean stage cluster:
+A run against a clean cluster:
 
 ```
 Probes run: 66/100   Time: 1m10s/3m0s
 Root cause: (none — all components healthy)
 ```
 
-66 probes, well under the 110 ceiling. The gap is because some facts are never reached (BFS visits every component, but not all have facts the probe runner can resolve — generic components with `operator_says_healthy` pre-seeded skip probing).
+66 probes, well under the 110 ceiling. The gap is because some facts are never reached — BFS visits every component, but generic components with `operator_says_healthy` pre-seeded skip the provider path entirely.
 
-**Scenario count if enumerated.** The model's `system.model.yaml` carries `meta.scenarios: none` with an explicit note:
+**Scenario count if enumerated.** The model carries `meta.scenarios: none` with this note in its header:
 
 > scenarios.yaml is huge. The model enumerates ~50k chains (≈40MB YAML).
 
-That 50 000 chains arises from the blue/green doubling and the 6-deep dep graph from `cloudflare → magento-ingress → magento-svc → magento-nginx-{blue,green} → magento-php-fpm-{blue,green} → rds|redis|mq|...`. Each failure mode at the data layer (`rds.stopped`, `redis.unreachable`, `mq.degraded`, ...) propagates through two colors × two tiers × the `business_process` symptom layer, and provider-level `can_cause` branches multiply further.
+That 50 000 chains arises from the blue/green doubling and the 6-deep dep graph: `edge → ingress → svc → web-{blue,green} → app-{blue,green} → db|cache|queue|search|bucket`. Each failure mode at the data layer (`db.stopped`, `cache.unreachable`, `queue.degraded`, …) propagates through two colors × two tiers × a `business_process` symptom layer, and provider-level `can_cause` branches multiply further.
 
 Written out, `B ≈ 3`, `L ≈ 8`, `R ≈ 8` root states → `R × B^L ≈ 8 × 3^8 ≈ 52 000`. Matches the observed count.
 
 With scenarios disabled, Occam never runs for this model. BFS probes the graph, the standalone-unhealthy check scans the healthy predicates, and the report looks like:
 
 ```
-Root cause: external-secrets
-Scenario:   external-secrets.not_running
+Root cause: config-operator
+Scenario:   config-operator.not_running
 Probes run: 66/100   Time: 1m10s/3m0s
 Trail:
   …
-  41. external-secrets.crd_registered      = true
-  42. external-secrets.deployment_ready    = false   ← rule broken
-  43. external-secrets.restart_count       = 0
+  41. config-operator.crd_registered      = true
+  42. config-operator.deployment_ready    = false   ← rule broken
+  43. config-operator.restart_count       = 0
   …
 ```
 
-— exactly the diagnosis Occam would have produced from the enumerated `external-secrets-down.yaml` scenario, without the 40MB sidecar.
+— exactly the diagnosis Occam would have produced from an enumerated `config-operator-down.yaml` scenario, without the 40 MB sidecar.
 
 ## See also
 

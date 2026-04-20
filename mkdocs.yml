@@ -62,6 +62,7 @@ nav:
   - Reference:
     - CLI: reference/cli.md
     - Configuration: reference/configuration.md
+    - Engine: reference/engine.md
     - Manifest Schema: reference/manifest.md
     - Model Schema: reference/model-schema.md
     - Scenario Schema: reference/scenario-schema.md

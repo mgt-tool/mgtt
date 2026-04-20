@@ -106,7 +106,7 @@ One model, two moments:
 - [`scenarios.yaml`](reference/scenarios-yaml.md) — the generated sidecar `mgtt diagnose` consumes
 - [Type Catalog](reference/type-catalog.md) — all provider types, facts, states, and failure modes
 - [CLI Reference](reference/cli.md) — every command
-- [Full Specification](reference/spec.md) — the v1.0 spec
+- [Full Specification](specs.md) — the v1.0 spec index + MCP + design principles
 
 ## Extend
 

@@ -136,20 +136,9 @@ $ mgtt provider list
 
 ## What the image gets at runtime
 
-Image-installed providers run via `docker run`. The container doesn't inherit your shell by default — mgtt injects bind mounts and env forwards based on what the provider declared in `manifest.yaml` under `runtime:`:
+Image-installed providers run via `docker run` with an otherwise-empty environment. What mgtt injects into the container (bind mounts, env forwards, `--network` mode) is declared in the provider's `manifest.yaml` under `runtime:`.
 
-```yaml
-runtime:
-  needs: [kubectl, aws]
-  network_mode: host
-```
-
-- `runtime.needs:` — named capabilities (host tools, credential chains, sockets). Built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`.
-- `runtime.network_mode:` — container network mode. `bridge` (default) or `host`.
-
-Both fields show up in `mgtt provider install --image` output, in `mgtt provider ls`, and in the [public registry](../reference/registry.md).
-
-Full vocabulary, operator overrides (`$MGTT_HOME/capabilities.yaml`), the `MGTT_IMAGE_CAP_<NAME>` env shortcut, and the `MGTT_IMAGE_CAPS_DENY` opt-out live in [Provider Capabilities](../reference/image-capabilities.md). For the full operator handbook — including auditing installed providers and troubleshooting capability forwards — see [Using Providers](./using-providers.md).
+That half of the story is the operator-facing "Using Providers" page, not this one. Start here for the install decision, then go to [Using Providers → What mgtt forwards](./using-providers.md#what-mgtt-forwards) for the runtime mechanics, [Image Capabilities](../reference/image-capabilities.md) for the full vocabulary and overrides.
 
 ---
 

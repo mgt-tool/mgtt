@@ -68,7 +68,7 @@ nav:
     - Scenario Schema: reference/scenario-schema.md
     - scenarios.yaml: reference/scenarios-yaml.md
     - Type Catalog: reference/type-catalog.md
-    - Specification: reference/spec.md
+    - Specification: specs.md
 
 extra_css:
   - stylesheets/terminal.css

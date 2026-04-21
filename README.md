@@ -1,10 +1,10 @@
 ![mgtt](docs/images/mgtt_full_lockup.png)
 
-## Unit tests, for your running system.
+## Your architecture, executable.
 
-You write a YAML model of your distributed system — components, dependencies, what "healthy" means. That one file drives two modes:
+You already draw the diagram — components, dependencies, what "healthy" means. mgtt reads it as code. One YAML model drives two modes:
 
-- **At design time**, `mgtt simulate` injects synthetic failures and asserts the engine reaches the right conclusion. Runs in CI on every PR. Catches model drift before the model is needed.
+- **At design time**, `mgtt simulate` injects synthetic failures and asserts the engine reaches the right conclusion. Runs in CI on every PR. Catches architectural drift before the diagram lies to you.
 - **At 3am**, `mgtt diagnose` runs the same engine against the live system. Real probes replace the synthetic facts. It names the broken component, eliminates the healthy ones, and hands you the chain.
 
 Same model. Same reasoning. Two fixture sources.

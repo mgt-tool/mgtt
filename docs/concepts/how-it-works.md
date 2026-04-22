@@ -7,64 +7,58 @@ The same model and engine serve two phases — the only difference is where fact
 ## Architecture at a glance
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepAfter', 'nodeSpacing': 50, 'rankSpacing': 80}}}%%
-flowchart LR
+%%{init: {'flowchart': {'curve': 'stepAfter', 'nodeSpacing': 40, 'rankSpacing': 55}}}%%
+flowchart TB
     Human["human operator"]
-    Agent["LLM agent<br/>(Claude Code, CI bot)"]
+    Agent["LLM agent<br/>Claude Code · CI bot"]
 
     subgraph MGTT["mgtt core &nbsp; · &nbsp; pure reasoning · no backend credentials"]
-        direction TB
-        CLI["CLI<br/>simulate · diagnose · plan"]
-        MCP["MCP server<br/>stdio · HTTP + bearer"]
+        direction LR
+        Model[("model.yaml")]
+        Scenarios[("scenarios.yaml")]
+        CLI["CLI"]
+        MCP["MCP server"]
         Engine["constraint engine<br/>walk · rank · eliminate"]
-        Model[("system.model.yaml<br/>components · dependencies")]
-        Scenarios[("scenarios.yaml<br/>scripted failures")]
-        State[("incident state<br/>$MGTT_HOME/incidents/")]
-        CLI --> Engine
-        MCP --> Engine
+        State[("incident state")]
         Model --> Engine
         Scenarios -.->|simulate mode| Engine
+        CLI --> Engine
+        MCP --> Engine
         Engine --> State
     end
 
-    subgraph ADAPTERS["adapters (providers) &nbsp; · &nbsp; the only place backend credentials live"]
-        direction TB
-        K8s["kubernetes<br/>kubectl"]
-        AWS["aws<br/>aws-cli"]
-        Docker["docker<br/>docker CLI"]
-        Terra["terraform<br/>state"]
-        Tempo["tempo<br/>TraceQL"]
-        Qwit["quickwit<br/>search API"]
+    subgraph ADAPTERS["adapters (providers) &nbsp; · &nbsp; hold the backend credentials"]
+        direction LR
+        K8s["kubernetes"]
+        AWS["aws"]
+        Docker["docker"]
+        Terra["terraform"]
+        Tempo["tempo"]
+        Qwit["quickwit"]
     end
 
     subgraph REG["registry"]
-        direction TB
-        Remote["registry.yaml<br/>GitHub Pages · SemVer tags"]
-        Local["$MGTT_HOME/providers/<br/>installed + verified"]
+        direction LR
+        Remote["registry.yaml<br/>GitHub Pages"]
+        Local["$MGTT_HOME/providers/"]
         Remote -->|mgtt provider install| Local
     end
 
-    subgraph SUT["system under test &nbsp; · &nbsp; your production, not touched by mgtt core"]
-        direction TB
-        NGX["nginx ingress"]
-        API["api replicas<br/>(k8s deployment)"]
-        Cache["redis"]
-        Queue["kafka / sqs"]
-        RDS[("postgres / rds")]
-        Tracing["tempo + quickwit<br/>(spans · logs)"]
-        NGX --> API
-        API --> RDS
-        API --> Cache
-        API --> Queue
-        API -.->|emits traces| Tracing
+    subgraph SUT["system under test &nbsp; · &nbsp; your production · never touched by mgtt core"]
+        direction LR
+        NGX["nginx"] --> API["api replicas"]
+        API --> RDS[("postgres / rds")]
+        API --> Cache["redis"]
+        API --> Queue["kafka / sqs"]
+        API -.->|spans| Tracing["tempo + quickwit"]
     end
 
     Human --> CLI
     Agent --> MCP
     Engine ==>|probe request| ADAPTERS
-    ADAPTERS ==>|shell / SDK call| SUT
-    SUT ==>|stdout · JSON · SQL rows| ADAPTERS
     ADAPTERS ==>|parsed facts| Engine
+    ADAPTERS ==>|shell / SDK| SUT
+    SUT ==>|stdout / JSON| ADAPTERS
     Local -.->|loaded at startup| ADAPTERS
 ```
 

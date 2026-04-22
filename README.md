@@ -27,43 +27,44 @@ The engine picks probes by information value, so every call rules out a branch. 
 ## Architecture
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepAfter', 'nodeSpacing': 50, 'rankSpacing': 80}}}%%
-flowchart LR
+%%{init: {'flowchart': {'curve': 'stepAfter', 'nodeSpacing': 40, 'rankSpacing': 55}}}%%
+flowchart TB
     Human["human"]
     Agent["LLM agent"]
 
     subgraph Core["mgtt core &nbsp; · &nbsp; no creds"]
-        direction TB
+        direction LR
+        Model[("model.yaml")]
+        Scen[("scenarios.yaml")]
         CLI["CLI"]
         MCP["MCP server"]
         Eng["engine"]
-        Scen[("scenarios.yaml")]
-        Model[("model.yaml")]
+        Model --> Eng
+        Scen -.->|simulate| Eng
         CLI --> Eng
         MCP --> Eng
-        Model --> Eng
-        Scen -.->|simulate mode| Eng
     end
 
     subgraph Adapters["adapters &nbsp; · &nbsp; hold creds"]
-        direction TB
+        direction LR
         K["kubernetes"]
         A["aws"]
         D["docker"]
-        T["terraform / tempo / quickwit / ..."]
+        T["terraform / tempo / quickwit / …"]
     end
+
+    Reg["registry<br/>registry.yaml"]
 
     subgraph SUT["system under test"]
         direction LR
         NGX["nginx"] --> API["api"] --> RDS[("rds")]
         API --> Cache["redis"]
     end
-    Reg["registry<br/>(registry.yaml)"]
 
     Human --> CLI
     Agent --> MCP
-    Eng ==>|probe request| Adapters
-    Adapters ==>|parsed facts| Eng
+    Eng ==>|probe| Adapters
+    Adapters ==>|facts| Eng
     Adapters ==>|commands| SUT
     SUT ==>|stdout| Adapters
     Reg -.->|mgtt provider install| Adapters

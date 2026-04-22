@@ -65,6 +65,22 @@ func tokenize(input string) ([]string, error) {
 			continue
 		}
 
+		// Double-quoted string literal — kept with quotes so parseValue
+		// can distinguish it from a bare identifier and skip int/bool
+		// inference. No escape sequences in v1.
+		if ch == '"' {
+			j := i + 1
+			for j < n && runes[j] != '"' {
+				j++
+			}
+			if j >= n {
+				return nil, fmt.Errorf("unterminated string literal")
+			}
+			tokens = append(tokens, string(runes[i:j+1]))
+			i = j + 1
+			continue
+		}
+
 		// Identifier or number (including component.fact and floats with '.').
 		// Read a "word": letters, digits, underscore, dot, minus.
 		if isWordStart(ch) || ch == '-' {
@@ -276,6 +292,11 @@ func (p *parser) parseValue() (any, error) {
 		return nil, fmt.Errorf("expected value, got end of input")
 	}
 	p.consume()
+	// Double-quoted tokens are string literals — strip quotes and skip
+	// type inference so "42" stays the string "42", not the int.
+	if len(tok) >= 2 && tok[0] == '"' && tok[len(tok)-1] == '"' {
+		return tok[1 : len(tok)-1], nil
+	}
 	return parseValueToken(tok), nil
 }
 

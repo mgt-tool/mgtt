@@ -214,6 +214,18 @@ func TestStatic_AcceptsValidNetworkModes(t *testing.T) {
 	}
 }
 
+func TestStatic_RejectsMissingCleanScriptAtParseTime(t *testing.T) {
+	// v1.0: when install.source is declared, install.source.clean is required —
+	// the parser enforces this so every source-installed provider ships a
+	// cleanup hook. Guarding against silent regression of that contract.
+	src := strings.Replace(minimalOK, "    clean: uninstall.sh\n", "", 1)
+	if _, err := providersupport.LoadFromBytes([]byte(src)); err == nil {
+		t.Fatal("source install without clean must be rejected at parse time")
+	} else if !strings.Contains(err.Error(), "install.source.clean") {
+		t.Fatalf("error must name install.source.clean; got %v", err)
+	}
+}
+
 func TestStatic_RejectsUnknownNetworkModeAtParseTime(t *testing.T) {
 	// v1.0: network_mode enum is enforced at parse time. Validate the
 	// parser rejects overlay (or any non-{"", bridge, host} value).

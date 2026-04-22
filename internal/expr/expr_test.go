@@ -431,6 +431,116 @@ func TestEvalStringFactNeq(t *testing.T) {
 	}
 }
 
+func TestParseDoubleQuotedStringLiteral(t *testing.T) {
+	// Quoted string literal: token "unhealthy" becomes string value "unhealthy"
+	// (no bool/int inference, no stripping of special characters).
+	node, err := expr.Parse(`health_status != "unhealthy"`)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	cmp, ok := node.(*expr.CmpNode)
+	if !ok {
+		t.Fatalf("expected *CmpNode, got %T", node)
+	}
+	if cmp.Fact != "health_status" {
+		t.Errorf("fact: got %q want %q", cmp.Fact, "health_status")
+	}
+	if cmp.Op != expr.OpNeq {
+		t.Errorf("op: got %v want OpNeq", cmp.Op)
+	}
+	if cmp.Value != "unhealthy" {
+		t.Errorf("value: got %v (%T), want string %q", cmp.Value, cmp.Value, "unhealthy")
+	}
+}
+
+func TestParseQuotedDefeatsInference(t *testing.T) {
+	// A quoted "42" must remain the string "42", not the int 42 — that's the
+	// whole point of quoting. Same for "true".
+	cases := []struct {
+		expr string
+		want string
+	}{
+		{`x == "42"`, "42"},
+		{`x == "true"`, "true"},
+		{`x == "1.5"`, "1.5"},
+	}
+	for _, tc := range cases {
+		node, err := expr.Parse(tc.expr)
+		if err != nil {
+			t.Fatalf("%s: parse error: %v", tc.expr, err)
+		}
+		cmp := node.(*expr.CmpNode)
+		got, ok := cmp.Value.(string)
+		if !ok {
+			t.Fatalf("%s: value type: got %T want string", tc.expr, cmp.Value)
+		}
+		if got != tc.want {
+			t.Errorf("%s: value: got %q want %q", tc.expr, got, tc.want)
+		}
+	}
+}
+
+func TestEvalQuotedStringLiteral(t *testing.T) {
+	// The docker provider's case: health_status != "unhealthy" evaluated
+	// against a fact carrying the string "healthy" — should be true.
+	node, _ := expr.Parse(`health_status != "unhealthy"`)
+	ctx := makeCtx("container", map[string]map[string]any{
+		"container": {"health_status": "healthy"},
+	}, nil)
+	result, err := node.Eval(ctx)
+	if err != nil {
+		t.Fatalf("unexpected eval error: %v", err)
+	}
+	if !result {
+		t.Error(`expected true ("healthy" != "unhealthy")`)
+	}
+}
+
+func TestParseUnterminatedStringLiteral(t *testing.T) {
+	if _, err := expr.Parse(`health_status != "unhealthy`); err == nil {
+		t.Fatal("expected parse error for unterminated string literal")
+	}
+}
+
+func TestParseEmptyStringLiteral(t *testing.T) {
+	node, err := expr.Parse(`label == ""`)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	cmp := node.(*expr.CmpNode)
+	if cmp.Value != "" {
+		t.Errorf("value: got %q want empty string", cmp.Value)
+	}
+}
+
+func TestParseStringLiteralWithSpaces(t *testing.T) {
+	// The main reason to quote: string values containing characters the
+	// bareword tokenizer can't represent (here, a space).
+	node, err := expr.Parse(`phase == "rolling update"`)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	cmp := node.(*expr.CmpNode)
+	if cmp.Value != "rolling update" {
+		t.Errorf("value: got %q want %q", cmp.Value, "rolling update")
+	}
+}
+
+func TestEvalQuotedStringLiteralFalse(t *testing.T) {
+	// Same expression, fact value matches the literal — should be false.
+	node, _ := expr.Parse(`health_status != "unhealthy"`)
+	ctx := makeCtx("container", map[string]map[string]any{
+		"container": {"health_status": "unhealthy"},
+	}, nil)
+	result, err := node.Eval(ctx)
+	if err != nil {
+		t.Fatalf("unexpected eval error: %v", err)
+	}
+	if result {
+		t.Error(`expected false ("unhealthy" != "unhealthy" is false)`)
+	}
+}
+
 func TestEvalCurrentComponentImplicit(t *testing.T) {
 	// A bare ref (no component prefix) uses ctx.CurrentComponent
 	node, _ := expr.Parse("ready_replicas == 3")

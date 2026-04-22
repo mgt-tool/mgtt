@@ -140,6 +140,15 @@ components:
   # ─── In-cluster search ──────────────────────────────────────────
   opensearch:
     type: deployment
+    # `healthy:` is a list of boolean rules. Each has the form
+    # `<fact> <op> <value>` with `<op>` in `== != < > <= >=`. Fact
+    # names (`ready_replicas` here) come from the type's probes — the
+    # `deployment` type is owned by the kubernetes provider. All rules
+    # must hold for the component to count as healthy; missing facts
+    # are treated as "don't know" and skipped rather than failed. A
+    # component-level `healthy:` REPLACES the type default outright
+    # (it does not merge) — see the override notes below for why we
+    # override for opensearch, rds, redis, and mq.
     healthy:
       - ready_replicas >= 1
 
@@ -153,8 +162,6 @@ components:
     type: rds_instance
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-rds
-    # Per-component `healthy:` REPLACES the type default outright — it
-    # does not merge. See the notes below for why we override here.
     healthy:
       - connection_count < 500
 

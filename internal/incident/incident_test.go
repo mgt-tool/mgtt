@@ -82,6 +82,106 @@ func TestEnd_NoActive(t *testing.T) {
 	}
 }
 
+func TestLoadByID_ReturnsIncidentFromDisk(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	_, err := incident.StartIsolated("storefront", "1.0", "inc-persistent-1", "")
+	if err != nil {
+		t.Fatalf("StartIsolated: %v", err)
+	}
+	loaded, err := incident.LoadByID("inc-persistent-1")
+	if err != nil {
+		t.Fatalf("LoadByID: %v", err)
+	}
+	if loaded.ID != "inc-persistent-1" {
+		t.Errorf("ID: got %q want %q", loaded.ID, "inc-persistent-1")
+	}
+	if loaded.Model != "storefront" {
+		t.Errorf("Model: got %q want %q", loaded.Model, "storefront")
+	}
+}
+
+func TestLoadByID_MissingIncidentReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	if _, err := incident.LoadByID("does-not-exist"); err == nil {
+		t.Fatal("expected error for missing incident id")
+	}
+}
+
+func TestEndByID_MarksEndedAndVerdictInState(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	if _, err := incident.StartIsolated("storefront", "1.0", "inc-end-1", ""); err != nil {
+		t.Fatalf("StartIsolated: %v", err)
+	}
+	ended, err := incident.EndByID("inc-end-1", "rds was the root cause")
+	if err != nil {
+		t.Fatalf("EndByID: %v", err)
+	}
+	if ended.Ended.IsZero() {
+		t.Error("Ended time must be non-zero after EndByID")
+	}
+
+	// Persistence check — reload and confirm the ended marker + verdict are
+	// on disk. A snapshot tool calling LoadByID later needs to see them.
+	reloaded, err := incident.LoadByID("inc-end-1")
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Ended.IsZero() {
+		t.Error("reloaded Ended must be non-zero — verdict must survive round-trip")
+	}
+	if reloaded.Verdict != "rds was the root cause" {
+		t.Errorf("reloaded Verdict: got %q want %q", reloaded.Verdict, "rds was the root cause")
+	}
+}
+
+func TestEndByID_MissingIncidentReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	if _, err := incident.EndByID("nope", ""); err == nil {
+		t.Fatal("expected error for missing incident")
+	}
+}
+
+func TestEndByID_DoesNotTouchCLICurrentPointer(t *testing.T) {
+	// D5 invariant: MCP end must not side-effect the CLI's single-active
+	// pointer. A human CLI session running in parallel must survive.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	// Simulate a concurrent CLI incident.
+	if _, err := incident.Start("cli-model", "1.0", "inc-cli"); err != nil {
+		t.Fatalf("CLI Start: %v", err)
+	}
+	// MCP-style isolated incident.
+	if _, err := incident.StartIsolated("mcp-model", "1.0", "inc-mcp", ""); err != nil {
+		t.Fatalf("StartIsolated: %v", err)
+	}
+	if _, err := incident.EndByID("inc-mcp", ""); err != nil {
+		t.Fatalf("EndByID: %v", err)
+	}
+	// CLI's pointer must still point at inc-cli.
+	if _, err := os.Stat(".mgtt-current"); err != nil {
+		t.Fatal("MCP EndByID must not remove .mgtt-current")
+	}
+}
+
 func TestGenerateID(t *testing.T) {
 	dir := t.TempDir()
 	origDir, _ := os.Getwd()

@@ -8,6 +8,15 @@ type StoreMeta struct {
 	Version  string    `yaml:"version"`
 	Incident string    `yaml:"incident"`
 	Started  time.Time `yaml:"started"`
+	// Ended marks when the incident was closed. Zero means open.
+	Ended time.Time `yaml:"ended,omitempty"`
+	// Verdict is an optional human/agent note written at close.
+	Verdict string `yaml:"verdict,omitempty"`
+	// ModelRef is the absolute path to the model file the incident is
+	// bound to. Populated by the MCP `incident.start` so downstream
+	// tools (plan, probe, snapshot) can reload the model without the
+	// agent having to re-pass it. Empty for CLI-started incidents.
+	ModelRef string `yaml:"model_ref,omitempty"`
 }
 
 // Store is an append-only fact store. It may be in-memory or disk-backed.

@@ -27,6 +27,7 @@ The engine picks probes by information value, so every call rules out a branch. 
 ## Architecture
 
 ```mermaid
+%%{init: {'flowchart': {'defaultRenderer': 'elk'}}}%%
 flowchart LR
     Human["human"]
     Agent["LLM agent"]

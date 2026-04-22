@@ -7,6 +7,7 @@ The same model and engine serve two phases — the only difference is where fact
 ## Architecture at a glance
 
 ```mermaid
+%%{init: {'flowchart': {'defaultRenderer': 'elk'}}}%%
 flowchart LR
     Human["human operator"]
     Agent["LLM agent<br/>(Claude Code, CI bot)"]

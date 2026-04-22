@@ -1,9 +1,21 @@
+// Package mcp — output schemas for every tool the server registers.
+//
+// Input schemas are not declared here: mcp-go's fluent tool builder
+// (mcpgo.WithString, WithBoolean, etc.) generates an accurate input
+// schema from the registration itself, so a separate constant would
+// be redundant and drift-prone.
+//
+// Output schemas are not auto-derived by the SDK, so they live here
+// and are wired into each tool via WithRawOutputSchema. An agent that
+// calls tools/list sees the exact shape its consumer-side decoder
+// should expect.
+//
+// Drift guard: `schemas_test.go` parses every constant as JSON to
+// catch a typo before it ships. Changing these is a public contract
+// change — bump at least a minor version.
 package mcp
 
-// AboutInputSchema — no parameters.
-const AboutInputSchema = `{"type":"object","properties":{},"additionalProperties":false}`
-
-// AboutOutputSchema — documents the AboutResult shape.
+// AboutOutputSchema documents the AboutResult shape.
 const AboutOutputSchema = `{
   "type":"object",
   "properties":{
@@ -17,19 +29,6 @@ const AboutOutputSchema = `{
   "required":["version","transports","readonly_only","on_write","max_execute_per_incident","probe_timeout_seconds"]
 }`
 
-// IncidentStartInputSchema documents the input shape. model_ref is required;
-// id and suspect are optional.
-const IncidentStartInputSchema = `{
-  "type":"object",
-  "properties":{
-    "model_ref":{"type":"string","description":"path to system.model.yaml the server can read"},
-    "id":{"type":"string","description":"optional incident id; generated if omitted"},
-    "suspect":{"type":"array","items":{"type":"string"},"description":"optional component.state hints, e.g. [\"api.crash_looping\"]"}
-  },
-  "required":["model_ref"],
-  "additionalProperties":false
-}`
-
 // IncidentStartOutputSchema documents the IncidentStartResult shape.
 const IncidentStartOutputSchema = `{
   "type":"object",
@@ -37,18 +36,6 @@ const IncidentStartOutputSchema = `{
     "incident_id":{"type":"string"}
   },
   "required":["incident_id"]
-}`
-
-// IncidentEndInputSchema documents the input. incident_id required;
-// verdict optional.
-const IncidentEndInputSchema = `{
-  "type":"object",
-  "properties":{
-    "incident_id":{"type":"string"},
-    "verdict":{"type":"string"}
-  },
-  "required":["incident_id"],
-  "additionalProperties":false
 }`
 
 // IncidentEndOutputSchema documents the IncidentEndResult shape.
@@ -60,21 +47,6 @@ const IncidentEndOutputSchema = `{
   "required":["saved"]
 }`
 
-// FactAddInputSchema — incident_id/component/key/value required, note
-// optional. Value is any JSON type (string, number, bool, etc.).
-const FactAddInputSchema = `{
-  "type":"object",
-  "properties":{
-    "incident_id":{"type":"string"},
-    "component":{"type":"string"},
-    "key":{"type":"string"},
-    "value":{},
-    "note":{"type":"string"}
-  },
-  "required":["incident_id","component","key","value"],
-  "additionalProperties":false
-}`
-
 // FactAddOutputSchema confirms the append.
 const FactAddOutputSchema = `{
   "type":"object",
@@ -82,26 +54,27 @@ const FactAddOutputSchema = `{
   "required":["appended"]
 }`
 
-// FactsListInputSchema — incident_id required; component optional filter.
-const FactsListInputSchema = `{
+// FactsListOutputSchema documents the flat fact-entry list.
+const FactsListOutputSchema = `{
   "type":"object",
   "properties":{
-    "incident_id":{"type":"string"},
-    "component":{"type":"string"}
+    "facts":{
+      "type":"array",
+      "items":{
+        "type":"object",
+        "properties":{
+          "component":{"type":"string"},
+          "key":{"type":"string"},
+          "value":{},
+          "at":{"type":"string","format":"date-time"},
+          "collector":{"type":"string"},
+          "note":{"type":"string"}
+        },
+        "required":["component","key","at","collector"]
+      }
+    }
   },
-  "required":["incident_id"],
-  "additionalProperties":false
-}`
-
-// PlanInputSchema — incident_id required, component optional.
-const PlanInputSchema = `{
-  "type":"object",
-  "properties":{
-    "incident_id":{"type":"string"},
-    "component":{"type":"string"}
-  },
-  "required":["incident_id"],
-  "additionalProperties":false
+  "required":["facts"]
 }`
 
 // PlanOutputSchema documents the path tree + suggestion.
@@ -141,18 +114,6 @@ const PlanOutputSchema = `{
   }
 }`
 
-// ProbeInputSchema — incident_id required, execute required, component optional.
-const ProbeInputSchema = `{
-  "type":"object",
-  "properties":{
-    "incident_id":{"type":"string"},
-    "component":{"type":"string"},
-    "execute":{"type":"boolean"}
-  },
-  "required":["incident_id","execute"],
-  "additionalProperties":false
-}`
-
 // ProbeOutputSchema documents the discriminated status envelope.
 const ProbeOutputSchema = `{
   "type":"object",
@@ -169,15 +130,7 @@ const ProbeOutputSchema = `{
   "required":["status"]
 }`
 
-// ScenariosListInputSchema — incident_id required.
-const ScenariosListInputSchema = `{
-  "type":"object",
-  "properties":{"incident_id":{"type":"string"}},
-  "required":["incident_id"],
-  "additionalProperties":false
-}`
-
-// ScenariosListOutputSchema — shared by scenarios.list and scenarios.alive.
+// ScenariosListOutputSchema is shared by scenarios.list and scenarios.alive.
 const ScenariosListOutputSchema = `{
   "type":"object",
   "properties":{
@@ -214,14 +167,6 @@ const ScenariosListOutputSchema = `{
   "required":["scenarios"]
 }`
 
-// IncidentSnapshotInputSchema — incident_id required; selectors deferred.
-const IncidentSnapshotInputSchema = `{
-  "type":"object",
-  "properties":{"incident_id":{"type":"string"}},
-  "required":["incident_id"],
-  "additionalProperties":false
-}`
-
 // IncidentSnapshotOutputSchema describes the full diagnostic-memory bundle.
 const IncidentSnapshotOutputSchema = `{
   "type":"object",
@@ -243,27 +188,4 @@ const IncidentSnapshotOutputSchema = `{
     "verdict":{"type":"string"}
   },
   "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","facts"]
-}`
-
-// FactsListOutputSchema documents the flat fact-entry list.
-const FactsListOutputSchema = `{
-  "type":"object",
-  "properties":{
-    "facts":{
-      "type":"array",
-      "items":{
-        "type":"object",
-        "properties":{
-          "component":{"type":"string"},
-          "key":{"type":"string"},
-          "value":{},
-          "at":{"type":"string","format":"date-time"},
-          "collector":{"type":"string"},
-          "note":{"type":"string"}
-        },
-        "required":["component","key","at","collector"]
-      }
-    }
-  },
-  "required":["facts"]
 }`

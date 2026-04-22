@@ -36,6 +36,11 @@ func (h *Handler) FactAdd(p FactAddParams) (*FactAddResult, error) {
 	if p.Key == "" {
 		return nil, fmt.Errorf("key is required")
 	}
+	// Serialize mutations per-incident — concurrent Append+Save without
+	// this races on facts.Store's internal maps.
+	mu := lockFor(p.IncidentID)
+	mu.Lock()
+	defer mu.Unlock()
 	inc, err := incident.LoadByID(p.IncidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident: %w", err)
@@ -51,6 +56,32 @@ func (h *Handler) FactAdd(p FactAddParams) (*FactAddResult, error) {
 		return nil, fmt.Errorf("append fact: %w", err)
 	}
 	return &FactAddResult{Appended: true}, nil
+}
+
+// storeFactsAsEntries maps a store's facts into FactEntry rows, honoring
+// an optional component filter. Shared by FactsList and IncidentSnapshot
+// so the snapshot doesn't re-load the state file (design §8.2 race).
+func storeFactsAsEntries(store *facts.Store, componentFilter string) []FactEntry {
+	out := []FactEntry{}
+	if store == nil {
+		return out
+	}
+	for _, c := range store.AllComponents() {
+		if componentFilter != "" && c != componentFilter {
+			continue
+		}
+		for _, f := range store.FactsFor(c) {
+			out = append(out, FactEntry{
+				Component: c,
+				Key:       f.Key,
+				Value:     f.Value,
+				At:        f.At,
+				Collector: f.Collector,
+				Note:      f.Note,
+			})
+		}
+	}
+	return out
 }
 
 // FactsListParams filters the listing. Empty Component returns all facts.
@@ -81,27 +112,12 @@ func (h *Handler) FactsList(p FactsListParams) (*FactsListResult, error) {
 	if p.IncidentID == "" {
 		return nil, fmt.Errorf("incident_id is required")
 	}
+	mu := lockFor(p.IncidentID)
+	mu.RLock()
+	defer mu.RUnlock()
 	inc, err := incident.LoadByID(p.IncidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident: %w", err)
 	}
-
-	out := &FactsListResult{Facts: []FactEntry{}}
-	components := inc.Store.AllComponents()
-	for _, c := range components {
-		if p.Component != "" && c != p.Component {
-			continue
-		}
-		for _, f := range inc.Store.FactsFor(c) {
-			out.Facts = append(out.Facts, FactEntry{
-				Component: c,
-				Key:       f.Key,
-				Value:     f.Value,
-				At:        f.At,
-				Collector: f.Collector,
-				Note:      f.Note,
-			})
-		}
-	}
-	return out, nil
+	return &FactsListResult{Facts: storeFactsAsEntries(inc.Store, p.Component)}, nil
 }

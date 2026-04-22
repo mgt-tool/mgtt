@@ -110,6 +110,9 @@ func (h *Handler) IncidentEnd(p IncidentEndParams) (*IncidentEndResult, error) {
 	if p.IncidentID == "" {
 		return nil, fmt.Errorf("incident_id is required")
 	}
+	mu := lockFor(p.IncidentID)
+	mu.Lock()
+	defer mu.Unlock()
 	if _, err := incident.EndByID(p.IncidentID, p.Verdict); err != nil {
 		return nil, fmt.Errorf("end incident: %w", err)
 	}

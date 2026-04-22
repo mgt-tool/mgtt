@@ -47,6 +47,14 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 	if p.IncidentID == "" {
 		return nil, fmt.Errorf("incident_id is required")
 	}
+	// Serialize per-incident. Execute-mode appends to the fact store
+	// and saves; render-mode only reads the store but takes the same
+	// lock (cheaper than branching for a handful of allocations, and
+	// guards against a concurrent FactAdd racing on the facts map
+	// during engine.Plan's read).
+	mu := lockFor(p.IncidentID)
+	mu.Lock()
+	defer mu.Unlock()
 	inc, err := incident.LoadByID(p.IncidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident: %w", err)
@@ -158,6 +166,7 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 			Status:          "error",
 			Component:       s.Component,
 			Fact:            s.Fact,
+			Provider:        s.Provider,
 			RenderedCommand: rendered,
 			Reason:          err.Error(),
 		}, nil
@@ -240,8 +249,9 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 }
 
 // providerIsReadOnly reports whether the registry's copy of the named
-// provider declared read_only: true. Unknown providers default to "no":
-// under --readonly-only a missing declaration is a refusal, not an assume.
+// provider declared read_only: true. Unknown providers are treated as
+// write-capable (returns false): safer than assuming read-only when the
+// --readonly-only gate is active.
 func providerIsReadOnly(reg *providersupport.Registry, name string) bool {
 	if name == "" {
 		return false
@@ -253,13 +263,23 @@ func providerIsReadOnly(reg *providersupport.Registry, name string) bool {
 	return p.ReadOnly
 }
 
+// probeTimeoutSecondsMax caps the operator-configurable probe timeout.
+// Design §7.2: "default 30s, clamped to 5m max." Typos like
+// --probe-timeout=3000 must not silently bind the server for ~50 minutes.
+const probeTimeoutSecondsMax = 300
+
 // probeTimeoutFromConfig converts the integer-seconds config field into a
 // time.Duration. Zero means "use the runner default" (typically 30s).
+// Anything over 5 minutes is clamped to 5 minutes.
 func probeTimeoutFromConfig(cfg Config) time.Duration {
 	if cfg.ProbeTimeoutSeconds <= 0 {
 		return 0
 	}
-	return time.Duration(cfg.ProbeTimeoutSeconds) * time.Second
+	sec := cfg.ProbeTimeoutSeconds
+	if sec > probeTimeoutSecondsMax {
+		sec = probeTimeoutSecondsMax
+	}
+	return time.Duration(sec) * time.Second
 }
 
 // probeCollectedFactCount counts facts whose collector is "probe" — the

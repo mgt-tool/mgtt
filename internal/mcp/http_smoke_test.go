@@ -32,7 +32,7 @@ func TestHTTP_SmokeDiagnosisLoopWithBearerAuth(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(orig) })
 
 	const token = "smoke-test-token"
-	mcpSrv, _ := buildServer(Config{Version: "smoke"})
+	mcpSrv := buildServer(Config{Version: "smoke"})
 	streamable := server.NewStreamableHTTPServer(mcpSrv)
 	httpSrv := httptest.NewServer(withBearerAuth(token, streamable))
 	t.Cleanup(httpSrv.Close)
@@ -102,7 +102,7 @@ func TestHTTP_SmokeDiagnosisLoopWithBearerAuth(t *testing.T) {
 // gate is wired — a request without the expected header must fail before
 // the MCP dispatcher sees it.
 func TestHTTP_SmokeMissingBearerFails401(t *testing.T) {
-	mcpSrv, _ := buildServer(Config{})
+	mcpSrv := buildServer(Config{})
 	streamable := server.NewStreamableHTTPServer(mcpSrv)
 	httpSrv := httptest.NewServer(withBearerAuth("real-token", streamable))
 	t.Cleanup(httpSrv.Close)
@@ -126,7 +126,7 @@ func TestHTTP_SmokeMissingBearerFails401(t *testing.T) {
 // TestHTTP_SmokeWrongBearerFails401 — wrong token must be rejected even
 // when the scheme is correct. Guards against any accidental bypass.
 func TestHTTP_SmokeWrongBearerFails401(t *testing.T) {
-	mcpSrv, _ := buildServer(Config{})
+	mcpSrv := buildServer(Config{})
 	streamable := server.NewStreamableHTTPServer(mcpSrv)
 	httpSrv := httptest.NewServer(withBearerAuth("real-token", streamable))
 	t.Cleanup(httpSrv.Close)

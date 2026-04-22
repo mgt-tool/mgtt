@@ -50,6 +50,9 @@ func (h *Handler) Plan(p PlanParams) (*PlanResult, error) {
 	if p.IncidentID == "" {
 		return nil, fmt.Errorf("incident_id is required")
 	}
+	mu := lockFor(p.IncidentID)
+	mu.RLock()
+	defer mu.RUnlock()
 	inc, err := incident.LoadByID(p.IncidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident: %w", err)

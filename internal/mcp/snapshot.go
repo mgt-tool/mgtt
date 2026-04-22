@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -58,6 +59,9 @@ func (h *Handler) IncidentSnapshot(p IncidentSnapshotParams) (*IncidentSnapshotR
 	if p.IncidentID == "" {
 		return nil, fmt.Errorf("incident_id is required")
 	}
+	mu := lockFor(p.IncidentID)
+	mu.RLock()
+	defer mu.RUnlock()
 	inc, err := incident.LoadByID(p.IncidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident: %w", err)
@@ -84,12 +88,10 @@ func (h *Handler) IncidentSnapshot(p IncidentSnapshotParams) (*IncidentSnapshotR
 		out.EndedAt = &ended
 	}
 
-	// Facts — reuse FactsList handler for identical shape.
-	if factsResult, err := h.FactsList(FactsListParams{IncidentID: inc.ID}); err == nil {
-		out.Facts = factsResult.Facts
-	} else {
-		out.Facts = []FactEntry{}
-	}
+	// Facts — project the already-loaded store directly. Going through
+	// h.FactsList would re-acquire the RLock (deadlock risk with a future
+	// RWMutex upgrade) and re-read the state file (design §8.2 race).
+	out.Facts = storeFactsAsEntries(inc.Store, "")
 
 	// Scenarios: enumerate once, then split into surviving vs eliminated.
 	// FilterLive returns the survivors; the complement is the eliminated
@@ -139,10 +141,15 @@ func statusOf(inc *incident.Incident) string {
 
 // fileSha256 returns the hex digest of the file at path, or "" on any
 // read failure — the field is declarative, not load-bearing, so silent
-// absence beats failing the whole snapshot.
+// absence beats failing the whole snapshot. Read failures still emit a
+// stderr log when MGTT_DEBUG is set so operators have a crumb when they
+// see an unexpected empty sha256.
 func fileSha256(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.Getenv("MGTT_DEBUG") != "" {
+			log.Printf("mcp snapshot: sha256 read failed for %q: %v", path, err)
+		}
 		return ""
 	}
 	sum := sha256.Sum256(data)

@@ -26,7 +26,7 @@ func TestTransport_FullDiagnosisLoopOverMCP(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(orig) })
 
-	s, _ := buildServer(Config{Version: "e2e"})
+	s := buildServer(Config{Version: "e2e"})
 	client, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
 		t.Fatalf("NewInProcessClient: %v", err)

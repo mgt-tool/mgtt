@@ -24,6 +24,36 @@ $ mgtt diagnose --suspect api
 
 The engine picks probes by information value, so every call rules out a branch. You didn't need to know the system — the model knew it for you. Partial visibility (RBAC refusals, transient throttles) surfaces as a flag, not an abort.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    Op["operator<br/>or LLM agent"]
+
+    subgraph Core["mgtt core"]
+        CLI["CLI / MCP"]
+        Eng["engine"]
+        CLI --> Eng
+    end
+
+    subgraph Adapters["adapters"]
+        K["kubernetes"]
+        A["aws"]
+        D["docker"]
+        E["…"]
+    end
+
+    SUT["system under test<br/>(real components)"]
+    Reg["registry"]
+
+    Op --> CLI
+    Eng <-->|facts| Adapters
+    Adapters <-->|probes| SUT
+    Reg -.->|mgtt provider install| Adapters
+```
+
+mgtt core reasons; adapters translate to backend-specific commands; the registry publishes them. See [How It Works](./docs/concepts/how-it-works.md#architecture-at-a-glance) for the full picture.
+
 ## Install
 
 ```bash

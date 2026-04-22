@@ -4,8 +4,66 @@ mgtt encodes your system's dependency graph in a YAML model. A constraint engine
 
 The same model and engine serve two phases — the only difference is where facts come from.
 
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    Operator["operator<br/>or LLM agent"]
+
+    subgraph MGTT["mgtt core"]
+        direction TB
+        CLI["CLI / MCP server"]
+        Engine["constraint engine"]
+        Model[("system.model.yaml")]
+        Incident[("incident state")]
+        CLI --> Engine
+        Model --> Engine
+        Engine --> Incident
+    end
+
+    subgraph Adapters["adapters (providers)"]
+        direction TB
+        K["kubernetes"]
+        A["aws"]
+        D["docker"]
+        Etc["…"]
+    end
+
+    subgraph Registry["registry"]
+        direction TB
+        Remote["registry.yaml<br/>(GitHub Pages)"]
+        Local["$MGTT_HOME/providers/"]
+        Remote -.->|mgtt provider install| Local
+    end
+
+    subgraph SUT["system under test"]
+        direction TB
+        API["api"]
+        NGX["nginx"]
+        DB["rds"]
+        Cluster["k8s cluster"]
+    end
+
+    Operator -->|command / tool call| CLI
+    Engine -->|probe request| Adapters
+    Adapters -->|kubectl / aws / docker| SUT
+    SUT -->|stdout| Adapters
+    Adapters -->|parsed facts| Engine
+    Local -.->|loaded at startup| Adapters
+```
+
+Four things, three flows:
+
+- **mgtt core** owns the engine, the model, and the incident state. It is pure reasoning — no credentials, no backend SDKs.
+- **Adapters** (providers) are plugins that translate engine-level probe requests into backend-specific commands and parse the output back into typed facts. One per technology: kubernetes, aws, docker, terraform, tempo, quickwit, or your own.
+- **Registry** is the published index (`registry.yaml`) of available providers. `mgtt provider install` pulls a provider from the registry (git or image) into `$MGTT_HOME/providers/` where the runtime discovers it.
+- **System under test** is the real thing — the pods, databases, load balancers your model claims to describe. The adapters touch it; mgtt core never does.
+
+Facts flow engine → adapter → SUT → adapter → engine. Operators (human or LLM) talk to mgtt core via the CLI or the MCP server, never directly to adapters or the SUT.
+
 ## On this page
 
+- [Architecture at a glance](#architecture-at-a-glance) — mgtt core, adapters, registry, system under test
 - [The three artifacts](#the-three-artifacts) — model, facts, providers
 - [The constraint engine](#the-constraint-engine) — how reasoning narrows the search
 - [Two modes, same model](#two-modes-same-model) — design-time vs runtime

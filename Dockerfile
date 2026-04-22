@@ -12,6 +12,8 @@ RUN apk add --no-cache ca-certificates git bash
 RUN adduser -D -h /home/mgtt mgtt
 COPY --from=builder /mgtt /usr/local/bin/mgtt
 ENV MGTT_HOME=/data
+# MCP sidecar default port. Override with `mgtt mcp serve --listen :PORT`.
+EXPOSE 8080
 USER mgtt
 WORKDIR /workspace
 ENTRYPOINT ["mgtt"]

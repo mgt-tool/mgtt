@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -28,15 +29,32 @@ type Config struct {
 // Run boots the MCP server with the given config. Blocks until the
 // transport closes (stdin EOF for stdio, SIGINT for HTTP).
 func Run(cfg Config) error {
-	h := NewHandler(cfg)
-	s := server.NewMCPServer("mgtt", cfg.Version)
-
-	registerAbout(s, h)
-
+	s, _ := buildServer(cfg)
 	if cfg.HTTP {
 		return runHTTP(s, cfg)
 	}
 	return server.ServeStdio(s)
+}
+
+// buildServer wires the handler and registers every tool. Exposed as a
+// package-internal helper so the in-process client tests can drive the
+// exact same server Run would expose on a transport.
+func buildServer(cfg Config) (*server.MCPServer, *Handler) {
+	h := NewHandler(cfg)
+	s := server.NewMCPServer("mgtt", cfg.Version)
+
+	registerAbout(s, h)
+	registerIncidentStart(s, h)
+	registerIncidentEnd(s, h)
+	registerFactAdd(s, h)
+	registerFactsList(s, h)
+	registerPlan(s, h)
+	registerProbe(s, h)
+	registerScenariosList(s, h)
+	registerScenariosAlive(s, h)
+	registerIncidentSnapshot(s, h)
+
+	return s, h
 }
 
 func registerAbout(s *server.MCPServer, h *Handler) {
@@ -56,6 +74,243 @@ func registerAbout(s *server.MCPServer, h *Handler) {
 	})
 }
 
-func runHTTP(_ *server.MCPServer, _ Config) error {
-	return fmt.Errorf("http transport not yet implemented") // Task 3
+func registerIncidentStart(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("incident.start",
+		mcpgo.WithDescription("Create a new incident bound to a model. Returns incident_id for subsequent tool calls."),
+		mcpgo.WithString("model_ref",
+			mcpgo.Required(),
+			mcpgo.Description("path to system.model.yaml the server can read"),
+		),
+		mcpgo.WithString("id",
+			mcpgo.Description("optional incident id; generated if omitted"),
+		),
+		mcpgo.WithArray("suspect",
+			mcpgo.Description(`optional component.state hints, e.g. ["api.crash_looping"]`),
+		),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		var p IncidentStartParams
+		p.ModelRef = req.GetString("model_ref", "")
+		p.ID = req.GetString("id", "")
+		if raw := req.GetStringSlice("suspect", nil); raw != nil {
+			p.Suspect = raw
+		}
+		result, err := h.IncidentStart(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("incident.start: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerIncidentEnd(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("incident.end",
+		mcpgo.WithDescription("Close an incident. Persists the end timestamp and optional verdict; returns saved=true on success."),
+		mcpgo.WithString("incident_id",
+			mcpgo.Required(),
+			mcpgo.Description("id returned by incident.start"),
+		),
+		mcpgo.WithString("verdict",
+			mcpgo.Description("optional human or agent note recording the conclusion"),
+		),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		p := IncidentEndParams{
+			IncidentID: req.GetString("incident_id", ""),
+			Verdict:    req.GetString("verdict", ""),
+		}
+		result, err := h.IncidentEnd(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("incident.end: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerFactAdd(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("fact.add",
+		mcpgo.WithDescription("Append an observation to an incident's fact store."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+		mcpgo.WithString("component", mcpgo.Required()),
+		mcpgo.WithString("key", mcpgo.Required()),
+		// value intentionally untyped — any JSON primitive or string is fine.
+		mcpgo.WithString("note", mcpgo.Description("optional note on provenance")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		args := req.GetArguments()
+		p := FactAddParams{
+			IncidentID: stringArg(args, "incident_id"),
+			Component:  stringArg(args, "component"),
+			Key:        stringArg(args, "key"),
+			Value:      args["value"],
+			Note:       stringArg(args, "note"),
+		}
+		result, err := h.FactAdd(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("fact.add: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerFactsList(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("facts.list",
+		mcpgo.WithDescription("List facts recorded for an incident, optionally filtered to one component."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+		mcpgo.WithString("component", mcpgo.Description("optional component filter")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		p := FactsListParams{
+			IncidentID: req.GetString("incident_id", ""),
+			Component:  req.GetString("component", ""),
+		}
+		result, err := h.FactsList(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("facts.list: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerPlan(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("plan",
+		mcpgo.WithDescription("Compute the current path tree for an incident and suggest the next probe. Does not execute anything."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+		mcpgo.WithString("component", mcpgo.Description("optional entry point override")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		p := PlanParams{
+			IncidentID: req.GetString("incident_id", ""),
+			Component:  req.GetString("component", ""),
+		}
+		result, err := h.Plan(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("plan: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerProbe(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("probe",
+		mcpgo.WithDescription("Render or execute the engine's next suggested probe. execute=false is read-only (rendered command, no system touch); execute=true runs it and appends the resulting fact."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+		mcpgo.WithString("component", mcpgo.Description("optional entry-point override")),
+		mcpgo.WithBoolean("execute", mcpgo.Required(),
+			mcpgo.Description("when false the probe is rendered but not run")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		p := ProbeParams{
+			IncidentID: req.GetString("incident_id", ""),
+			Component:  req.GetString("component", ""),
+			Execute:    req.GetBool("execute", false),
+		}
+		result, err := h.Probe(p)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("probe: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerScenariosList(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("scenarios.list",
+		mcpgo.WithDescription("Enumerate every failure chain the engine considers for this incident's model."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		result, err := h.ScenariosList(ScenariosListParams{IncidentID: req.GetString("incident_id", "")})
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("scenarios.list: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerScenariosAlive(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("scenarios.alive",
+		mcpgo.WithDescription("Subset of enumerated scenarios still consistent with the incident's facts."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		result, err := h.ScenariosAlive(ScenariosAliveParams{IncidentID: req.GetString("incident_id", "")})
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("scenarios.alive: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+func registerIncidentSnapshot(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("incident.snapshot",
+		mcpgo.WithDescription("Export an incident's full diagnostic memory — surviving and eliminated scenarios, facts, current suggestion, status."),
+		mcpgo.WithString("incident_id", mcpgo.Required()),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		result, err := h.IncidentSnapshot(IncidentSnapshotParams{IncidentID: req.GetString("incident_id", "")})
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("incident.snapshot: marshal result: %w", err)
+		}
+		return mcpgo.NewToolResultText(string(body)), nil
+	})
+}
+
+// stringArg extracts a string from the raw arguments map. Missing or
+// non-string values return "" — handler methods validate required fields.
+func stringArg(args map[string]any, key string) string {
+	if v, ok := args[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func runHTTP(s *server.MCPServer, cfg Config) error {
+	token, err := resolveToken(cfg)
+	if err != nil {
+		return err
+	}
+	streamable := server.NewStreamableHTTPServer(s)
+	authed := withBearerAuth(token, streamable)
+	addr := cfg.Listen
+	if addr == "" {
+		addr = ":8080"
+	}
+	httpSrv := &http.Server{Addr: addr, Handler: authed}
+	return httpSrv.ListenAndServe()
 }

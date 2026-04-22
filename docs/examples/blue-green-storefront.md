@@ -179,6 +179,11 @@ components:
 
   cloudfront:
     type: cloudfront_distribution
+    # Strictly redundant — `cloudfront_distribution` only lives in the
+    # aws provider, so mgtt would resolve it from meta.providers without
+    # this line. Kept for self-documentation: the aws-vs-k8s split stays
+    # obvious at a glance, and the version pin survives even if a future
+    # provider happens to introduce a clashing type name.
     providers: [mgt-tool/aws@^1.0.0]
     resource: EABCDEF123456X
     depends:

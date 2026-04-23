@@ -141,14 +141,17 @@ components:
   opensearch:
     type: deployment
     # `healthy:` is a list of boolean rules. Each has the form
-    # `<fact> <op> <value>` with `<op>` in `== != < > <= >=`. Fact
-    # names (`ready_replicas` here) come from the type's probes — the
-    # `deployment` type is owned by the kubernetes provider. All rules
-    # must hold for the component to count as healthy; missing facts
-    # are treated as "don't know" and skipped rather than failed. A
-    # component-level `healthy:` REPLACES the type default outright
-    # (it does not merge) — see the override notes below for why we
-    # override for opensearch, rds, redis, and mq.
+    # `[<component>.]<fact> <op> <value>` with `<op>` in
+    # `== != < > <= >=`. The `<component>.` prefix is optional —
+    # omit it to reference this component's own fact (what we're
+    # doing with `ready_replicas` here), or include it to reach
+    # across (e.g. `redis.available == true`). Fact names come from
+    # the type's probes — `deployment` is owned by the kubernetes
+    # provider. All rules must hold for the component to count as
+    # healthy; missing facts are treated as "don't know" and skipped
+    # rather than failed. A component-level `healthy:` REPLACES the
+    # type default outright (it does not merge) — see the override
+    # notes below for why we override for opensearch, rds, redis, mq.
     healthy:
       - ready_replicas >= 1
 

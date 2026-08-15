@@ -1,0 +1,32 @@
+; minishop.claims — the questions, kept beside the model.
+;
+; Read by `writ check --claims`, and by `writ query` as a sibling file named
+; after the model (so this must sit next to the generated minishop.writ).
+;
+; ACKNOWLEDGEMENTS. `check` lists, for each law, the moves that write a fact
+; the law reads — whether or not they break it today. Accepting one says "I
+; know this move touches this law, and I have thought about it." Two findings
+; fall out of that, and both cost exit 1:
+;
+;   undeclared — a move that can break a law and was never accepted. Usually
+;                a move you just added, or a law you just widened.
+;   stale      — a move accepted against a law it cannot touch. Usually a law
+;                that was narrowed and an acknowledgement nobody removed.
+;
+; This is drift detection for the model's own edit history, and it is why the
+; acknowledgements are worth keeping in the repository rather than passing
+; --strict and moving on.
+
+(accept store-fails-saturated datastore-health-matches-state)
+(accept store-fails-stopped   datastore-health-matches-state)
+
+(accept api-fails-down                    service-health-matches-state)
+(accept store-saturated-triggers-api-down service-health-matches-state)
+(accept store-stopped-triggers-api-down   service-health-matches-state)
+
+; Which stores have an exhausted connection pool, in whichever situation the
+; query is asked at. `writ query minishop.writ saturated-stores --at 2`.
+(query saturated-stores
+  (where (s datastore))
+  (and (is s.available yes)
+       (is s.connection-count at-or-above-500)))

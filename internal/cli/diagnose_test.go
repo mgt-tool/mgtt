@@ -1,0 +1,776 @@
+// Copyright (C) 2026 Alex Kunich
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package cli
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mgt-tool/mgtt/internal/engine/strategy"
+	"github.com/mgt-tool/mgtt/internal/expr"
+	"github.com/mgt-tool/mgtt/internal/facts"
+	"github.com/mgt-tool/mgtt/internal/model"
+	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
+	"github.com/mgt-tool/mgtt/internal/scenarios"
+
+	"github.com/spf13/cobra"
+)
+
+// stubProbeRunner serves canned fact values for (component, fact) pairs.
+// Any probe not in values returns an error so tests fail loud on unexpected
+// probe paths.
+type stubProbeRunner struct {
+	values map[string]any // "comp.fact" → value
+	delays map[string]time.Duration
+	calls  []string // ordered list of "comp.fact" actually probed
+}
+
+func (s *stubProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *facts.Store) (string, error) {
+	key := p.Component + "." + p.Fact
+	s.calls = append(s.calls, key)
+	if d, ok := s.delays[key]; ok {
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+	val, ok := s.values[key]
+	if !ok {
+		return "", fmt.Errorf("stub: no canned value for %s", key)
+	}
+	store.Append(p.Component, facts.Fact{
+		Key:   p.Fact,
+		Value: val,
+		At:    time.Now(),
+	})
+	return fmt.Sprintf("%s = %v", key, val), nil
+}
+
+// diagnoseFixture constructs a two-component model (api → db) with a
+// status fact per component, plus the matching registry.
+func diagnoseFixture(t *testing.T) (*model.Model, *providersupport.Registry) {
+	t.Helper()
+	mkType := func(name string) *providersupport.Type {
+		return &providersupport.Type{
+			Name: name,
+			Facts: map[string]*providersupport.FactSpec{
+				"status": {Probe: providersupport.ProbeDef{Cmd: name + "-status", Cost: "cheap", Access: "read"}},
+			},
+			States: []providersupport.StateDef{
+				{Name: "down", When: expr.CmpNode{Fact: "status", Op: expr.OpEq, Value: "down"}},
+			},
+		}
+	}
+	prov := &providersupport.Provider{
+		Meta:     providersupport.ProviderMeta{Name: "p"},
+		Types:    map[string]*providersupport.Type{"api": mkType("api"), "db": mkType("db")},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(prov)
+
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"p"}},
+		Components: map[string]*model.Component{
+			"api": {Name: "api", Type: "api", Depends: []model.Dependency{{On: []string{"db"}}}},
+			"db":  {Name: "db", Type: "db"},
+		},
+		Order: []string{"api", "db"},
+	}
+	m.BuildGraph()
+	return m, reg
+}
+
+// withLoader installs a one-shot loader for the duration of the test.
+func withLoader(t *testing.T, m *model.Model, reg *providersupport.Registry, scs []scenarios.Scenario) {
+	t.Helper()
+	prev := diagnoseLoader
+	diagnoseLoader = func(_ string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error) {
+		return m, reg, scs, nil
+	}
+	t.Cleanup(func() { diagnoseLoader = prev })
+}
+
+// withRunner installs a one-shot probe runner for the duration of the test.
+func withRunner(t *testing.T, r probeRunner) {
+	t.Helper()
+	prev := newProbeRunner
+	newProbeRunner = func(_ *providersupport.Registry) (probeRunner, error) {
+		return r, nil
+	}
+	t.Cleanup(func() { newProbeRunner = prev })
+}
+
+// withStdin redirects diagnose's prompt reader for the duration of the test.
+func withStdin(t *testing.T, r io.Reader) {
+	t.Helper()
+	prev := diagnoseStdin
+	diagnoseStdin = r
+	t.Cleanup(func() { diagnoseStdin = prev })
+}
+
+// runDiagnoseCaptured invokes runDiagnose against a buffer-backed cobra
+// command so tests can inspect the emitted output without touching
+// rootCmd state.
+func runDiagnoseCaptured(t *testing.T, f diagnoseFlags) (string, error) {
+	t.Helper()
+	cmd := &cobra.Command{Use: "diagnose"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+	err := runDiagnose(cmd, f)
+	return buf.String(), err
+}
+
+func TestDiagnose_Done(t *testing.T) {
+	m, reg := diagnoseFixtureMultiState(t)
+	// Two scenarios, both terminal at api but with different root states.
+	// The first probe on api.status collapses the live set by confirming
+	// "down" (eliminating the degraded-rooted scenario).
+	scs := []scenarios.Scenario{
+		{
+			ID:   "api-down",
+			Root: scenarios.RootRef{Component: "api", State: "down"},
+			Chain: []scenarios.Step{
+				{Component: "api", State: "down", Observes: []string{"status"}},
+			},
+		},
+		{
+			ID:   "api-degraded",
+			Root: scenarios.RootRef{Component: "api", State: "degraded"},
+			Chain: []scenarios.Step{
+				{Component: "api", State: "degraded", Observes: []string{"status"}},
+			},
+		},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{
+		"api.status": "down", // confirms api.down; contradicts api.degraded
+	}})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 10, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "Root cause: api") {
+		t.Errorf("want 'Root cause: api' in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Scenario:") {
+		t.Errorf("want scenario line; got:\n%s", out)
+	}
+}
+
+// diagnoseFixtureMultiState is a variant where "api" has two distinct
+// non-default states (down, degraded) so tests can force a live-set
+// collapse on a single probe.
+func diagnoseFixtureMultiState(t *testing.T) (*model.Model, *providersupport.Registry) {
+	t.Helper()
+	apiType := &providersupport.Type{
+		Name: "api",
+		Facts: map[string]*providersupport.FactSpec{
+			"status": {Probe: providersupport.ProbeDef{Cmd: "api-status", Cost: "cheap", Access: "read"}},
+		},
+		States: []providersupport.StateDef{
+			{Name: "down", When: expr.CmpNode{Fact: "status", Op: expr.OpEq, Value: "down"}},
+			{Name: "degraded", When: expr.CmpNode{Fact: "status", Op: expr.OpEq, Value: "degraded"}},
+		},
+	}
+	prov := &providersupport.Provider{
+		Meta:     providersupport.ProviderMeta{Name: "p"},
+		Types:    map[string]*providersupport.Type{"api": apiType},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(prov)
+
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"p"}},
+		Components: map[string]*model.Component{
+			"api": {Name: "api", Type: "api"},
+		},
+		Order: []string{"api"},
+	}
+	m.BuildGraph()
+	return m, reg
+}
+
+func TestDiagnose_Stuck(t *testing.T) {
+	m, reg := diagnoseFixtureMultiState(t)
+	// Two scenarios so occam actually suggests probes; the single probe
+	// returns "up" which contradicts both down and degraded → live set
+	// collapses to zero.
+	scs := []scenarios.Scenario{
+		{
+			ID:   "api-down",
+			Root: scenarios.RootRef{Component: "api", State: "down"},
+			Chain: []scenarios.Step{
+				{Component: "api", State: "down", Observes: []string{"status"}},
+			},
+		},
+		{
+			ID:   "api-degraded",
+			Root: scenarios.RootRef{Component: "api", State: "degraded"},
+			Chain: []scenarios.Step{
+				{Component: "api", State: "degraded", Observes: []string{"status"}},
+			},
+		},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{
+		"api.status": "up", // contradicts both "down" and "degraded"
+	}})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 10, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "No matching scenario") {
+		t.Errorf("want 'No matching scenario' in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "model gap") {
+		t.Errorf("want 'model gap' in output; got:\n%s", out)
+	}
+}
+
+func TestDiagnose_BudgetExhausted(t *testing.T) {
+	m, reg := diagnoseFixture(t)
+	// Three scenarios that all stay live under the facts we'll feed.
+	// The loop should keep probing until max-probes hits.
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "api", State: "down"}, Chain: []scenarios.Step{{Component: "api", State: "down", Observes: []string{"status"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "db", State: "down"}, Chain: []scenarios.Step{{Component: "db", State: "down"}, {Component: "api", State: "down", Observes: []string{"status"}}}},
+		{ID: "s3", Root: scenarios.RootRef{Component: "db", State: "down"}, Chain: []scenarios.Step{{Component: "db", State: "down", Observes: []string{"status"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	// Both probes return "down" so nothing gets eliminated.
+	withRunner(t, &stubProbeRunner{values: map[string]any{
+		"api.status": "down",
+		"db.status":  "down",
+	}})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 2, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "budget exhausted") {
+		t.Errorf("want 'budget exhausted' in output; got:\n%s", out)
+	}
+}
+
+func TestDiagnose_DeadlineExceeded(t *testing.T) {
+	m, reg := diagnoseFixture(t)
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "api", State: "down"}, Chain: []scenarios.Step{{Component: "api", State: "down", Observes: []string{"status"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "db", State: "down"}, Chain: []scenarios.Step{{Component: "db", State: "down"}, {Component: "api", State: "down", Observes: []string{"status"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	// Make the first probe sleep past the deadline.
+	withRunner(t, &stubProbeRunner{
+		values: map[string]any{"api.status": "down", "db.status": "down"},
+		delays: map[string]time.Duration{"api.status": 200 * time.Millisecond},
+	})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 10, deadline: 50 * time.Millisecond, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "deadline exceeded") {
+		t.Errorf("want 'deadline exceeded' in output; got:\n%s", out)
+	}
+}
+
+func TestDiagnose_WritePauseTriggered(t *testing.T) {
+	// Custom fixture where the provider is NOT read-only.
+	writeProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "wp"},
+		Types: map[string]*providersupport.Type{
+			"api": {
+				Name: "api",
+				Facts: map[string]*providersupport.FactSpec{
+					"status": {Probe: providersupport.ProbeDef{Cmd: "api-status", Cost: "high", Access: "write"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "status", Op: expr.OpEq, Value: "down"}},
+				},
+			},
+		},
+		ReadOnly: false,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(writeProv)
+
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"wp"}},
+		Components: map[string]*model.Component{
+			"api": {Name: "api", Type: "api"},
+		},
+		Order: []string{"api"},
+	}
+	m.BuildGraph()
+
+	scs := []scenarios.Scenario{
+		// Two scenarios keep the set live so occam actually suggests a probe.
+		{ID: "s1", Root: scenarios.RootRef{Component: "api", State: "down"}, Chain: []scenarios.Step{{Component: "api", State: "down", Observes: []string{"status"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "api", State: "down"}, Chain: []scenarios.Step{{Component: "api", State: "down", Observes: []string{"status"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	// Runner shouldn't be called — pause gates the write probe first. If
+	// it is called we surface a loud error.
+	withRunner(t, &stubProbeRunner{values: map[string]any{}})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 10, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "pause") {
+		t.Errorf("want 'pause' in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "requires writes") {
+		t.Errorf("want 'requires writes' in output; got:\n%s", out)
+	}
+}
+
+func TestDiagnose_GenericComponentPrompt(t *testing.T) {
+	// Fixture with two components: a "widget" backed by the generic
+	// provider, and a "db" backed by a normal provider. Two scenarios
+	// force occam to suggest a probe — the widget-targeted one triggers
+	// the operator prompt.
+	genericProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "generic"},
+		Types: map[string]*providersupport.Type{
+			"thing": {
+				Name: "thing",
+				Facts: map[string]*providersupport.FactSpec{
+					"operator_says_healthy": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "free", Access: "none"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "operator_says_healthy", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	normalProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "np"},
+		Types: map[string]*providersupport.Type{
+			"db": {
+				Name: "db",
+				Facts: map[string]*providersupport.FactSpec{
+					"status": {Probe: providersupport.ProbeDef{Cmd: "db-status", Cost: "cheap", Access: "read"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "status", Op: expr.OpEq, Value: "down"}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(genericProv)
+	reg.Register(normalProv)
+
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"generic", "np"}},
+		Components: map[string]*model.Component{
+			"widget": {Name: "widget", Type: "thing"},
+			"db":     {Name: "db", Type: "db"},
+		},
+		Order: []string{"widget", "db"},
+	}
+	m.BuildGraph()
+
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "db", State: "down"}, Chain: []scenarios.Step{{Component: "db", State: "down", Observes: []string{"status"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	// Runner might be called for the db scenario; return "down" so db.down
+	// stays live and the loop eventually budgets out after the generic
+	// prompt fires.
+	withRunner(t, &stubProbeRunner{values: map[string]any{"db.status": "down"}})
+
+	// Feed multiple "n" answers in case the prompt fires more than once.
+	withStdin(t, strings.NewReader("n\nn\nn\n"))
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 3, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
+	}
+	if !strings.Contains(out, "Is 'widget' healthy?") {
+		t.Errorf("want prompt in output; got:\n%s", out)
+	}
+	// The operator-answer trail line must appear in the final report.
+	if !strings.Contains(out, "operator-answered: n") {
+		t.Errorf("want 'operator-answered: n' in trail; got:\n%s", out)
+	}
+}
+
+// TestDiagnose_EOFStdinRecordsSkipMarker verifies that when stdin
+// delivers EOF before any answer, the generic-component prompt loop
+// bails out with a partial report instead of spinning on empty reads
+// until --max-probes is exhausted. The skip-marker fact is recorded so
+// pickSymptomInward doesn't re-select the same step in the same loop
+// iteration set.
+func TestDiagnose_EOFStdinRecordsSkipMarker(t *testing.T) {
+	genericProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "generic"},
+		Types: map[string]*providersupport.Type{
+			"thing": {
+				Name: "thing",
+				Facts: map[string]*providersupport.FactSpec{
+					"operator_says_healthy": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "free", Access: "none"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "operator_says_healthy", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(genericProv)
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"generic"}},
+		Components: map[string]*model.Component{
+			"widget": {Name: "widget", Type: "thing"},
+		},
+		Order: []string{"widget"},
+	}
+	m.BuildGraph()
+
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+		{ID: "s2", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{}})
+	// Empty reader → immediate EOF.
+	withStdin(t, strings.NewReader(""))
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 20, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("EOF must not error; got %v\nout:\n%s", err, out)
+	}
+	if !strings.Contains(out, "stdin closed") {
+		t.Errorf("want 'stdin closed' in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Stopped:") {
+		t.Errorf("want 'Stopped:' in output; got:\n%s", out)
+	}
+}
+
+// TestDiagnose_NonTTYStdinRejectedForGeneric verifies diagnose fails fast
+// when the model has generic components AND stdin is a real non-TTY
+// file. Using /dev/null here simulates the redirect-from-file case.
+func TestDiagnose_NonTTYStdinRejectedForGeneric(t *testing.T) {
+	genericProv := &providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "generic"},
+		Types: map[string]*providersupport.Type{
+			"thing": {
+				Name: "thing",
+				Facts: map[string]*providersupport.FactSpec{
+					"operator_says_healthy": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "free", Access: "none"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "down", When: expr.CmpNode{Fact: "operator_says_healthy", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+		ReadOnly: true,
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(genericProv)
+	m := &model.Model{
+		Meta: model.Meta{Providers: []string{"generic"}},
+		Components: map[string]*model.Component{
+			"widget": {Name: "widget", Type: "thing"},
+		},
+		Order: []string{"widget"},
+	}
+	m.BuildGraph()
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{}})
+
+	devnull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("no %s on this platform: %v", os.DevNull, err)
+	}
+	t.Cleanup(func() { devnull.Close() })
+	withStdin(t, devnull)
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 20, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err == nil {
+		t.Fatalf("non-TTY stdin + generic must error fast; got nil\nout:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Errorf("error should explain the TTY requirement; got %v", err)
+	}
+}
+
+// TestDiagnose_ParseSuspectHints spot-checks the hint parser.
+// TestShellProbeRunner_ForwardsTypeAndVars is the regression guard for the
+// bug where diagnose built probe.Command without Type or Vars — the
+// provider binary rejected with "unknown type \"\"" and {key}
+// placeholders in commands never expanded.
+//
+// End-to-end: build a strategy.Probe as the engine would (Type + Vars
+// populated by the Occam/BFS constructors), feed it through the real
+// shellProbeRunner, and capture the probe.Command the runner hands to
+// the Executor. Assert Type is forwarded, Vars is forwarded, AND the
+// Raw command has had its {namespace} placeholder expanded from Vars.
+func TestShellProbeRunner_ForwardsTypeAndVars(t *testing.T) {
+	var captured probe.Command
+	captor := capturingExecutor{
+		capture: &captured,
+		result:  probe.Result{Raw: "3", Parsed: int64(3), Status: probe.StatusOk},
+	}
+	runner := &shellProbeRunner{
+		exec: captor,
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+
+	p := &strategy.Probe{
+		Component: "api",
+		Fact:      "ready_replicas",
+		Provider:  "kubernetes",
+		Type:      "deployment",
+		Command:   "kubectl -n {namespace} get deployment api -o json",
+		ParseMode: "int",
+		Vars:      map[string]string{"namespace": "prod"},
+	}
+
+	out, err := runner.Run(context.Background(), p, store)
+	if err != nil {
+		t.Fatalf("runner.Run: %v", err)
+	}
+	if !strings.Contains(out, "api.ready_replicas") {
+		t.Errorf("expected output to mention probe key; got %q", out)
+	}
+
+	// The runner must forward Type to the Executor; buildArgs drops
+	// --type otherwise and the provider binary rejects.
+	if captured.Type != "deployment" {
+		t.Errorf("Command.Type = %q, want \"deployment\" (regression: forgot to forward)", captured.Type)
+	}
+	// Vars must be forwarded for runner backends that re-expand at
+	// probe time (not just substituted into Raw).
+	if got := captured.Vars["namespace"]; got != "prod" {
+		t.Errorf("Command.Vars[\"namespace\"] = %q, want \"prod\"", got)
+	}
+	// Substitute must see the Vars so {namespace} expands in Raw.
+	// Nil Vars was the other half of the same bug.
+	if !strings.Contains(captured.Raw, "-n prod ") {
+		t.Errorf("Raw should have {namespace} expanded to 'prod'; got %q", captured.Raw)
+	}
+	// Sanity: the trivial identity fields were already correct before
+	// the fix — include them so a future rewrite can't silently drop
+	// the whole payload.
+	if captured.Component != "api" || captured.Fact != "ready_replicas" || captured.Provider != "kubernetes" {
+		t.Errorf("unexpected identity fields: %+v", captured)
+	}
+
+	// And the collected fact must land in the store.
+	if f := store.Latest("api", "ready_replicas"); f == nil || f.Value != int64(3) {
+		t.Errorf("expected store.Latest(api, ready_replicas) = 3; got %+v", f)
+	}
+}
+
+type capturingExecutor struct {
+	capture *probe.Command
+	result  probe.Result
+}
+
+func (c capturingExecutor) Run(_ context.Context, cmd probe.Command) (probe.Result, error) {
+	*c.capture = cmd
+	return c.result, nil
+}
+
+// stubExecutor returns a preconfigured error (and/or result) for every
+// Run call. Used to exercise the runner's error-handling branches
+// without a real provider binary.
+type stubExecutor struct {
+	err    error
+	result probe.Result
+}
+
+func (s stubExecutor) Run(_ context.Context, _ probe.Command) (probe.Result, error) {
+	return s.result, s.err
+}
+
+// Forbidden errors from the provider runner must be recorded as an
+// unresolved fact (Status=Forbidden, Value=nil) and returned as a
+// soft "<forbidden>" outcome — not propagated up the diagnose loop
+// as a hard error. Regression-locks the mgtt-core fix for CI-role
+// RBAC holes that used to abort the whole diagnose run.
+func TestShellProbeRunner_ForbiddenIsUnresolvedNotFatal(t *testing.T) {
+	runner := &shellProbeRunner{
+		exec: stubExecutor{err: fmt.Errorf("%w: customresourcedefinitions is forbidden", probe.ErrForbidden)},
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+	p := &strategy.Probe{Component: "eso", Fact: "crd_registered", ParseMode: "bool"}
+
+	out, err := runner.Run(context.Background(), p, store)
+	if err != nil {
+		t.Fatalf("runner.Run must not propagate ErrForbidden; got %v", err)
+	}
+	if !strings.Contains(out, "<forbidden>") {
+		t.Errorf("outcome should mark forbidden explicitly; got %q", out)
+	}
+	f := store.Latest("eso", "crd_registered")
+	if f == nil {
+		t.Fatal("forbidden probe must still append a fact (unresolved marker) so the strategy doesn't re-probe it")
+	}
+	if f.Status != facts.FactStatusForbidden {
+		t.Errorf("Status = %q, want FactStatusForbidden", f.Status)
+	}
+	if f.Value != nil {
+		t.Errorf("Value must be nil so the expr layer treats this as UnresolvedError; got %v", f.Value)
+	}
+}
+
+// Transient errors (throttling, timeout) follow the same soft-fail
+// path as forbidden.
+func TestShellProbeRunner_TransientIsUnresolvedNotFatal(t *testing.T) {
+	runner := &shellProbeRunner{
+		exec: stubExecutor{err: fmt.Errorf("%w: throttled", probe.ErrTransient)},
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+	p := &strategy.Probe{Component: "rds", Fact: "available", ParseMode: "bool"}
+
+	_, err := runner.Run(context.Background(), p, store)
+	if err != nil {
+		t.Fatalf("runner.Run must not propagate ErrTransient; got %v", err)
+	}
+	if f := store.Latest("rds", "available"); f == nil || f.Status != facts.FactStatusTransient {
+		t.Errorf("Status = %v, want FactStatusTransient (regression: transient should be soft)", f)
+	}
+}
+
+// Usage errors (and other non-recoverable categories) must still
+// propagate — they indicate a bug or misconfiguration the operator
+// needs to see, not a partial-visibility case.
+func TestShellProbeRunner_UsageErrorStillFatal(t *testing.T) {
+	runner := &shellProbeRunner{
+		exec: stubExecutor{err: fmt.Errorf("%w: missing --type", probe.ErrUsage)},
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+	p := &strategy.Probe{Component: "x", Fact: "y", ParseMode: "bool"}
+
+	_, err := runner.Run(context.Background(), p, store)
+	if err == nil {
+		t.Fatal("Usage errors must propagate so the caller aborts — partial visibility would hide a real bug")
+	}
+}
+
+func TestDiagnose_ParseSuspectHints(t *testing.T) {
+	got := parseSuspectHints([]string{"api", "db.down", "", "  "})
+	if len(got) != 2 {
+		t.Fatalf("want 2 hints; got %d (%+v)", len(got), got)
+	}
+	if got[0] != (strategy.SuspectHint{Component: "api"}) {
+		t.Errorf("hint[0]: want {api,\"\"}; got %+v", got[0])
+	}
+	if got[1] != (strategy.SuspectHint{Component: "db", State: "down"}) {
+		t.Errorf("hint[1]: want {db,down}; got %+v", got[1])
+	}
+}
+
+// TestDiagnose_TrailShowsResourceWhenDiffers — when a component has
+// a resource override (Component.Resource != Component.Name), the
+// diagnose trail names the resource alongside the component. At 3am
+// the operator needs to know which AWS resource is being probed, not
+// just the mgtt component key.
+func TestDiagnose_TrailShowsResourceWhenDiffers(t *testing.T) {
+	m := &model.Model{
+		Meta: model.Meta{Name: "r", Version: "1.0", Providers: []string{"aws"}},
+		Components: map[string]*model.Component{
+			"rds": {Name: "rds", Type: "rds_instance", Resource: "flowers-stage-rds"},
+		},
+		Order: []string{"rds"},
+	}
+	m.BuildGraph()
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "aws"},
+		Types: map[string]*providersupport.Type{
+			"rds_instance": {
+				Name: "rds_instance",
+				Facts: map[string]*providersupport.FactSpec{
+					"available": {Probe: providersupport.ProbeDef{Cmd: "", Cost: "low", Access: "read"}},
+				},
+				States: []providersupport.StateDef{
+					{Name: "stopped", When: expr.CmpNode{Fact: "available", Op: expr.OpEq, Value: false}},
+				},
+			},
+		},
+	})
+	scs := []scenarios.Scenario{
+		{ID: "s1", Root: scenarios.RootRef{Component: "rds", State: "stopped"}, Chain: []scenarios.Step{{Component: "rds", State: "stopped", Observes: []string{"available"}}}},
+	}
+	withLoader(t, m, reg, scs)
+	withRunner(t, &stubProbeRunner{values: map[string]any{"rds.available": true}})
+
+	out, err := runDiagnoseCaptured(t, diagnoseFlags{maxProbes: 5, deadline: 5 * time.Second, onWrite: "pause", readonlyOnly: true})
+	if err != nil {
+		t.Fatalf("diagnose: %v\n%s", err, out)
+	}
+	// Trail should mention both the component key "rds" and the
+	// resource "flowers-stage-rds" on the same line (or near it).
+	if !strings.Contains(out, "flowers-stage-rds") {
+		t.Errorf("trail should name the resource; got:\n%s", out)
+	}
+	if !strings.Contains(out, "rds") {
+		t.Errorf("trail should also name the component; got:\n%s", out)
+	}
+}
+
+// TestShellProbeRunner_ForwardsResource — regression guard for the
+// Resource field. When the strategy-supplied Probe carries Resource,
+// shellProbeRunner must copy it into probe.Command so buildArgs sends
+// the right --name to the provider binary.
+func TestShellProbeRunner_ForwardsResource(t *testing.T) {
+	var captured probe.Command
+	captor := capturingExecutor{
+		capture: &captured,
+		result:  probe.Result{Raw: "true", Parsed: true, Status: probe.StatusOk},
+	}
+	runner := &shellProbeRunner{
+		exec: captor,
+		reg:  providersupport.NewRegistry(),
+	}
+	store := facts.NewInMemory()
+
+	p := &strategy.Probe{
+		Component: "rds",
+		Fact:      "available",
+		Provider:  "aws",
+		Type:      "rds_instance",
+		Resource:  "flowers-magento-stage-rds",
+		Command:   "aws rds describe-db-instances --db-instance-identifier {component}",
+		ParseMode: "bool",
+	}
+
+	if _, err := runner.Run(context.Background(), p, store); err != nil {
+		t.Fatalf("runner.Run: %v", err)
+	}
+	if captured.Resource != "flowers-magento-stage-rds" {
+		t.Errorf("Command.Resource = %q, want %q", captured.Resource, "flowers-magento-stage-rds")
+	}
+}

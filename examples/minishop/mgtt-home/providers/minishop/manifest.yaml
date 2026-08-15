@@ -1,0 +1,13 @@
+meta:
+  name: minishop
+  version: 0.1.0
+  description: >-
+    Minimal fictional provider for the verification example. Two types, three
+    facts between them. Does NOT represent any real backend — the probe
+    commands are illustrative and are never run by verification, which is a
+    design-time operation over the model alone.
+
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh

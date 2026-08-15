@@ -1,0 +1,103 @@
+# Blue/green storefront — mgtt model diagram for docs/examples/blue-green-storefront.md
+# Source of truth. Render with:
+#   d2 --scale 1.25 docs/images/blue-green-storefront.d2 docs/images/blue-green-storefront.svg
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    pad: 40
+    theme-id: 200
+  }
+}
+
+direction: down
+
+classes: {
+  flow: {
+    style.font-size: 26
+    style.stroke-width: 2
+    style.bold: true
+  }
+  sidenote: {
+    style.font-size: 22
+    style.stroke-dash: 3
+    style.italic: true
+  }
+}
+
+# ---- public edge ------------------------------------------------------
+cf: "Cloudflare CDN"
+alb: "ALB — live"
+svc: "acme-shop-svc\nselector: color=blue"
+
+# ---- stateless tiers (per color) --------------------------------------
+blue: "blue" {
+  nb: "nginx-blue"
+  pb: "php-fpm-blue"
+  cb: "consumer-blue"
+  nb -> pb
+}
+
+green: "green" {
+  ng: "nginx-green"
+  pg: "php-fpm-green"
+  cg: "consumer-green"
+  ng -> pg
+}
+
+# ---- singletons -------------------------------------------------------
+cron: "cron"
+eso: "external-secrets\noperator"
+ssm: "SSM parameter" { shape: cylinder }
+
+# ---- shared data layer (color-agnostic) -------------------------------
+data: "shared data layer" {
+  rds: "RDS MySQL" { shape: cylinder }
+  redis: "ElastiCache" { shape: cylinder }
+  mq: "AmazonMQ — RabbitMQ" { shape: cylinder }
+  os: "OpenSearch" { shape: cylinder }
+  s3: "S3 media" { shape: cylinder }
+  cfm: "CloudFront media"
+  s3 -> cfm
+}
+
+# ---- serving path -----------------------------------------------------
+cf -> alb
+alb -> svc
+svc -> blue.nb: "active color" { class: sidenote }
+svc -> green.ng: "standby" { class: sidenote }
+
+# ---- php-fpm → full shared data layer --------------------------------
+blue.pb -> data.rds
+blue.pb -> data.redis
+blue.pb -> data.mq
+blue.pb -> data.os
+blue.pb -> data.s3
+blue.pb -> eso
+
+green.pg -> data.rds
+green.pg -> data.redis
+green.pg -> data.mq
+green.pg -> data.os
+green.pg -> data.s3
+green.pg -> eso
+
+# ---- consumer tier → queue + data -----------------------------------
+blue.cb -> data.mq
+blue.cb -> data.rds
+blue.cb -> data.redis
+blue.cb -> eso
+
+green.cg -> data.mq
+green.cg -> data.rds
+green.cg -> data.redis
+green.cg -> eso
+
+# ---- cron (singleton) -------------------------------------------------
+cron -> data.rds
+cron -> data.redis
+cron -> data.mq
+cron -> eso
+
+# ---- secrets plumbing -------------------------------------------------
+eso -> ssm

@@ -1,0 +1,11 @@
+meta:
+  name: test-missing-dep
+  version: "1.0"
+  providers:
+    - compute
+
+components:
+  edge:
+    type: gateway
+    depends:
+      - on: nonexistent

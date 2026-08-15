@@ -1,0 +1,20 @@
+facts:
+  ready:
+    type: mgtt.bool
+    ttl: 30s
+    probe:
+      cmd: "kubectl get thing {name} -o jsonpath={.status.ready}"
+      parse: bool
+      cost: low
+healthy: ["ready == true"]
+states:
+  missing:
+    when: "ready == false"
+    description: not ready
+  live:
+    when: "ready == true"
+    description: ready
+default_active_state: live
+failure_modes:
+  missing:
+    can_cause: [upstream_failure]

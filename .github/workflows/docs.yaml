@@ -1,0 +1,50 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+  # Manual redeploy. The path filter above is right for ordinary work, but it
+  # leaves no way to rebuild when the site is stale for a reason that never
+  # touched docs/ — a history rewrite, a rebuilt provider registry, or a
+  # deploy that failed after the source had already moved on.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: read   # registry generator pulls ghcr.io manifest digests
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - run: pip install mkdocs-material pymdown-extensions pyyaml
+
+      - run: mkdocs build -d _site
+        env:
+          SITE_URL: https://mgt-tool.github.io/mgtt
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

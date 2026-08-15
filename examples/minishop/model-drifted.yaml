@@ -1,0 +1,30 @@
+meta:
+  name: minishop
+  version: "1.0"
+  providers:
+    - mgt-tool/minishop@^0.1.0
+  scenarios: none
+
+components:
+  store:
+    type: datastore
+    # THE BREAKING CHANGE, and it is a reasonable-sounding one.
+    #
+    # "A saturated store is still serving — stop paging us for it." So the
+    # health condition is loosened to just `available`, overriding the type's
+    # two clauses. Nothing warns, nothing fails, and `mgtt model validate`
+    # is still clean: this is a valid health expression over a valid fact.
+    #
+    # But the type's `states:` block still says a store with an exhausted
+    # pool is `saturated`, not `live`. So the model now calls a component
+    # healthy while placing it outside its default active state — and
+    # `simulate` and `diagnose` will read different facts and disagree.
+    #
+    # Verification is what notices. See ../../docs/concepts/verification.md.
+    healthy:
+      - available == true
+
+  api:
+    type: service
+    depends:
+      - on: store

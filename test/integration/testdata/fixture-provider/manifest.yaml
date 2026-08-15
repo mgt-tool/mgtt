@@ -1,0 +1,30 @@
+meta:
+  name: fixture
+  version: 0.0.1
+  description: integration-test fixture provider — exposes one widget component type
+
+runtime:
+  needs: []
+
+install:
+  image:
+    repository: ghcr.io/mgt-tool/fixture-provider
+
+types:
+  widget:
+    description: An integration-test widget
+    facts:
+      count:
+        type: mgtt.int
+        ttl: 10s
+        probe:
+          cmd: "widget count"
+          cost: low
+    healthy:
+      - count > 0
+    states:
+      live:
+        when: "count > 0"
+        description: widget is live
+    default_active_state: live
+    failure_modes: {}

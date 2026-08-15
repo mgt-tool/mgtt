@@ -1,0 +1,32 @@
+meta:
+  name: storefront
+  version: "1.0"
+  providers:
+    - compute
+  vars:
+    namespace: production
+
+components:
+  edge:
+    type: gateway
+    depends:
+      - on: frontend
+      - on: api
+
+  frontend:
+    type: workload
+    depends:
+      - on: api
+
+  api:
+    type: workload
+    depends:
+      - on: store
+
+  store:
+    providers:
+      - datalayer
+    type: datastore
+    healthy:
+      - available == true
+      - connection_count < 500

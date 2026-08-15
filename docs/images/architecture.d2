@@ -1,0 +1,93 @@
+# mgtt — architecture diagram.
+# Source of truth. Render with:
+#   d2 docs/images/architecture.d2 docs/images/architecture.svg
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    pad: 20
+    theme-id: 200
+  }
+}
+
+direction: down
+
+# Class applied to every cross-tier edge label so the annotations
+# read at a glance without zooming in.
+classes: {
+  flow: {
+    style.font-size: 22
+    style.stroke-width: 2
+    style.bold: true
+  }
+  sidenote: {
+    style.font-size: 18
+    style.stroke-dash: 3
+    style.italic: true
+  }
+}
+
+# ---- operators (row 1) -----------------------------------------------
+human: "human operator"
+agent: "LLM agent (Claude Code, CI bot)"
+
+# ---- mgtt core (row 2) -----------------------------------------------
+mgtt: "mgtt core — pure reasoning, no backend credentials" {
+  model: "model.yaml" { shape: cylinder }
+  scens: "scenarios.yaml" { shape: cylinder }
+  state: "incident state" { shape: cylinder }
+  cli: "CLI"
+  mcp: "MCP server"
+  engine: "constraint engine\nwalk · rank · eliminate"
+
+  cli -> engine
+  mcp -> engine
+  model -> engine
+  scens -> engine: "simulate mode" { class: sidenote }
+  engine -> state
+}
+
+# ---- adapters + registry (row 3) -------------------------------------
+adapters: "adapters — hold the backend credentials" {
+  k8s: "kubernetes"
+  aws: "aws"
+  docker: "docker"
+  terraform: "terraform"
+  tempo: "tempo"
+  quickwit: "quickwit"
+}
+
+registry: "registry" {
+  remote: "registry.yaml\n(GitHub Pages)"
+  local: |md
+    `$MGTT_HOME/providers/`
+  |
+  remote -> local: "mgtt provider install"
+}
+
+# ---- system under test (row 4) ---------------------------------------
+sut: "system under test — your production · never touched by mgtt core" {
+  nginx: "nginx"
+  api: "api replicas"
+  redis: "redis"
+  queue: "kafka / sqs"
+  rds: "postgres / rds" { shape: cylinder }
+  tracing: "tempo + quickwit"
+
+  nginx -> api
+  api -> rds
+  api -> redis
+  api -> queue
+  api -> tracing: "spans" { class: sidenote }
+}
+
+# ---- cross-tier flows ------------------------------------------------
+human -> mgtt.cli
+agent -> mgtt.mcp
+
+mgtt.engine -> adapters: "probe request" { class: flow }
+adapters -> mgtt.engine: "parsed facts" { class: flow }
+adapters -> sut: "shell / SDK" { class: flow }
+sut -> adapters: "stdout / JSON" { class: flow }
+
+registry.local -> adapters: "loaded at startup" { class: sidenote }

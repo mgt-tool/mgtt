@@ -1,0 +1,105 @@
+meta:
+  name: compute
+  version: 1.0.0
+  description: Fictional compute provider — workloads and edge routing. Used to exercise provider-agnostic core machinery in tests; does NOT represent any real backend.
+  requires:
+    mgtt: ">=0.1.0"
+
+install:
+  source:
+    build: hooks/install.sh
+    clean: hooks/uninstall.sh
+
+variables:
+  namespace:
+    description: logical grouping name
+    required: false
+    default: default
+
+auth:
+  strategy: environment
+  reads_from: [COMPUTE_CONFIG, ~/.compute/config]
+  access:
+    probes: read-only
+    writes: none
+
+types:
+  gateway:
+    facts:
+      upstream_count:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "compute-cli -n {namespace} get endpoints {name} -o json"
+          parse: "json:.subsets.0.addresses|length"
+          cost: low
+          access: read-only
+    healthy: [upstream_count > 0]
+    states:
+      live:
+        when: "upstream_count > 0"
+        description: serving traffic
+      draining:
+        when: "upstream_count == 0"
+        description: no upstreams
+    default_active_state: live
+    failure_modes:
+      draining:
+        can_cause: [upstream_failure, 5xx_errors]
+
+  workload:
+    facts:
+      ready_replicas:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "compute-cli -n {namespace} get workload {name} -o jsonpath={.status.readyReplicas}"
+          parse: int
+          cost: low
+          access: read-only
+      desired_replicas:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "compute-cli -n {namespace} get workload {name} -o jsonpath={.spec.replicas}"
+          parse: int
+          cost: low
+      restart_count:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "compute-cli -n {namespace} get instances -l app={name} -o jsonpath={.items[*].status.restartCount}"
+          parse: "regex:(\\d+)"
+          cost: low
+      endpoints:
+        type: mgtt.int
+        ttl: 30s
+        probe:
+          cmd: "compute-cli -n {namespace} get endpoints {name}"
+          parse: "lines:1"
+          cost: low
+    healthy:
+      - ready_replicas == desired_replicas
+      - endpoints > 0
+      - restart_count < 5
+    states:
+      degraded:
+        when: "ready_replicas < desired_replicas & restart_count > 5"
+        description: crash-looping
+      draining:
+        when: "desired_replicas == 0"
+        description: scaled to zero
+      starting:
+        when: "ready_replicas < desired_replicas"
+        description: instances initialising
+      live:
+        when: "ready_replicas == desired_replicas"
+        description: all instances ready
+    default_active_state: live
+    failure_modes:
+      degraded:
+        can_cause: [upstream_failure, timeout, connection_refused, 5xx_errors]
+      draining:
+        can_cause: [upstream_failure, connection_refused]
+      starting:
+        can_cause: [upstream_failure, timeout]

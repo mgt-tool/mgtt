@@ -1,0 +1,12 @@
+meta:
+  name: generic
+  version: 0.1.0
+  description: Fallback provider for components without a typed provider.
+  tags: [generic, fallback]
+  requires:
+    mgtt: ">=0.2.0"
+
+install:
+  source:
+    build: /dev/null
+    clean: /dev/null

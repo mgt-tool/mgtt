@@ -1,0 +1,50 @@
+# Binaries
+mgtt
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+*.prof
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MGTT runtime files
+.mgtt-current
+*.state.yaml
+
+# mgtt binary (built locally)
+mgtt-provider-kubernetes
+
+# mkdocs build output
+site/
+
+
+docs/superpowers/
+STRATEGY.md
+
+.claude
+.log
+docs/_hooks/__pycache__/
+.cache/
+
+temp.md

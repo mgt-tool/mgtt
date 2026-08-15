@@ -1,0 +1,8 @@
+.git
+docs
+*.md
+Dockerfile*
+.github
+.claude
+.log
+site

@@ -1,0 +1,10 @@
+  int           base: int      unit: ~                     range: ~
+  float         base: float    unit: ~                     range: ~
+  bool          base: bool     unit: ~                     range: ~
+  string        base: string   unit: ~                     range: ~
+  duration      base: float    unit: ms|s|m|h|d            range: 0..
+  bytes         base: int      unit: b|kb|mb|gb|tb         range: 0..
+  ratio         base: float    unit: ~                     range: 0..1
+  percentage    base: float    unit: ~                     range: 0..100
+  count         base: int      unit: ~                     range: 0..
+  timestamp     base: string   unit: ISO8601               range: ~

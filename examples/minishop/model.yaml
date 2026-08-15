@@ -1,0 +1,16 @@
+meta:
+  name: minishop
+  version: "1.0"
+  providers:
+    - mgt-tool/minishop@^0.1.0
+  # This example ships no scenarios; verification needs none.
+  scenarios: none
+
+components:
+  store:
+    type: datastore
+
+  api:
+    type: service
+    depends:
+      - on: store

@@ -1,0 +1,271 @@
+// Copyright (C) 2026 Alex Kunich
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package model
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/mgt-tool/mgtt/internal/expr"
+
+	"gopkg.in/yaml.v3"
+)
+
+// resourcePlaceholderRE matches {key} placeholders in resource: values.
+// The key is any non-} sequence; substitution lookups hit meta.vars.
+var resourcePlaceholderRE = regexp.MustCompile(`\{([^}]+)\}`)
+
+// substituteResourceVars replaces {key} placeholders in s against vars.
+// Returns ("", err) when any key is unresolved — returning the original
+// string alongside an error was a footgun (callers who ignored err got
+// literal "{key}" through to probe time).
+func substituteResourceVars(s string, vars map[string]string) (string, error) {
+	var unresolved []string
+	result := resourcePlaceholderRE.ReplaceAllStringFunc(s, func(m string) string {
+		key := m[1 : len(m)-1]
+		if v, ok := vars[key]; ok {
+			return v
+		}
+		unresolved = append(unresolved, key)
+		return m
+	})
+	if len(unresolved) > 0 {
+		return "", fmt.Errorf("unresolved placeholder(s): %s", strings.Join(unresolved, ", "))
+	}
+	return result, nil
+}
+
+// rawModel is the top-level YAML structure.
+type rawModel struct {
+	Meta       rawMeta                  `yaml:"meta"`
+	Components map[string]*rawComponent `yaml:"components"`
+}
+
+type rawMeta struct {
+	Name        string            `yaml:"name"`
+	Version     string            `yaml:"version"`
+	Providers   []string          `yaml:"providers"`
+	Vars        map[string]string `yaml:"vars"`
+	StrictTypes bool              `yaml:"strict_types"`
+	Scenarios   string            `yaml:"scenarios"`
+}
+
+// rawComponent mirrors the YAML component block.
+type rawComponent struct {
+	Type         string                 `yaml:"type"`
+	Resource     string                 `yaml:"resource"`
+	Providers    []string               `yaml:"providers"`
+	Depends      []rawDependency        `yaml:"depends"`
+	Healthy      []string               `yaml:"healthy"`
+	FailureModes map[string]rawFailMode `yaml:"failure_modes"`
+	Vars         map[string]string      `yaml:"vars"`
+}
+
+// rawDependency mirrors depends list entries.
+// The "on" field can be a scalar string or a list of strings.
+type rawDependency struct {
+	OnRaw    any    `yaml:"on"`
+	WhileRaw string `yaml:"while"`
+}
+
+type rawFailMode struct {
+	CanCause []string `yaml:"can_cause"`
+}
+
+// Load reads the YAML file at path, parses it into a Model, and builds the
+// internal dependency graph.
+func Load(path string) (*Model, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("model: read %q: %w", path, err)
+	}
+	// First pass: parse into a yaml.Node so we can extract declaration order.
+	var docNode yaml.Node
+	if err := yaml.Unmarshal(data, &docNode); err != nil {
+		return nil, fmt.Errorf("model: parse %q: %w", path, err)
+	}
+	// Second pass: decode into the typed raw structs.
+	var raw rawModel
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("model: decode %q: %w", path, err)
+	}
+	if raw.Components == nil {
+		raw.Components = make(map[string]*rawComponent)
+	}
+
+	m := &Model{
+		Meta: Meta{
+			Name:        raw.Meta.Name,
+			Version:     raw.Meta.Version,
+			Providers:   raw.Meta.Providers,
+			Vars:        raw.Meta.Vars,
+			StrictTypes: raw.Meta.StrictTypes,
+			Scenarios:   raw.Meta.Scenarios,
+		},
+		Components: make(map[string]*Component, len(raw.Components)),
+		Order:      extractOrder(&docNode, raw.Components),
+		SourcePath: path,
+	}
+	for name, rc := range raw.Components {
+		comp, err := compileRawComponent(name, rc)
+		if err != nil {
+			return nil, err
+		}
+		m.Components[name] = comp
+	}
+	if err := expandResourceVars(m); err != nil {
+		return nil, err
+	}
+	m.BuildGraph()
+
+	return m, nil
+}
+
+// compileRawComponent converts the YAML-decoded rawComponent into a
+// typed Component, compiling every healthy/while expression along the
+// way. Errors name the offending component so a 20-component file's
+// parse failure still points at the right source line.
+func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
+	comp := &Component{
+		Name:       name,
+		Type:       rc.Type,
+		Resource:   rc.Resource,
+		Providers:  rc.Providers,
+		HealthyRaw: rc.Healthy,
+		Vars:       rc.Vars,
+	}
+	if len(rc.FailureModes) > 0 {
+		comp.FailureModes = make(map[string][]string, len(rc.FailureModes))
+		for state, fm := range rc.FailureModes {
+			comp.FailureModes[state] = fm.CanCause
+		}
+	}
+	for _, rawExpr := range rc.Healthy {
+		node, err := expr.Parse(rawExpr)
+		if err != nil {
+			return nil, fmt.Errorf("component %s: invalid healthy expression %q: %w", name, rawExpr, err)
+		}
+		comp.Healthy = append(comp.Healthy, node)
+	}
+	for _, rd := range rc.Depends {
+		on, err := normaliseOn(rd.OnRaw)
+		if err != nil {
+			return nil, fmt.Errorf("component %s: depends.on: %w", name, err)
+		}
+		dep := Dependency{WhileRaw: rd.WhileRaw, On: on}
+		if dep.WhileRaw != "" {
+			w, err := expr.Parse(dep.WhileRaw)
+			if err != nil {
+				return nil, fmt.Errorf("component %s: invalid while expression %q: %w", name, dep.WhileRaw, err)
+			}
+			dep.While = w
+		}
+		comp.Depends = append(comp.Depends, dep)
+	}
+	return comp, nil
+}
+
+// expandResourceVars rewrites each component's Resource with {key}
+// placeholders resolved against the merged meta+component var scope.
+// Component.Vars overrides Meta.Vars on key collision. Unresolved keys
+// are a hard error at load time — trying to substitute at probe time
+// would push the failure far from the author's mistake.
+func expandResourceVars(m *Model) error {
+	for name, c := range m.Components {
+		if c.Resource == "" {
+			continue
+		}
+		expanded, err := substituteResourceVars(c.Resource, mergeVars(m.Meta.Vars, c.Vars))
+		if err != nil {
+			return fmt.Errorf("component %q resource: %w", name, err)
+		}
+		c.Resource = expanded
+	}
+	return nil
+}
+
+// normaliseOn converts the raw "on" value (a string or []string) into
+// []string. Any non-string element — or a non-string/non-sequence value —
+// is a hard error: silently dropping elements would erase dependencies.
+func normaliseOn(v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	switch t := v.(type) {
+	case string:
+		return []string{t}, nil
+	case []any:
+		out := make([]string, 0, len(t))
+		for i, item := range t {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("entry %d is %T, expected string", i, item)
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected string or []string, got %T", v)
+	}
+}
+
+// extractOrder walks the yaml.Node document tree to find the line numbers of
+// each component key under the "components" mapping, then returns component
+// names sorted by line number.
+func extractOrder(doc *yaml.Node, components map[string]*rawComponent) []string {
+	lineMap := make(map[string]int, len(components))
+
+	// A valid YAML document has doc.Kind == yaml.DocumentNode with one child
+	// which is a MappingNode.
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return sortedKeys(components)
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return sortedKeys(components)
+	}
+
+	// Find the "components" mapping.
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		keyNode := root.Content[i]
+		valNode := root.Content[i+1]
+		if keyNode.Value == "components" && valNode.Kind == yaml.MappingNode {
+			// Each pair in valNode.Content is (componentName, componentBody).
+			for j := 0; j+1 < len(valNode.Content); j += 2 {
+				compKeyNode := valNode.Content[j]
+				lineMap[compKeyNode.Value] = compKeyNode.Line
+			}
+			break
+		}
+	}
+
+	// Fall back to sorted keys for any component missing from the scan.
+	names := make([]string, 0, len(components))
+	for name := range components {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		li := lineMap[names[i]]
+		lj := lineMap[names[j]]
+		if li != lj {
+			return li < lj
+		}
+		return names[i] < names[j]
+	})
+	return names
+}
+
+// sortedKeys returns the string keys of m in ascending order. Generic so
+// callers don't re-implement this ~8-line pattern for every map shape.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}

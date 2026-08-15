@@ -1,0 +1,44 @@
+description: A persistent store behind a connection pool.
+
+facts:
+  available:
+    type: mgtt.bool
+    ttl: 60s
+    probe:
+      cmd: "minishop-cli status {name}"
+      parse: bool
+      cost: low
+  connection_count:
+    type: mgtt.int
+    ttl: 60s
+    probe:
+      cmd: "minishop-cli connections {name}"
+      parse: int
+      cost: low
+
+# Health and the states below are two predicates over the same two facts,
+# written in different places for different purposes. Keeping them in
+# agreement is exactly what verification checks — see model-drifted.yaml
+# for what happens when they part company.
+healthy:
+  - available == true
+  - connection_count < 500
+
+states:
+  live:
+    when: "available == true & connection_count < 500"
+    description: accepting connections
+  saturated:
+    when: "available == true & connection_count >= 500"
+    description: connection pool exhausted
+  stopped:
+    when: "available == false"
+    description: not accepting connections
+
+default_active_state: live
+
+failure_modes:
+  saturated:
+    can_cause: [connection_refused]
+  stopped:
+    can_cause: [connection_refused]

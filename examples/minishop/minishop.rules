@@ -1,0 +1,29 @@
+; minishop.rules — questions about the failure space, as relations.
+;
+; Read by `writ derive`. A rule never adds a situation, an edge or a cell;
+; it only names a set the interrogator already computed, so nothing here
+; can change what the model means.
+;
+; `holds` does not bind its situation, so each rule ranges over `situation`
+; first — a body joins in written order (writ interrogator, extension §4).
+
+; The configurations where the store's connection pool is exhausted.
+; In the drifted model these are exactly the situations that `healthy:`
+; calls fine and the state rules call `saturated` — the contradiction,
+; named and listed rather than counted.
+(relation saturated 1)
+(rule (saturated S)
+  (situation S)
+  (holds S (and (is store.available yes)
+                (is store.connection-count at-or-above-500))))
+
+; Situations from which the api can still be lost. The recursion walks
+; BACKWARD from the goal, one pass over the edges; written forwards through
+; a transitive closure it is the same set at a quadratic price.
+(relation can-lose-api 1)
+(rule (can-lose-api S)
+  (situation S)
+  (holds S (is api.reachable no)))
+(rule (can-lose-api S)
+  (edge E S T)
+  (can-lose-api T))

@@ -1,0 +1,16 @@
+# Minimal scenario used by TestLoadScenario to verify YAML loader value
+# normalization (ints stay int, bools stay bool, strings stay string).
+name: loader normalization
+description: exercises the scenario loader's type coercion
+inject:
+  comp_a:
+    restart_count: 12
+    ready: true
+    phase: running
+  comp_b:
+    available: false
+    count: 0
+expect:
+  root_cause: comp_b
+  path: [comp_a, comp_b]
+  eliminated: []

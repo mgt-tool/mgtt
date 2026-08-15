@@ -1,0 +1,25 @@
+description: Fallback type for components without a typed provider. Operator-verified via prompts during mgtt diagnose / mgtt plan.
+
+facts:
+  operator_says_healthy:
+    type: mgtt.bool
+    ttl: 0s
+    probe:
+      cmd: ""
+      parse: bool
+      cost: low
+      access: operator prompt
+
+states:
+  live:
+    when: "operator_says_healthy == true"
+    description: operator confirmed this component is healthy
+  stopped:
+    when: "operator_says_healthy == false"
+    description: operator confirmed this component is not healthy
+
+default_active_state: live
+
+failure_modes:
+  stopped:
+    can_cause: [upstream_failure]

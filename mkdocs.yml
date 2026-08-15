@@ -1,0 +1,97 @@
+site_name: mgtt
+site_url: https://mgt-tool.github.io/mgtt
+repo_url: https://github.com/mgt-tool/mgtt
+repo_name: mgt-tool/mgtt
+docs_dir: docs
+
+# Exclude internal design specs and plans from the published site.
+# Kept locally (gitignored) for contributor reference, but not shipped.
+exclude_docs: |
+  superpowers/
+
+# Wire the {{ MGTT_VERSION }} placeholder so docs source the version
+# from the repo's VERSION file at build time — no manual sync.
+hooks:
+  - docs/_hooks/version_substitute.py
+  - docs/_hooks/registry_generator.py
+
+theme:
+  name: material
+  logo: images/mgtt_icon_medium.png
+  favicon: images/mgtt_icon_32px.png
+  palette:
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: getting-started/quickstart.md
+    - Install: getting-started/install.md
+  - Examples:
+    - Overview: examples/index.md
+    - Blue/green storefront on EKS: examples/blue-green-storefront.md
+  - Concepts:
+    - How It Works: concepts/how-it-works.md
+    - Model Authoring: concepts/model-authoring.md
+    - Simulation: concepts/simulation.md
+    - Verification: concepts/verification.md
+    - Troubleshooting: concepts/troubleshooting.md
+    - Multi-File Models: concepts/multi-file-models.md
+  - Using Providers:
+    - Overview: concepts/using-providers.md
+    - Install Methods: concepts/provider-install-methods.md
+    - Names and Versions: concepts/provider-fqn-and-versions.md
+    - Image Capabilities: reference/image-capabilities.md
+    - Registry (browse): reference/registry.md
+  - Writing Providers:
+    - Overview: providers/overview.md
+    - Vocabulary: providers/vocabulary.md
+    - Binary Protocol: providers/protocol.md
+    - Testing: providers/testing.md
+  - Reference:
+    - CLI: reference/cli.md
+    - Configuration: reference/configuration.md
+    - Engine: reference/engine.md
+    - MCP Service: reference/mcp.md
+    - Manifest Schema: reference/manifest.md
+    - Model Schema: reference/model-schema.md
+    - Scenario Schema: reference/scenario-schema.md
+    - scenarios.yaml: reference/scenarios-yaml.md
+    - Type Catalog: reference/type-catalog.md
+    - Specification: specs.md
+
+extra_css:
+  - stylesheets/terminal.css
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true

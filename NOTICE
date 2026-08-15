@@ -1,0 +1,18 @@
+mgtt — model-guided troubleshooting tool
+Copyright (C) 2026 Alex Kunich <alex.kunich@gmail.com>
+
+This repository is dual-licensed. Every source file carries the SPDX identifier
+that governs it.
+
+The engine and CLI are licensed under the GNU Affero General Public License,
+version 3 or later — see LICENSE and LICENSES/AGPL-3.0.txt.
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+The provider SDK under sdk/provider/ is licensed under the Apache License,
+Version 2.0 — see sdk/provider/LICENSE and LICENSES/Apache-2.0.txt. It is kept
+permissive on purpose: a provider author must never inherit the engine's
+reciprocity by depending on the SDK.
+SPDX-License-Identifier: Apache-2.0
+
+Both programs are distributed WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

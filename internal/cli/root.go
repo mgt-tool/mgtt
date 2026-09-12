@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"fmt"
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
@@ -38,7 +39,7 @@ func init() {
 			Use:   "version",
 			Short: "Print version",
 			Run: func(cmd *cobra.Command, args []string) {
-				cmd.Println("mgtt version " + version)
+				fmt.Fprintln(cmd.OutOrStdout(), "mgtt version "+version)
 			},
 		}
 	})

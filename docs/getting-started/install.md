@@ -16,7 +16,7 @@ section of [CHANGELOG.md](https://github.com/mgt-tool/mgtt/blob/main/CHANGELOG.m
 ```sh
 curl -sSLO https://raw.githubusercontent.com/mgt-tool/mgtt/main/install.sh
 sh install.sh                                   # the newest release
-MGTT_VERSION=v0.2.0 sh install.sh               # a pinned one
+MGTT_VERSION=v0.3.0 sh install.sh               # a pinned one
 INSTALL_DIR=$HOME/.local/bin sh install.sh      # somewhere other than /usr/local/bin
 ```
 
@@ -28,7 +28,7 @@ fallback is never "whatever main is today".
 ## Go install
 
 ```sh
-go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.2.0     # pinned
+go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.3.0     # pinned
 go install github.com/mgt-tool/mgtt/cmd/mgtt@latest     # the newest release
 ```
 
@@ -38,17 +38,17 @@ information Go stamps into it, so `mgtt version` reports the tag you asked for.
 ## Docker
 
 ```sh
-docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.2.0 version
-docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.2.0 simulate --all
-docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.2.0 model validate
+docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.3.0 version
+docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.3.0 simulate --all
+docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.3.0 model validate
 ```
 
 Tags, and what moves them:
 
 | tag | is | moves when |
 |---|---|---|
-| `0.2.0` | that release | never |
-| `0.2`, `0` | the newest release in that line | a release in the line |
+| `0.3.0` | that release | never |
+| `0.3`, `0` | the newest release in that line | a release in the line |
 | `latest` | the newest release | a release |
 | `edge`, `sha-<commit>` | a build of main | every push to main |
 
@@ -60,7 +60,7 @@ Provider runners are built against `sdk/provider`, which is versioned with
 the rest of the module:
 
 ```sh
-go get github.com/mgt-tool/mgtt/sdk/provider@v0.2.0
+go get github.com/mgt-tool/mgtt/sdk/provider@v0.3.0
 ```
 
 The `internal/` packages are not importable, by Go's rule; what a provider

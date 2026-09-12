@@ -69,16 +69,16 @@ Every release is published three ways, and each can be pinned to a version:
 ```sh
 # the binary, checksummed, from the GitHub release
 curl -sSLO https://raw.githubusercontent.com/mgt-tool/mgtt/main/install.sh
-MGTT_VERSION=v0.2.0 sh install.sh        # or: sh install.sh for the newest release
+MGTT_VERSION=v0.3.0 sh install.sh        # or: sh install.sh for the newest release
 
 # from source, through the Go proxy
-go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.2.0
+go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.3.0
 
 # the image, linux/amd64 and linux/arm64
-docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.2.0 version
+docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:0.3.0 version
 ```
 
-`latest` — on the image, on `go install @latest` — is the newest release, never a build of main. Provider authors import the SDK the same way: `go get github.com/mgt-tool/mgtt/sdk/provider@v0.2.0`. See [docs/getting-started/install.md](docs/getting-started/install.md).
+`latest` — on the image, on `go install @latest` — is the newest release, never a build of main. Provider authors import the SDK the same way: `go get github.com/mgt-tool/mgtt/sdk/provider@v0.3.0`. See [docs/getting-started/install.md](docs/getting-started/install.md).
 
 ## Quick start
 

@@ -48,3 +48,5 @@ docs/_hooks/__pycache__/
 .cache/
 
 temp.md
+# make dist
+dist/

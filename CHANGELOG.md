@@ -4,21 +4,9 @@ All notable changes to mgtt are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-04-18
-
-### Changed (breaking)
-
-- **`manifest.yaml` schema rewritten.** v0.x manifests are rejected. Three top-level blocks: `meta` (identity), `runtime` (needs + network_mode + entrypoint + backends), `install` (source + image subblocks declare which methods the provider offers). `hooks:` retired; `meta.command` moved to `runtime.entrypoint`; install-method declaration is now canonical in the manifest instead of inferred from hook presence + registry state. See [`docs/reference/manifest.md`](docs/reference/manifest.md).
-
-- **All in-tree providers updated to v1.0.** aws 1.0.0, kubernetes 3.0.0, docker 1.0.0, tempo 1.0.0, terraform 1.0.0, quickwit 1.0.0. Older provider versions won't install against mgtt 0.2.0.
-
-- `mgtt provider install --image` rejects providers without an `install.image` block; `mgtt provider install` (source) rejects providers without `install.source`. No more deep-in-build failures.
-
-### Known issues
-
-- ~~`mgtt-provider-docker`'s `container` type declares a `healthy:` expression comparing a string literal (`health_status != "unhealthy"`). The current `internal/expr` parser does not tokenize string literals, so loading that specific type fails at runtime. The rest of the docker provider's manifest is v1.0-valid and the migration commit is on main; a follow-up will extend the expression tokenizer to accept double-quoted string literals.~~ **Resolved in [Unreleased]** — see _Fixed: `internal/expr` tokenizes double-quoted string literals_.
-
 ## [Unreleased]
+
+## [0.3.0] — 2026-09-12
 
 ### Breaking (SDK)
 
@@ -53,6 +41,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Absent-component elimination.** `internal/facts.FactStatus` + `FactStatusNotFound` + `Store.IsAbsent` plumb authoritative "the probe ran but the resource is missing" into the live-set filter. Scenarios requiring a non-default state on an absent component are dropped; the default-active state stays live.
 
 - **Provider capabilities.** Providers declare semantic needs at the top level of `manifest.yaml` (`needs: [kubectl, network]`); mgtt's image runner expands each label into the matching `docker run` bind mounts and env forwards at probe time (git installs inherit them from the operator's shell). Built-in vocabulary covers `network`, `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`. Operators override or extend via `$MGTT_HOME/capabilities.yaml` (+ `capabilities.d/*.yaml` shards) or `MGTT_IMAGE_CAP_<NAME>` env vars; `MGTT_IMAGE_CAPS_DENY=docker,aws` refuses capabilities regardless of declaration. Install-time prints declared caps for audit. `mgtt provider ls` shows a caps column per installed provider. Validation rejects unknown caps and refuses `needs` on shell-fallback providers. See `docs/reference/image-capabilities.md`.
+- **A release pipeline, and three ways to pin a version.** Pushing `vX.Y.Z`
+  now publishes a GitHub release (`mgtt-<os>-<arch>` for linux/darwin ×
+  amd64/arm64, with `SHA256SUMS`, notes quoted from this file), the image at
+  `ghcr.io/mgt-tool/mgtt:X.Y.Z` (and `X.Y`, `X`, `latest`; linux/amd64 and
+  linux/arm64), and verifies all three from the outside — `go install @tag`,
+  `go get sdk/provider@tag`, `docker pull`, and `install.sh` — each answering
+  `mgtt version` with the tag. `scripts/release-check.sh` refuses a tag whose
+  tree disagrees with `VERSION` or whose changelog still has unreleased
+  entries; `make tag` runs it first. (`.github/workflows/release.yaml`)
+- `install.sh` takes `MGTT_VERSION=vX.Y.Z` and `INSTALL_DIR`, verifies the
+  binary against the release's `SHA256SUMS`, and falls back to `go install`
+  at the same version rather than a clone of main.
+- `make dist` cross-compiles every release platform; CI runs it on every push.
 
 ### Breaking
 
@@ -65,6 +66,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`internal/expr` tokenizes double-quoted string literals.** Previously the tokenizer rejected `"` outright, so `health_status != "unhealthy"` failed to parse. Now `"..."` is a first-class value token: quotes are stripped and the content is taken as a string without bool/int inference (so `"42"` stays the string `42`, not the int). Unquoted barewords remain accepted for back-compat. Unblocks the docker provider's `container` type healthy expression noted under 0.2.0 Known Issues.
 - **`mgtt provider install --image` now works with distroless and scratch-based provider images.** `ExtractManifest` previously shelled out to `docker run --rm --entrypoint cat <image> /manifest.yaml`, which required the provider image to ship a `cat` binary on `PATH`. Switched to `docker create` + `docker cp <cid>:/manifest.yaml -` + `docker rm`, decoding the resulting tar stream in-process. Nothing inside the container is executed, so any base image works. No docs, flags, or on-disk state change.
 - **`mgtt provider install --image` now extracts `/types/` for multi-file providers.** The installer previously copied only `/manifest.yaml` out of the image. Providers with a `types/<name>.yaml` layout (kubernetes, tempo, quickwit, terraform) would land in `~/.mgtt/providers/<name>/` with no type definitions — `mgtt provider inspect` would report zero types and planning against the provider would silently skip its components. `installFromImage` now calls the new `DockerCmd.ExtractTypes`, which `docker cp`s the `/types/` directory out of the image and writes each `.yaml` entry into `destDir/types/`. Absence of `/types/` is not an error (inline-types providers still work).
+
+### Changed
+
+- `mgtt version` prints `vX.Y.Z` — the spelling the Go proxy and git tags
+  use — from every channel alike. Builds from `make`, the image and the
+  release assets used to print `X.Y.Z` without the `v`; `go install` builds
+  already printed it with.
+- The `latest` image tag is now written only by a release. Pushes to main
+  publish `edge` and `sha-<commit>` instead, so `latest` never runs ahead of
+  the newest release.
+- GitHub Actions are pinned by commit, and the Go toolchain by `go.mod`.
+- `make docker` builds with `docker build`; the compose file it referred to
+  did not exist.
+
+## [0.2.0] — 2026-04-18
+
+### Changed (breaking)
+
+- **`manifest.yaml` schema rewritten.** v0.x manifests are rejected. Three top-level blocks: `meta` (identity), `runtime` (needs + network_mode + entrypoint + backends), `install` (source + image subblocks declare which methods the provider offers). `hooks:` retired; `meta.command` moved to `runtime.entrypoint`; install-method declaration is now canonical in the manifest instead of inferred from hook presence + registry state. See [`docs/reference/manifest.md`](docs/reference/manifest.md).
+
+- **All in-tree providers updated to v1.0.** aws 1.0.0, kubernetes 3.0.0, docker 1.0.0, tempo 1.0.0, terraform 1.0.0, quickwit 1.0.0. Older provider versions won't install against mgtt 0.2.0.
+
+- `mgtt provider install --image` rejects providers without an `install.image` block; `mgtt provider install` (source) rejects providers without `install.source`. No more deep-in-build failures.
+
+### Known issues
+
+- ~~`mgtt-provider-docker`'s `container` type declares a `healthy:` expression comparing a string literal (`health_status != "unhealthy"`). The current `internal/expr` parser does not tokenize string literals, so loading that specific type fails at runtime. The rest of the docker provider's manifest is v1.0-valid and the migration commit is on main; a follow-up will extend the expression tokenizer to accept double-quoted string literals.~~ **Resolved in [Unreleased]** — see _Fixed: `internal/expr` tokenizes double-quoted string literals_.
 
 ## [0.1.4] — 2026-04-16
 

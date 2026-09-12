@@ -1,0 +1,167 @@
+# A release, from a tag.
+#
+# Push vX.Y.Z and this checks that the tree at the tag says X.Y.Z -- in
+# VERSION, and as a dated section of CHANGELOG.md with nothing left under
+# [Unreleased] -- before it builds anything.  A tag that disagrees with the
+# tree fails here rather than shipping.
+#
+# Then the three ways a client pins mgtt are produced and, last, tried from
+# the outside the way a client would:
+#
+#   go install github.com/mgt-tool/mgtt/cmd/mgtt@vX.Y.Z      the Go proxy
+#   docker pull ghcr.io/mgt-tool/mgtt:X.Y.Z                    the image
+#   MGTT_VERSION=vX.Y.Z install.sh                             the binaries
+#
+# The verify job is the point of the file.  The proxy indexes a tag on first
+# request and the image is pushed by a job here, so nothing about a release
+# is taken on faith: every channel is pulled back and asked its version.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: the tag and the tree agree
+        id: version
+        run: |
+          sh scripts/release-check.sh "$GITHUB_REF_NAME"
+          echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+  binaries:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: the suites, at the tag
+        run: go vet ./... && go test ./...
+      - name: every platform, and the sums
+        run: |
+          make dist
+          got=$(./dist/mgtt-linux-amd64 version)
+          [ "$got" = "mgtt version $GITHUB_REF_NAME" ] || {
+            echo "binary says '$got', tag is $GITHUB_REF_NAME" >&2; exit 1; }
+      # The notes are the changelog section for this version, verbatim: one
+      # place says what changed, and the release page quotes it.
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=${{ needs.check.outputs.version }}
+          awk -v v="$v" '
+            $0 ~ "^## \\[" v "\\]" { on=1; next }
+            /^## / { on=0 }
+            on' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Pin it"
+            echo
+            echo '```sh'
+            echo "go install github.com/mgt-tool/mgtt/cmd/mgtt@$GITHUB_REF_NAME"
+            echo "docker pull ghcr.io/${{ github.repository }}:$v"
+            echo "MGTT_VERSION=$GITHUB_REF_NAME sh install.sh"
+            echo '```'
+            echo
+            echo "\`SHA256SUMS\` covers every binary."
+          } >> notes.md
+          gh release create "$GITHUB_REF_NAME" --title "mgtt $GITHUB_REF_NAME" \
+            --notes-file notes.md dist/*
+
+  image:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # X.Y.Z is the pin; X.Y and X follow the newest release in their line;
+      # latest is the newest release, full stop.  None of these moves except
+      # by a release.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+
+  # From the outside, as a client.  Nothing here uses the checkout except
+  # install.sh, and that fetches from the release like anyone else would.
+  verify:
+    needs: [check, binaries, image]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # The proxy fetches a tag the first time anyone asks for it, and the
+      # checksum database follows; a few minutes of "not yet" is normal.
+      - name: go install, at the pin
+        env:
+          GOPROXY: https://proxy.golang.org
+          GOFLAGS: ""
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if go install "github.com/mgt-tool/mgtt/cmd/mgtt@$GITHUB_REF_NAME"; then break; fi
+            echo "proxy has not indexed $GITHUB_REF_NAME yet; waiting ($i)"; sleep 30
+          done
+          got=$("$(go env GOPATH)/bin/mgtt" version)
+          [ "$got" = "mgtt version $GITHUB_REF_NAME" ] || { echo "go install gave '$got'" >&2; exit 1; }
+
+      - name: go get the library, at the pin
+        env:
+          GOPROXY: https://proxy.golang.org
+          GOFLAGS: ""
+        run: |
+          d=$(mktemp -d) && cd "$d"
+          go mod init example.com/client >/dev/null 2>&1
+          go get "github.com/mgt-tool/mgtt/sdk/provider@$GITHUB_REF_NAME"
+          go list -m github.com/mgt-tool/mgtt | grep -q " $GITHUB_REF_NAME$" || {
+            echo "the library resolved to something other than $GITHUB_REF_NAME" >&2; exit 1; }
+
+      - name: docker pull, at the pin
+        run: |
+          v=${{ needs.check.outputs.version }}
+          got=$(docker run --rm "ghcr.io/${{ github.repository }}:$v" version)
+          [ "$got" = "mgtt version $GITHUB_REF_NAME" ] || { echo "image says '$got'" >&2; exit 1; }
+          latest=$(docker run --rm "ghcr.io/${{ github.repository }}:latest" version)
+          [ "$latest" = "$got" ] || { echo "latest says '$latest', not this release" >&2; exit 1; }
+
+      - name: install.sh, at the pin
+        run: |
+          mkdir -p "$PWD/bin"
+          MGTT_VERSION="$GITHUB_REF_NAME" INSTALL_DIR="$PWD/bin" sh install.sh
+          got=$("$PWD/bin/mgtt" version)
+          [ "$got" = "mgtt version $GITHUB_REF_NAME" ] || { echo "install.sh gave '$got'" >&2; exit 1; }

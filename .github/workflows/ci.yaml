@@ -1,22 +1,53 @@
+# The gate, on every push and pull request.
+#
+# What it checks is the tree, not a release: the module is tidy, the code
+# vets and tests, the binary builds for every platform a release would ship,
+# and the version the tree claims is one the changelog knows.  The release
+# workflow runs the stricter form of that last check at the tag.
+#
+# Actions are pinned by commit, the toolchain by go.mod.
+
 name: ci
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  gate:
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
+
+      # A module a client can pin is a module whose go.mod says exactly what
+      # it needs.  A stray or missing requirement shows up here, not in the
+      # client's build.
+      - name: the module is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum || {
+            echo "go.mod/go.sum are not tidy; run: go mod tidy" >&2; exit 1; }
+
       - name: vet
         run: go vet ./...
       - name: test
         run: go test ./...
-      - name: build
+
+      - name: the version is one the changelog knows
+        run: sh scripts/release-check.sh
+
+      - name: the binary says the version the tree claims
         run: |
-          VERSION=$(cat VERSION)
-          go build -ldflags="-X github.com/mgt-tool/mgtt/internal/cli.version=${VERSION}" ./cmd/mgtt
-      - name: version
-        run: ./mgtt version
+          make build
+          got=$(./mgtt version)
+          want="mgtt version v$(cat VERSION)"
+          [ "$got" = "$want" ] || { echo "built binary says '$got', tree says '$want'" >&2; exit 1; }
+
+      # Every platform a release ships, built now, so that a tag cannot be the
+      # first time darwin/arm64 fails to compile.
+      - name: it builds for every release platform
+        run: make dist

@@ -49,6 +49,8 @@ types_describe {type: "deployment"}         → facts, default healthy rules, st
 model_validate {model_source: "<yaml>"}     → every error and warning, each with a suggestion
 scenario_simulate {model_source: "<yaml>", scenarios_source: "<yaml>---<yaml>"}
                                             → pass/fail, with expected and actual side by side
+model_impact {model_source: "<yaml>", component: "redis"}
+                                            → what breaks if it fails: chains, symptoms, where redundancy holds
 ```
 
 The model and scenarios can be sent inline or by path (`model_path`, `scenarios_path`), so a chat client with no file access can use the tools too. No tool writes the model.
@@ -101,4 +103,4 @@ incident_end {incident_id, verdict: "rds stopped by maintenance window", emit_sc
 
 ## All tools
 
-Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`. Diagnosis: `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.
+Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`, `model_impact`. Diagnosis: `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.

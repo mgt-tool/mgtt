@@ -84,6 +84,7 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerModelValidate(s, h)
 		registerScenarioSimulate(s, h)
 		registerGuide(s, h)
+		registerModelImpact(s, h)
 	}
 
 	return s
@@ -150,6 +151,26 @@ func registerModelValidate(s *server.MCPServer, h *Handler) {
 			return ModelValidateParams{ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", "")}
 		},
 		h.ModelValidate,
+	))
+}
+
+func registerModelImpact(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("model_impact",
+		mcpgo.WithDescription("What breaks if this component fails? Walks the model's failure graph from the component's failure states (all, or those named) and returns every component the failure reaches with a shortest chain, which of them are user-facing symptoms, the while: guards a chain depends on, and where a redundancy group stops the failure. From the model alone: no facts, no live system."),
+		mcpgo.WithString("component", mcpgo.Required(), mcpgo.Description("the component to fail")),
+		mcpgo.WithArray("states", mcpgo.WithStringItems(), mcpgo.Description("optional: only these failure states (types_describe lists them)")),
+		mcpgo.WithString("model_path", mcpgo.Description("path to system.model.yaml on the server")),
+		mcpgo.WithString("model_source", mcpgo.Description("the model YAML itself (max 512 KiB)")),
+		rawOutput(ModelImpactOutputSchema),
+	)
+	s.AddTool(tool, dispatch("model_impact",
+		func(req mcpgo.CallToolRequest) ModelImpactParams {
+			return ModelImpactParams{
+				ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", ""),
+				Component: req.GetString("component", ""), States: req.GetStringSlice("states", nil),
+			}
+		},
+		h.ModelImpact,
 	))
 }
 

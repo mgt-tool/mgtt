@@ -4,6 +4,8 @@
 package mcp
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -196,5 +198,49 @@ func TestGuide(t *testing.T) {
 	}
 	if _, err := h.Guide(GuideParams{Topic: "nope"}); err == nil || !strings.Contains(err.Error(), "model.health") {
 		t.Errorf("unknown topic should list topics, got %v", err)
+	}
+}
+
+// model_impact answers from an inline model with no live system: the
+// failure of what everything depends on reaches the symptom.
+func TestModelImpact_Inline(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MGTT_HOME", home)
+	dir := filepath.Join(home, "providers", "testimpact")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"b.sh": "#!/bin/sh\n", "c.sh": "#!/bin/sh\n",
+		"manifest.yaml": `meta: { name: testimpact, version: 1.0.0, description: impact test }
+install: { source: { build: b.sh, clean: c.sh } }
+types:
+  service:
+    facts:
+      up: { type: mgtt.bool, probe: { cmd: "echo true", parse: bool } }
+    healthy: ["up == true"]
+    states:
+      live: { when: "up == true" }
+      down: { when: "up == false" }
+    default_active_state: live
+    failure_modes:
+      down: { can_cause: [upstream_failure] }
+`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := NewHandler(Config{Toolset: "authoring"})
+	model := "meta:\n  name: i\n  version: \"1\"\n  providers: [testimpact]\ncomponents:\n  web:\n    type: service\n    depends:\n      - on: db\n  db:\n    type: service\n"
+	res, err := h.ModelImpact(ModelImpactParams{ModelSource: model, Component: "db"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Affected) != 1 || res.Affected[0].Component != "web" || len(res.Symptoms) != 1 || res.Symptoms[0] != "web" {
+		t.Fatalf("db failing should reach web, the symptom: %+v", res)
+	}
+	if _, err := h.ModelImpact(ModelImpactParams{ModelSource: model}); err == nil {
+		t.Error("component is required")
 	}
 }

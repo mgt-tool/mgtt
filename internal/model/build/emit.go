@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 
 	"github.com/mgt-tool/mgtt/internal/model"
 	"gopkg.in/yaml.v3"
@@ -141,6 +142,9 @@ func dependsNode(deps []model.Dependency) *yaml.Node {
 		m.Content = append(m.Content, strNode("on"), strSeqNode(dep.On))
 		if dep.WhileRaw != "" {
 			appendStrField(m, "while", dep.WhileRaw)
+		}
+		if dep.Need > 0 {
+			m.Content = append(m.Content, strNode("need"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(dep.Need)})
 		}
 		seq.Content = append(seq.Content, m)
 	}

@@ -42,6 +42,13 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 	paths := enumeratePaths(m, entry, store, m.VarLookup(reg), derivation)
 	// Stage 3 — split alive vs eliminated, annotate reason strings.
 	alive, eliminated := splitPaths(paths, m, reg, store, derivation)
+	// The entry is no path of its own, so a broken entry with nothing
+	// below it to blame could never be named. When it is seen broken it
+	// becomes a one-component path; anything deeper seen broken still
+	// outranks it.
+	if strategy.ComponentVerdict(m, reg, store, entry) == strategy.Unhealthy {
+		alive = append([]Path{{ID: "PATH ENTRY", Components: []string{entry}}}, alive...)
+	}
 
 	tree := &PathTree{
 		Entry:      entry,
@@ -55,6 +62,7 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 		}),
 	}
 	tree.CannotRuleOut = strategy.CannotRuleOut(m, reg, store)
+	tree.RedundancyDegraded = strategy.RedundancyDegraded(m, reg, store)
 	// Stage 5 — strategy dispatch.
 	tree.Suggested = suggestNextProbe(m, reg, store, suspects)
 	return tree
@@ -68,6 +76,15 @@ func splitPaths(paths []Path, m *model.Model, reg *providersupport.Registry, sto
 		deepest := p.Components[len(p.Components)-1]
 		deepestState := derivation.ComponentStates[deepest]
 
+		// A redundancy group that still has enough healthy members does
+		// not pass a member's failure up: the path cannot explain the
+		// symptoms above it, even when its tail is itself broken -- that
+		// is degraded redundancy, reported apart, not a root cause.
+		if why := satisfiedGroupOn(p, m, reg, store); why != "" {
+			p.Reason = "redundancy holds (" + why + ")"
+			eliminated = append(eliminated, p)
+			continue
+		}
 		// A path explains the symptoms only through its links, so a link
 		// proven healthy refutes it -- unless its tail is itself seen
 		// broken, which stays a finding (a standalone failure) whether or
@@ -99,6 +116,17 @@ func splitPaths(paths []Path, m *model.Model, reg *providersupport.Registry, sto
 		eliminated = append(eliminated, p)
 	}
 	return alive, eliminated
+}
+
+// satisfiedGroupOn describes the first edge of p that runs through a
+// satisfied redundancy group, or "" when none does.
+func satisfiedGroupOn(p Path, m *model.Model, reg *providersupport.Registry, store *facts.Store) string {
+	for i := 0; i+1 < len(p.Components); i++ {
+		if ok, why := strategy.SatisfiedGroup(m, reg, store, p.Components[i], p.Components[i+1]); ok {
+			return why
+		}
+	}
+	return ""
 }
 
 // healthyLink returns the first component before p's tail whose facts

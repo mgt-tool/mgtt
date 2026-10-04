@@ -132,7 +132,8 @@ depends:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `on` | yes | Name of the component this one depends on. Must exist in `components`. |
+| `on` | yes | Name of the component this one depends on, or a list of names. Each must exist in `components`. |
+| `need` | no | Makes a list in `on` a **redundancy group**: the dependency holds while at least `need` members are healthy. Omit to require every member. Must be between 1 and the number of members. |
 | `while` | no | Health expression that guards the edge. The dependency is only active while the expression evaluates true against derived state. When it evaluates false the edge is skipped; when it can't be resolved the edge is walked conservatively. Omit for an always-active edge. |
 
 ```yaml
@@ -150,8 +151,22 @@ The engine uses the dependency graph to:
 2. Build failure paths (trace from symptom to root cause)
 3. Eliminate healthy branches (if a dependency is healthy, its sub-tree is cleared)
 
-!!! note "Soft dependencies"
-    All dependencies are currently treated as hard — if a dependency is unhealthy, the engine considers the dependent component potentially affected. Soft/optional dependency support (`soft: true`) is planned but not yet implemented. If your system has optional dependencies, model only the hard ones for now.
+#### Redundancy groups
+
+Replicas across zones, a primary with a standby, two colors that both serve: these are "one of N" structures, not N hard dependencies.
+
+```yaml
+depends:
+  - on: [web-a, web-b]
+    need: 1          # served while at least one of them is healthy
+```
+
+A group is **satisfied** while at least `need` members are proven healthy. A member whose health is unknown (its facts could not be read) does not count toward `need`, so an unread fact never hides a failure.
+
+While its group is satisfied, a broken member does not break the component that depends on it. It is not named as the root cause; conclusions report it as **redundancy degraded** (`mgtt plan`: `Redundancy degraded: web-a (edge: 1 of 2 healthy in [web-a, web-b], needs 1)`; MCP `plan`: `redundancy_degraded`). Once fewer than `need` members are healthy, the group no longer holds and failures pass through it as through any dependency.
+
+!!! note "Limits"
+    Today the path engine and the BFS strategy honour groups. Scenario-guided diagnosis (`scenarios.yaml`) and `model export` still treat each member as a hard dependency, so their view of a group is pessimistic, as before. Soft dependencies (`soft: true`) are not implemented yet.
 
 ### Health expressions
 

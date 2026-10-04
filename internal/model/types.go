@@ -101,7 +101,11 @@ func mergeVars(base, override map[string]string) map[string]string {
 
 // Dependency captures a single depends-on clause with an optional while guard.
 type Dependency struct {
-	On       []string
+	On []string
+	// Need makes On a redundancy group: the dependency holds while at
+	// least Need of its members are healthy. 0 means every member is
+	// required, as for a plain list.
+	Need     int
 	WhileRaw string    // raw expression string, compiled in Phase 2
 	While    expr.Node // compiled from WhileRaw; nil means always active
 }

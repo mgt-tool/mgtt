@@ -148,3 +148,52 @@ func TestEmitYAML_KeepsHealthyMode(t *testing.T) {
 		t.Fatalf("modes lost in emit:\n%s", b.String())
 	}
 }
+
+// need: k turns a depends entry into a redundancy group; validate bounds
+// it to the group's size, and model build keeps it.
+func TestDependsNeed(t *testing.T) {
+	m, err := loadModelYAML(t, `  svc:
+    type: rds_instance
+    depends:
+      - on: [a, b]
+        need: 1
+  a: { type: rds_instance }
+  b: { type: rds_instance }
+  bad:
+    type: rds_instance
+    depends:
+      - on: [a, b]
+        need: 3
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Components["svc"].Depends[0].Need; got != 1 {
+		t.Fatalf("need = %d, want 1", got)
+	}
+	var errs []string
+	for _, e := range model.Validate(m, nil).Errors {
+		errs = append(errs, e.Component+": "+e.Message)
+	}
+	if len(errs) != 1 || !strings.Contains(errs[0], "bad: need: 3 over 2") {
+		t.Fatalf("want one error on bad's need: 3; got %q", errs)
+	}
+
+	delete(m.Components, "bad")
+	m.Order = []string{"svc", "a", "b"}
+	var b bytes.Buffer
+	if err := build.EmitYAML(m, &b); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "re.yaml")
+	if err := os.WriteFile(path, b.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	again, err := model.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Components["svc"].Depends[0].Need != 1 {
+		t.Fatalf("need lost in emit:\n%s", b.String())
+	}
+}

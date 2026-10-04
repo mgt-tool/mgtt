@@ -97,6 +97,7 @@ func (h *rawHealthy) UnmarshalYAML(n *yaml.Node) error {
 type rawDependency struct {
 	OnRaw    any    `yaml:"on"`
 	WhileRaw string `yaml:"while"`
+	Need     int    `yaml:"need"`
 }
 
 type rawFailMode struct {
@@ -184,7 +185,7 @@ func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 		if err != nil {
 			return nil, fmt.Errorf("component %s: depends.on: %w", name, err)
 		}
-		dep := Dependency{WhileRaw: rd.WhileRaw, On: on}
+		dep := Dependency{WhileRaw: rd.WhileRaw, On: on, Need: rd.Need}
 		if dep.WhileRaw != "" {
 			w, err := expr.Parse(dep.WhileRaw)
 			if err != nil {

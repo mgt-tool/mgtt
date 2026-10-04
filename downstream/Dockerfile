@@ -157,6 +157,9 @@ RUN /downstream/run.sh storefront && touch /tmp/passed
 FROM suites AS check-storefront-speed
 RUN /downstream/run.sh storefront-speed && touch /tmp/passed
 
+FROM suites AS check-redundant-web
+RUN /downstream/run.sh redundant-web && touch /tmp/passed
+
 FROM suites AS check-mgtt2writ
 RUN /downstream/run.sh mgtt2writ && touch /tmp/passed
 
@@ -180,6 +183,7 @@ COPY --from=check-provider-terraform   /tmp/passed /tmp/passed-provider-terrafor
 COPY --from=check-minishop             /tmp/passed /tmp/passed-minishop
 COPY --from=check-storefront           /tmp/passed /tmp/passed-storefront
 COPY --from=check-storefront-speed     /tmp/passed /tmp/passed-storefront-speed
+COPY --from=check-redundant-web        /tmp/passed /tmp/passed-redundant-web
 COPY --from=check-mgtt2writ            /tmp/passed /tmp/passed-mgtt2writ
 COPY --from=check-mcp                  /tmp/passed /tmp/passed-mcp
 COPY --from=check-mcp-probe            /tmp/passed /tmp/passed-mcp-probe

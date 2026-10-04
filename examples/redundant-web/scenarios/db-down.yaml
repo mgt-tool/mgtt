@@ -1,0 +1,11 @@
+name: database down under both webs
+# One cause, both members: redundancy cannot help, and the database is
+# the root cause.
+inject:
+  shop-svc: { endpoint_count: 0 }
+  web-a:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+  web-b:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+  db:       { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+expect:
+  root_cause: db
+  path: [shop-svc, web-a, db]

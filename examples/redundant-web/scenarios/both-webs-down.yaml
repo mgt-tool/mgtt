@@ -1,0 +1,10 @@
+name: both webs down
+# The group no longer holds: the failure reaches the Service.
+inject:
+  shop-svc: { endpoint_count: 0 }
+  web-a:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+  web-b:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+  db:       { ready_replicas: 2, desired_replicas: 2, condition_available: true,  restart_count: 0 }
+expect:
+  root_cause: web-a
+  path: [shop-svc, web-a]

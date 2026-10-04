@@ -32,6 +32,9 @@ type Expectation struct {
 	// CannotRuleOut lists components the conclusion must report as
 	// undecided because some of their facts could not be read. Subset.
 	CannotRuleOut []string `yaml:"cannot_rule_out"`
+	// RedundancyDegraded lists components the conclusion must report as
+	// broken but covered by a redundancy group that holds. Subset.
+	RedundancyDegraded []string `yaml:"redundancy_degraded"`
 }
 
 type Result struct {

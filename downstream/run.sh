@@ -66,6 +66,14 @@ suite_storefront() {
   mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios
 }
 
+# A redundancy group (need: 1 of 2 webs) on the real kubernetes types:
+# one member down is degraded, not a root cause; a cause under both is.
+suite_redundant_web() {
+  cd "$root/examples/redundant-web" || return 1
+  mgtt model validate system.model.yaml || return 1
+  mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios
+}
+
 # Scenario-guided diagnosis on the flagship example decides a probe within the
 # budget (seconds). G2: enumerate, then one occam decision.
 suite_storefront_speed() {
@@ -140,7 +148,7 @@ suite_mcp_probe() {
 
 suites="providers"
 for p in $providers; do suites="$suites provider-$p"; done
-suites="$suites minishop storefront storefront-speed mgtt2writ mcp mcp-probe"
+suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe"
 
 # Suites are suite_* functions, so none can shadow the tool it runs.
 dispatch() {

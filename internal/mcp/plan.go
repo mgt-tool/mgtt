@@ -62,6 +62,14 @@ type UnseenInfo struct {
 	Facts     map[string]string `json:"facts"` // fact → forbidden | transient
 }
 
+func degradedStrings(in []strategy.Degraded) []string {
+	var out []string
+	for _, d := range in {
+		out = append(out, d.String())
+	}
+	return out
+}
+
 func mapUnseen(in []strategy.Unseen) []UnseenInfo {
 	var out []UnseenInfo
 	for _, u := range in {
@@ -90,7 +98,7 @@ func (h *Handler) Plan(p PlanParams) (*PlanResult, error) {
 			RootCause:          tree.RootCause,
 			Suggested:          toSuggested(tree.Suggested, m),
 			CannotRuleOut:      mapUnseen(tree.CannotRuleOut),
-			RedundancyDegraded: tree.RedundancyDegraded,
+			RedundancyDegraded: degradedStrings(tree.RedundancyDegraded),
 		}, nil
 	})
 }

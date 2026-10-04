@@ -1,0 +1,11 @@
+name: one web down, the other carrying traffic
+# web-a crash-loops, web-b serves: the Service is fine. web-a is
+# degraded redundancy, reported as such, not a root cause.
+inject:
+  shop-svc: { endpoint_count: 2 }
+  web-a:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 9 }
+  web-b:    { ready_replicas: 2, desired_replicas: 2, condition_available: true,  restart_count: 0 }
+  db:       { ready_replicas: 2, desired_replicas: 2, condition_available: true,  restart_count: 0 }
+expect:
+  root_cause: none
+  redundancy_degraded: [web-a]

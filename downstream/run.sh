@@ -99,9 +99,48 @@ suite_mcp() {
   [ -z "$bad" ] || { echo "non-portable tool names:"; echo "$bad"; return 1; }
 }
 
+# await_reply ID waits (up to 30s) until the MCP session's output holds the
+# reply to request ID.
+await_reply() {
+  n=0
+  until grep -q "\"id\":$1[,}]" "$tmp/mcp.out" 2>/dev/null; do
+    n=$((n + 1))
+    [ "$n" -le 300 ] || return 0
+    sleep 0.1
+  done
+}
+
+# MCP runs a fact with no probe.cmd through its provider's runner binary,
+# as the CLI does, instead of handing it to a human. aws declares no cmd
+# at all. With no aws CLI in the image the runner fails, which is fine:
+# the claim is that it ran.
+suite_mcp_probe() {
+  mkdir -p "$tmp/awsprobe" && cd "$tmp/awsprobe" || return 1
+  printf '%s\n' 'meta:' '  name: awsprobe' '  version: "1.0"' '  providers: [aws]' \
+    'components:' '  db:' '    type: rds_instance' '    resource: downstream-db' >system.model.yaml
+  # The server answers requests concurrently, so each call waits for the
+  # reply it depends on, as a real client does.
+  : >"$tmp/mcp.out"
+  {
+    printf '%s\n' \
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
+      '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+      '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"incident.start","arguments":{"model_ref":"system.model.yaml","id":"inc-downstream"}}}'
+    await_reply 2
+    printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"probe","arguments":{"incident_id":"inc-downstream","execute":true}}}'
+    await_reply 3
+  } | timeout 60 mgtt mcp serve 2>"$tmp/mcp.err" >"$tmp/mcp.out"
+  status=$(grep '"id":3' "$tmp/mcp.out" | grep -o '\\"status\\":\\"[a-z_]*' | sed 's/.*"//')
+  echo "probe status: ${status:-<none>}"
+  case "$status" in
+  executed | not_found | forbidden | transient | error) ;;
+  *) cat "$tmp/mcp.out" "$tmp/mcp.err"; return 1 ;;
+  esac
+}
+
 suites="providers"
 for p in $providers; do suites="$suites provider-$p"; done
-suites="$suites minishop storefront storefront-speed mgtt2writ mcp"
+suites="$suites minishop storefront storefront-speed mgtt2writ mcp mcp-probe"
 
 # Suites are suite_* functions, so none can shadow the tool it runs.
 dispatch() {

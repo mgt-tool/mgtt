@@ -539,7 +539,6 @@ func TestShellProbeRunner_ForwardsTypeAndVars(t *testing.T) {
 	}
 	runner := &shellProbeRunner{
 		exec: captor,
-		reg:  providersupport.NewRegistry(),
 	}
 	store := facts.NewInMemory()
 
@@ -619,7 +618,6 @@ func (s stubExecutor) Run(_ context.Context, _ probe.Command) (probe.Result, err
 func TestShellProbeRunner_ForbiddenIsUnresolvedNotFatal(t *testing.T) {
 	runner := &shellProbeRunner{
 		exec: stubExecutor{err: fmt.Errorf("%w: customresourcedefinitions is forbidden", probe.ErrForbidden)},
-		reg:  providersupport.NewRegistry(),
 	}
 	store := facts.NewInMemory()
 	p := &strategy.Probe{Component: "eso", Fact: "crd_registered", ParseMode: "bool"}
@@ -648,7 +646,6 @@ func TestShellProbeRunner_ForbiddenIsUnresolvedNotFatal(t *testing.T) {
 func TestShellProbeRunner_TransientIsUnresolvedNotFatal(t *testing.T) {
 	runner := &shellProbeRunner{
 		exec: stubExecutor{err: fmt.Errorf("%w: throttled", probe.ErrTransient)},
-		reg:  providersupport.NewRegistry(),
 	}
 	store := facts.NewInMemory()
 	p := &strategy.Probe{Component: "rds", Fact: "available", ParseMode: "bool"}
@@ -668,7 +665,6 @@ func TestShellProbeRunner_TransientIsUnresolvedNotFatal(t *testing.T) {
 func TestShellProbeRunner_UsageErrorStillFatal(t *testing.T) {
 	runner := &shellProbeRunner{
 		exec: stubExecutor{err: fmt.Errorf("%w: missing --type", probe.ErrUsage)},
-		reg:  providersupport.NewRegistry(),
 	}
 	store := facts.NewInMemory()
 	p := &strategy.Probe{Component: "x", Fact: "y", ParseMode: "bool"}
@@ -753,7 +749,6 @@ func TestShellProbeRunner_ForwardsResource(t *testing.T) {
 	}
 	runner := &shellProbeRunner{
 		exec: captor,
-		reg:  providersupport.NewRegistry(),
 	}
 	store := facts.NewInMemory()
 

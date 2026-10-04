@@ -8,10 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,8 +20,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
-	probeexec "github.com/mgt-tool/mgtt/internal/providersupport/probe/exec"
-	"github.com/mgt-tool/mgtt/internal/providersupport/probe/fixture"
+	"github.com/mgt-tool/mgtt/internal/providersupport/probe/dispatch"
 	"github.com/mgt-tool/mgtt/internal/state"
 
 	"github.com/spf13/cobra"
@@ -123,7 +119,7 @@ func loadPlanContext(f *planFlags) (*planContext, error) {
 	if err := resolveModelProviders(m, os.Stderr); err != nil {
 		return nil, err
 	}
-	executor, err := buildExecutor(reg)
+	executor, err := dispatch.New(reg)
 	if err != nil {
 		return nil, err
 	}
@@ -163,26 +159,18 @@ func runPlanProbe(w io.Writer, m *model.Model, reg *providersupport.Registry, st
 		Vars:      s.Vars,
 		Timeout:   probeTimeout(),
 	})
+	outcome, err := dispatch.Record(store, s.Component, s.Fact, result, err)
 	if err != nil {
 		fmt.Fprintf(w, "\n  probe error: %v\n", err)
 		return true
 	}
-	if result.Status == probe.StatusNotFound {
-		// not_found: underlying resource missing. Surface it AND record
-		// a nil-value fact with FactStatusNotFound so the expr layer
-		// yields an UnresolvedError on the next iteration — the planner
-		// cannot loop on the same probe.
-		fmt.Fprintf(w, "\n  resource not found: %s.%s\n", s.Component, s.Fact)
-		appendProbeFact(store, s.Component, facts.Fact{
-			Key: s.Fact, Collector: "probe",
-			At: time.Now(), Status: facts.FactStatusNotFound,
-		}, w)
+	saveProbeStore(store, w)
+	if outcome != dispatch.Value {
+		// Recorded as unknown: the expr layer reads it as unresolved on
+		// the next iteration, so the planner moves on instead of looping.
+		fmt.Fprintf(w, "\n  %s.%s: %s\n", s.Component, s.Fact, strings.ReplaceAll(string(outcome), "_", " "))
 		return false
 	}
-	appendProbeFact(store, s.Component, facts.Fact{
-		Key: s.Fact, Value: result.Parsed, Collector: "probe",
-		At: time.Now(), Raw: result.Raw,
-	}, w)
 
 	derivation := state.Derive(m, reg, store)
 	defaultActive := engine.ResolveDefaultActive(m.Components[s.Component], m, reg)
@@ -191,10 +179,8 @@ func runPlanProbe(w io.Writer, m *model.Model, reg *providersupport.Registry, st
 	return false
 }
 
-// appendProbeFact centralises the Append + save-on-disk-backed pattern
-// every probe-outcome branch previously repeated.
-func appendProbeFact(store *facts.Store, component string, f facts.Fact, w io.Writer) {
-	store.Append(component, f)
+// saveProbeStore persists a disk-backed store after a probe outcome.
+func saveProbeStore(store *facts.Store, w io.Writer) {
 	if !store.IsDiskBacked() {
 		return
 	}
@@ -295,54 +281,6 @@ func probeTimeout() time.Duration {
 }
 
 var probeTimeoutWarnOnce sync.Once
-
-// buildExecutor selects a probe executor based on MGTT_FIXTURES. In fixture
-// mode, all probes go through the fixture executor. Otherwise the shell
-// executor is used, with any provider runner binaries mixed in via Mux.
-func buildExecutor(reg *providersupport.Registry) (probe.Executor, error) {
-	if fixturePath := os.Getenv("MGTT_FIXTURES"); fixturePath != "" {
-		ex, err := fixture.Load(fixturePath)
-		if err != nil {
-			return nil, fmt.Errorf("load fixtures: %w", err)
-		}
-		return ex, nil
-	}
-
-	runners := map[string]probe.Executor{}
-	for _, p := range reg.All() {
-		// Registry was built via LoadAllForUse at the call site, so
-		// CheckCompatible has already been run. No need to re-gate here.
-		dir := providersupport.ProviderDir(p.Meta.Name)
-		meta, _ := providersupport.ReadInstallMeta(dir) // absent file → Method:git (backward-compat)
-		switch meta.Method {
-		case providersupport.InstallMethodImage:
-			runners[p.Meta.Name] = probe.NewImageRunner(
-				meta.Source,
-				slices.Sorted(maps.Keys(p.Runtime.Needs)),
-				p.Runtime.NetworkMode,
-			)
-		default:
-			// git-installed (or legacy installs without metadata file)
-			if cmd := p.ResolveEntrypoint(providersupport.InstallMethodGit, providersupport.ProviderDir(p.Meta.Name)); cmd != "" {
-				runners[p.Meta.Name] = probe.NewExternalRunner(
-					resolveCommand(cmd, p.Meta.Name))
-			}
-		}
-	}
-	if len(runners) == 0 {
-		return probeexec.Default(), nil
-	}
-	return &probe.Mux{Default: probeexec.Default(), Runners: runners}, nil
-}
-
-// resolveCommand substitutes $MGTT_PROVIDER_DIR in a command string.
-func resolveCommand(command, providerName string) string {
-	dir := providersupport.ProviderDir(providerName)
-	if dir == "" {
-		dir = filepath.Join("providers", providerName)
-	}
-	return strings.ReplaceAll(command, "$MGTT_PROVIDER_DIR", dir)
-}
 
 // renderPlanHeader renders the initial entry point message.
 func renderPlanHeader(w io.Writer, entry string) {

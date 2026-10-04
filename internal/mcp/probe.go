@@ -15,7 +15,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
-	probeexec "github.com/mgt-tool/mgtt/internal/providersupport/probe/exec"
+	probedispatch "github.com/mgt-tool/mgtt/internal/providersupport/probe/dispatch"
 )
 
 // ProbeParams carries the inputs for the `probe` tool. Phase 1: no
@@ -32,6 +32,8 @@ type ProbeParams struct {
 //   - "rendered"                 — execute=false; rendered_command populated
 //   - "executed"                 — ran successfully; value + raw populated
 //   - "not_found"                — probe ran; resource missing
+//   - "forbidden"                — the backend refused the credentials; recorded as unknown
+//   - "transient"                — retryable failure (e.g. timeout); recorded as unknown
 //   - "operator_prompt_required" — provider declares this fact is operator-sourced
 //   - "no_suggestion"            — engine has no next probe (resolved or stuck)
 //   - "error"                    — the probe ran and failed; raw may carry stderr
@@ -63,7 +65,12 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 		if !p.Execute {
 			return &ProbeResult{Status: "rendered", Component: s.Component, Fact: s.Fact, Provider: s.Provider, RenderedCommand: rendered}, nil
 		}
-		if s.Command == "" {
+		d, err := probedispatch.New(reg)
+		if err != nil {
+			return nil, err
+		}
+		// No command and no runner: only an operator can supply the fact.
+		if !d.Runnable(s.Provider, s.Command) {
 			return &ProbeResult{Status: "operator_prompt_required", Component: s.Component, Fact: s.Fact, Provider: s.Provider}, nil
 		}
 		if gate := h.checkProbeGates(inc, reg, s, rendered); gate != nil {
@@ -72,7 +79,7 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 		if err := probe.ValidateCommand(rendered, s.Command); err != nil {
 			return blocked("error", err.Error(), s, rendered), nil
 		}
-		return h.runProbeAndStore(inc, s, rendered)
+		return h.runProbeAndStore(d, inc, s, rendered)
 	})
 }
 
@@ -114,11 +121,12 @@ func (h *Handler) checkProbeGates(inc *incident.Incident, reg *providersupport.R
 	return nil
 }
 
-// runProbeAndStore executes the rendered probe, writes the resulting
-// fact into the store, and builds the wire result.
-func (h *Handler) runProbeAndStore(inc *incident.Incident, s *engine.Probe, rendered string) (*ProbeResult, error) {
+// runProbeAndStore executes the rendered probe through the same dispatcher
+// the CLI uses, records the outcome the same way, and builds the wire
+// result.
+func (h *Handler) runProbeAndStore(d *probedispatch.Dispatcher, inc *incident.Incident, s *engine.Probe, rendered string) (*ProbeResult, error) {
 	ctx := probe.WithTracer(context.Background(), probe.NewTracer())
-	res, runErr := probeexec.Default().Run(ctx, probe.Command{
+	res, runErr := d.Run(ctx, probe.Command{
 		Raw:       rendered,
 		Parse:     s.ParseMode,
 		Provider:  s.Provider,
@@ -129,35 +137,26 @@ func (h *Handler) runProbeAndStore(inc *incident.Incident, s *engine.Probe, rend
 		Vars:      s.Vars,
 		Timeout:   probeTimeoutFromConfig(h.cfg),
 	})
-	if runErr != nil {
-		return blocked("error", runErr.Error(), s, rendered), nil
+	outcome, err := probedispatch.Record(inc.Store, s.Component, s.Fact, res, runErr)
+	if err != nil {
+		return blocked("error", err.Error(), s, rendered), nil
 	}
-	if res.Status == probe.StatusNotFound {
-		// Record the not_found sentinel so subsequent plan calls
-		// don't re-suggest the same probe. Status (not Note) is what
-		// the engine's liveset filter reads.
-		inc.Store.Append(s.Component, facts.Fact{
-			Key: s.Fact, Collector: "probe",
-			At: time.Now().UTC(), Status: facts.FactStatusNotFound,
-		})
-		_ = inc.Store.Save()
-		return &ProbeResult{
-			Status: "not_found", Component: s.Component, Fact: s.Fact,
-			Provider: s.Provider, RenderedCommand: rendered, Raw: res.Raw,
-		}, nil
-	}
-	inc.Store.Append(s.Component, facts.Fact{
-		Key: s.Fact, Value: res.Parsed, Collector: "probe",
-		At: time.Now().UTC(), Raw: res.Raw,
-	})
 	if err := inc.Store.Save(); err != nil {
 		return nil, fmt.Errorf("save state: %w", err)
 	}
-	return &ProbeResult{
+	result := &ProbeResult{
 		Status: "executed", Component: s.Component, Fact: s.Fact,
-		Provider: s.Provider, RenderedCommand: rendered,
-		Value: res.Parsed, Raw: res.Raw,
-	}, nil
+		Provider: s.Provider, RenderedCommand: rendered, Raw: res.Raw,
+	}
+	switch outcome {
+	case probedispatch.Value:
+		result.Value = res.Parsed
+	case probedispatch.Forbidden, probedispatch.Transient:
+		result.Status, result.Reason = string(outcome), runErr.Error()
+	default:
+		result.Status = string(outcome)
+	}
+	return result, nil
 }
 
 // blocked builds a ProbeResult for any non-success terminal state that

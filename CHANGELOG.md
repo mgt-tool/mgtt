@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MCP `probe` tool runs probes the way the CLI does.** It used to run every probe as a shell command, skipping provider runners. A fact with no `probe.cmd` -- every fact of a runner-backed provider such as aws -- came back `operator_prompt_required`, so an agent could never probe aws at all, and kubernetes probes bypassed the provider binary the CLI uses. `mgtt plan`, `mgtt diagnose` and MCP now share one dispatcher (`probe/dispatch`): the same runner routing, `MGTT_FIXTURES` support, and the same recording of outcomes. A probe the backend refuses or that times out is recorded as an unknown fact everywhere; over MCP it now returns `forbidden` or `transient` instead of an unrecorded `error`, and `mgtt plan` keeps going instead of stopping. `operator_prompt_required` now means what it says: no command and no runner.
+- A provider gets a runner only when its binary exists or its manifest declares an entrypoint. A types-only provider used to be routed to a `bin/mgtt-provider-<name>` that was never built; its `probe.cmd` now runs.
+
 ### Added
 
 - **`make downstream`** builds this checkout and every repository that depends on it -- the six providers, compiled against this engine through a `replace`, and mgtt2writ with writ -- in one pinned Docker image, then runs the suites: provider unit tests and `provider validate`, the minishop verification contract, the storefront scenarios and probe-decision budget, the mgtt2writ pipeline and MCP tool-name portability. Images are pinned by digest and repositories by commit. Known breakages sit in `downstream/xfail`, each naming the step that fixes it; a listed suite that starts passing fails the build until its line goes.

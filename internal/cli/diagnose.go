@@ -6,7 +6,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
+	"github.com/mgt-tool/mgtt/internal/providersupport/probe/dispatch"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 
 	"github.com/spf13/cobra"
@@ -452,21 +452,23 @@ func stdinLooksInteractive(r io.Reader) bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
-// defaultNewProbeRunner returns the production runner that shells out to
-// probes via the same executor `mgtt plan` builds.
+// defaultNewProbeRunner returns the production runner: the same
+// dispatcher `mgtt plan` and the MCP probe tool use.
 func defaultNewProbeRunner(reg *providersupport.Registry) (probeRunner, error) {
-	exec, err := buildExecutor(reg)
+	d, err := dispatch.New(reg)
 	if err != nil {
 		return nil, err
 	}
-	return &shellProbeRunner{exec: exec, reg: reg}, nil
+	return &shellProbeRunner{exec: d}, nil
 }
 
 type shellProbeRunner struct {
 	exec probe.Executor
-	reg  *providersupport.Registry
 }
 
+// Run executes p and records its outcome. Forbidden and transient failures
+// are recorded as unknown facts so diagnose keeps going; any other error
+// terminates the run.
 func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *facts.Store) (string, error) {
 	rendered := probe.Substitute(p.Command, p.Component, p.Vars, nil)
 	if err := probe.ValidateCommand(rendered, p.Command); err != nil {
@@ -483,50 +485,14 @@ func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *fa
 		Vars:      p.Vars,
 		Timeout:   probeTimeout(),
 	})
+	outcome, err := dispatch.Record(store, p.Component, p.Fact, result, err)
 	if err != nil {
-		return handleProbeError(p, store, err)
+		return "", err
 	}
-	if result.Status == probe.StatusNotFound {
-		recordUnresolvedFact(store, p, facts.FactStatusNotFound, "not_found")
-		return fmt.Sprintf("%s.%s = <not_found>", p.Component, p.Fact), nil
+	if outcome != dispatch.Value {
+		return fmt.Sprintf("%s.%s = <%s>", p.Component, p.Fact, outcome), nil
 	}
-	store.Append(p.Component, facts.Fact{
-		Key:       p.Fact,
-		Value:     result.Parsed,
-		Collector: "probe",
-		At:        time.Now(),
-		Raw:       result.Raw,
-	})
 	return fmt.Sprintf("%s.%s = %v", p.Component, p.Fact, result.Parsed), nil
-}
-
-// handleProbeError degrades Forbidden/Transient failures to "unknown
-// fact" (Unresolved semantics) so diagnose keeps going; all other
-// taxonomies terminate the run.
-func handleProbeError(p *strategy.Probe, store *facts.Store, err error) (string, error) {
-	if errors.Is(err, probe.ErrForbidden) {
-		recordUnresolvedFact(store, p, facts.FactStatusForbidden, "forbidden: "+err.Error())
-		return fmt.Sprintf("%s.%s = <forbidden>", p.Component, p.Fact), nil
-	}
-	if errors.Is(err, probe.ErrTransient) {
-		recordUnresolvedFact(store, p, facts.FactStatusTransient, "transient: "+err.Error())
-		return fmt.Sprintf("%s.%s = <transient>", p.Component, p.Fact), nil
-	}
-	return "", err
-}
-
-// recordUnresolvedFact appends a value-less fact with the given status
-// classification. The engine's expr layer yields an UnresolvedError on
-// the next iteration so the strategy picks a different probe.
-func recordUnresolvedFact(store *facts.Store, p *strategy.Probe, status facts.FactStatus, note string) {
-	store.Append(p.Component, facts.Fact{
-		Key:       p.Fact,
-		Value:     nil,
-		Collector: "probe",
-		At:        time.Now(),
-		Note:      note,
-		Status:    status,
-	})
 }
 
 // reportDone prints the terminal success report: single scenario remains,

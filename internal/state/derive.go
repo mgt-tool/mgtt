@@ -67,6 +67,7 @@ func deriveOne(
 	ctx := expr.Ctx{
 		CurrentComponent: name,
 		Facts:            store,
+		Vars:             m.VarLookup(reg),
 		States:           partialStates,
 	}
 

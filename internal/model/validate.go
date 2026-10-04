@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 )
 
@@ -22,6 +23,7 @@ func Validate(m *Model, reg *providersupport.Registry) *ValidationResult {
 		pass5TriggeredBy(m, reg, result)
 		pass6DuplicateResource(m, reg, result)
 		pass7HealthyOverride(m, reg, result)
+		pass8UnsetVars(m, reg, result)
 	}
 	pass3DepRefs(m, result)
 	pass4Cycles(m, result)
@@ -320,6 +322,86 @@ func pass7HealthyOverride(m *Model, reg *providersupport.Registry, result *Valid
 			})
 		}
 	}
+}
+
+// pass8UnsetVars warns when a component's rules compare against a var --
+// `restart_count <= max_restart_count` -- that nothing sets: not the
+// component's vars:, not meta.vars:, not a provider default. Such a rule
+// can never be decided, so the component can never be shown healthy.
+func pass8UnsetVars(m *Model, reg *providersupport.Registry, result *ValidationResult) {
+	vars := m.VarLookup(reg)
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		if comp == nil {
+			continue
+		}
+		t, _, err := comp.ResolveType(m, reg)
+		if err != nil || t == nil {
+			continue
+		}
+		rules := comp.Healthy
+		if len(rules) == 0 {
+			rules = t.Healthy
+		}
+		for _, st := range t.States {
+			if st.When != nil {
+				rules = append(rules[:len(rules):len(rules)], st.When)
+			}
+		}
+		warned := map[string]bool{}
+		for _, rule := range rules {
+			for _, key := range varRefs(rule, t) {
+				if _, set := vars.LookupVar(name, key); set || warned[key] {
+					continue
+				}
+				warned[key] = true
+				result.Warnings = append(result.Warnings, ValidationWarning{
+					Component: name,
+					Field:     "vars",
+					Message:   fmt.Sprintf("%s rules compare against %q, which is not set (component vars:, meta.vars: or a provider default); those rules can never be decided", comp.Type, key),
+				})
+			}
+		}
+	}
+}
+
+// varRefs returns the bare words n compares t's non-string facts against
+// that are not themselves facts of t: the vars the evaluator will look up.
+func varRefs(n expr.Node, t *providersupport.Type) []string {
+	var out []string
+	var walk func(expr.Node)
+	walk = func(n expr.Node) {
+		switch v := n.(type) {
+		case *expr.AndNode:
+			walk(v.L)
+			walk(v.R)
+		case *expr.OrNode:
+			walk(v.L)
+			walk(v.R)
+		case *expr.CmpNode:
+			s, ok := v.Value.(string)
+			if !ok || v.Component != "" || v.Fact == "" || v.Fact == "state" || !isBareWord(s) {
+				return
+			}
+			if f := t.Facts[v.Fact]; f != nil && f.TypeName == "mgtt.string" {
+				return // a literal, as in phase == Bound
+			}
+			if _, isFact := t.Facts[s]; !isFact {
+				out = append(out, s)
+			}
+		}
+	}
+	walk(n)
+	return out
+}
+
+func isBareWord(s string) bool {
+	for i, c := range s {
+		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9' || i == 0) {
+			return false
+		}
+	}
+	return s != "" && s != "true" && s != "false"
 }
 
 func pass4Cycles(m *Model, result *ValidationResult) {

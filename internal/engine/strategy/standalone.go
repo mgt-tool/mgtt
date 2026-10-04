@@ -121,7 +121,7 @@ func failedStateFor(in Input, name string) string {
 		if st.Name == t.DefaultActiveState || st.When == nil {
 			continue
 		}
-		ok, err := EvalStatePredicate(st.When, in.Store, name)
+		ok, err := EvalStatePredicate(st.When, in.Store, in.Model.VarLookup(in.Registry), name)
 		if err == nil && ok {
 			return st.Name
 		}

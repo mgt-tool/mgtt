@@ -224,6 +224,21 @@ Each expression follows the pattern:
 
 **Fact names** must be facts defined by the provider for that component's type. See [Type Catalog](type-catalog.md) for which facts each type exposes.
 
+**Bare words as values.** A value written as a bare word, not quoted and not a number, is read according to the fact it is compared with:
+
+- Against a string fact it is a literal: `phase == Bound`.
+- Against any other fact it names a second fact of the same component: `ready_replicas == desired_replicas`.
+- If no such fact exists, it names a **variable**, resolved in this order: the component's `vars:`, then `meta.vars:`, then the default the provider declares under `variables:`. This is how a provider leaves a threshold to each component:
+
+```yaml
+web:
+  type: container                       # rules: restart_count <= max_restart_count
+  vars:
+    max_restart_count: 5
+```
+
+A variable set nowhere leaves its rule undecided. The component then can never be shown healthy, and `mgtt model validate` warns about it.
+
 **Compound expressions** (used in provider state definitions, not in model `healthy` fields):
 
 | Syntax | Meaning |

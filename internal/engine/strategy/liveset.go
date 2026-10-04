@@ -59,7 +59,7 @@ func stepConsistent(step scenarios.Step, store *facts.Store, m *model.Model, reg
 	if store.IsAbsent(step.Component) {
 		return absentStepConsistent(step, t)
 	}
-	return matchedStepConsistent(step, store, t)
+	return matchedStepConsistent(step, store, m.VarLookup(reg), t)
 }
 
 // absentStepConsistent resolves liveness when the probe layer reports
@@ -78,7 +78,7 @@ func absentStepConsistent(step scenarios.Step, t *providersupport.Type) bool {
 // facts are "undefined"); evaluator bugs are logged and the step is
 // treated as contradicted so a corrupt AST doesn't silently keep every
 // scenario alive.
-func matchedStepConsistent(step scenarios.Step, store *facts.Store, t *providersupport.Type) bool {
+func matchedStepConsistent(step scenarios.Step, store *facts.Store, vars expr.VarLookup, t *providersupport.Type) bool {
 	for _, st := range t.States {
 		if st.Name != step.State {
 			continue
@@ -86,7 +86,7 @@ func matchedStepConsistent(step scenarios.Step, store *facts.Store, t *providers
 		if st.When == nil {
 			return true
 		}
-		result, err := EvalStatePredicate(st.When, store, step.Component)
+		result, err := EvalStatePredicate(st.When, store, vars, step.Component)
 		if err != nil {
 			var ue *expr.UnresolvedError
 			if errors.As(err, &ue) {
@@ -107,10 +107,11 @@ func matchedStepConsistent(step scenarios.Step, store *facts.Store, t *providers
 // node's Eval. An UnresolvedError (or any eval error) is returned to
 // the caller unchanged — callers treat "error" as undefined and keep
 // the scenario live.
-func EvalStatePredicate(node expr.Node, store *facts.Store, component string) (bool, error) {
+func EvalStatePredicate(node expr.Node, store *facts.Store, vars expr.VarLookup, component string) (bool, error) {
 	ctx := expr.Ctx{
 		CurrentComponent: component,
 		Facts:            store,
+		Vars:             vars,
 		// States is intentionally nil — live-set filtering runs against
 		// the raw fact store, not derived cross-component states. A
 		// `state` reference inside a when-predicate will raise an

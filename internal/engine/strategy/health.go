@@ -51,7 +51,7 @@ func ComponentVerdict(m *model.Model, reg *providersupport.Registry, store *fact
 	}
 	verdict := Healthy
 	for _, rule := range rules {
-		ok, err := EvalStatePredicate(rule, store, name)
+		ok, err := EvalStatePredicate(rule, store, m.VarLookup(reg), name)
 		switch {
 		case err != nil:
 			verdict = Unknown

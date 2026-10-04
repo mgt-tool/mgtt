@@ -260,7 +260,7 @@ func implicatedComponents(store *facts.Store, m *model.Model, reg *providersuppo
 			if st.Name == t.DefaultActiveState || st.When == nil {
 				continue
 			}
-			ok, err := strategy.EvalStatePredicate(st.When, store, compName)
+			ok, err := strategy.EvalStatePredicate(st.When, store, m.VarLookup(reg), compName)
 			if err == nil && ok {
 				implicated[compName] = st.Name
 				break

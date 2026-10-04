@@ -203,6 +203,21 @@ func TestStatic_EmptyCmdAllowedWithRunner(t *testing.T) {
 	}
 }
 
+// A bare word the provider declares under variables: is the per-component
+// threshold the evaluator resolves from vars, not an undeclared fact. On the
+// left-hand side it is still an error: only facts are read there.
+func TestStatic_DeclaredVariableAsComparisonValue(t *testing.T) {
+	src := strings.Replace(minimalOK, "install:", "variables:\n  max_f:\n    description: threshold\n    required: true\ninstall:", 1)
+	src = strings.Replace(src, `when: "f > 0"`, `when: "f <= max_f"`, 1)
+	if r := Static(loadYAML(t, src)); !r.OK() {
+		t.Fatalf("declared variable as comparison value should pass: %+v", r.Failures)
+	}
+	src = strings.Replace(src, `when: "f <= max_f"`, `when: "max_f > 0"`, 1)
+	if r := Static(loadYAML(t, src)); !containsAny(r.Failures, `"max_f"`) {
+		t.Fatalf("a variable on the left-hand side is not a fact and should fail: %+v", r.Failures)
+	}
+}
+
 func containsAny(xs []string, sub string) bool {
 	for _, x := range xs {
 		if strings.Contains(x, sub) {

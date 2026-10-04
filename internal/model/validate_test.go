@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 )
@@ -87,5 +88,41 @@ func TestValidate_HealthyOverrideDropsTypeRule(t *testing.T) {
 		if !strings.Contains(strings.Join(got, "\n"), "loose: healthy override drops type rule \""+rule+"\"") {
 			t.Errorf("no warning naming dropped rule %q; got %q", rule, got)
 		}
+	}
+}
+
+// A rule comparing against a var nothing sets can never be decided, so the
+// component can never be shown healthy; validate says so, once per var.
+func TestValidate_UnsetVarWarning(t *testing.T) {
+	when, err := expr.Parse("restart_count <= max_restart_count")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "docker"},
+		Types: map[string]*providersupport.Type{"container": {
+			Name:    "container",
+			Facts:   map[string]*providersupport.FactSpec{"restart_count": {TypeName: "mgtt.int"}},
+			Healthy: []expr.Node{when},
+			States:  []providersupport.StateDef{{Name: "live", When: when}},
+		}},
+	})
+	m := &model.Model{
+		Meta: model.Meta{Name: "v", Providers: []string{"docker"}},
+		Components: map[string]*model.Component{
+			"set":   {Name: "set", Type: "container", Vars: map[string]string{"max_restart_count": "5"}},
+			"unset": {Name: "unset", Type: "container"},
+		},
+		Order: []string{"set", "unset"},
+	}
+	var got []string
+	for _, w := range model.Validate(m, reg).Warnings {
+		if w.Field == "vars" {
+			got = append(got, w.Component)
+		}
+	}
+	if len(got) != 1 || got[0] != "unset" {
+		t.Fatalf("want one vars warning, on unset; got %v", got)
 	}
 }

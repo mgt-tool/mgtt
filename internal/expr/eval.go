@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Eval implementations — And/Or evaluate both sides unconditionally:
@@ -121,21 +122,43 @@ func compareNumericFact(op CmpOp, factVal, nodeVal any, component string, ctx Ct
 	if nodeFloat, err := toFloat(nodeVal); err == nil {
 		return compareFloats(op, factFloat, nodeFloat), nil
 	}
-	// RHS is a non-numeric string — treat it as an identifier referring to
-	// another fact in the same component.
+	// RHS is a non-numeric string — an identifier naming another fact on
+	// the same component or, failing that, one of its vars. A fact wins a
+	// name clash; a var that is unset or not a number stays unresolved.
 	s, ok := nodeVal.(string)
 	if !ok {
 		return false, &UnresolvedError{Component: component, Reason: "type mismatch"}
 	}
 	rhsVal, ok := ctx.Facts.LookupValue(component, s)
 	if !ok {
-		return false, &UnresolvedError{Component: component, Fact: s, Reason: "missing"}
+		v, set := lookupVar(ctx, component, s)
+		if !set {
+			return false, &UnresolvedError{Component: component, Fact: s, Reason: "missing"}
+		}
+		rhsVal = v
 	}
 	rhsFloat, ok := toNumeric(rhsVal)
 	if !ok {
 		return false, &UnresolvedError{Component: component, Fact: s, Reason: "type mismatch"}
 	}
 	return compareFloats(op, factFloat, rhsFloat), nil
+}
+
+// lookupVar returns ctx's var key for component as a number, when set
+// and numeric.
+func lookupVar(ctx Ctx, component, key string) (any, bool) {
+	if ctx.Vars == nil {
+		return nil, false
+	}
+	raw, ok := ctx.Vars.LookupVar(component, key)
+	if !ok {
+		return nil, false
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return raw, true // set but not a number: type mismatch below
+	}
+	return f, true
 }
 
 // toNumeric coerces fact values (int/int64/float32/float64) to float64.

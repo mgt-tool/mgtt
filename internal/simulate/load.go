@@ -10,6 +10,8 @@ import (
 	"sort"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mgt-tool/mgtt/internal/facts"
 )
 
 // LoadScenario reads and parses a single scenario YAML file.
@@ -33,7 +35,34 @@ func LoadScenario(path string) (*Scenario, error) {
 		}
 	}
 
+	if err := checkUnresolved(&sc); err != nil {
+		return nil, fmt.Errorf("scenario %q: %w", path, err)
+	}
 	return &sc, nil
+}
+
+// unresolvedStatuses are the outcomes an unresolved: entry may name — the
+// fact statuses a probe records when it ran but produced no value.
+var unresolvedStatuses = map[string]facts.FactStatus{
+	"not_found": facts.FactStatusNotFound,
+	"forbidden": facts.FactStatusForbidden,
+	"transient": facts.FactStatusTransient,
+}
+
+// checkUnresolved rejects an unknown status, and a fact given both a value
+// and a probe failure, which no single probe can produce.
+func checkUnresolved(sc *Scenario) error {
+	for comp, kvs := range sc.Unresolved {
+		for fact, status := range kvs {
+			if _, ok := unresolvedStatuses[status]; !ok {
+				return fmt.Errorf("unresolved: %s.%s: status %q (want not_found, forbidden or transient)", comp, fact, status)
+			}
+			if _, both := sc.Inject[comp][fact]; both {
+				return fmt.Errorf("%s.%s is both injected and unresolved", comp, fact)
+			}
+		}
+	}
+	return nil
 }
 
 // LoadAllScenarios loads every *.yaml file in dir, sorted by filename.

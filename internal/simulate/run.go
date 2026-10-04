@@ -4,6 +4,7 @@
 package simulate
 
 import (
+	"slices"
 	"sort"
 	"time"
 
@@ -22,6 +23,16 @@ func Run(m *model.Model, reg *providersupport.Registry, sc *Scenario) *Result {
 			store.Append(comp, facts.Fact{
 				Key:       k,
 				Value:     v,
+				Collector: "simulate",
+				At:        time.Now(),
+			})
+		}
+	}
+	for comp, kvs := range sc.Unresolved {
+		for k, status := range kvs {
+			store.Append(comp, facts.Fact{
+				Key:       k,
+				Status:    unresolvedStatuses[status],
 				Collector: "simulate",
 				At:        time.Now(),
 			})
@@ -98,6 +109,11 @@ func matches(expected, actual Expectation) bool {
 	}
 	if !isSubset(expected.Eliminated, actual.Eliminated) {
 		return false
+	}
+	for _, c := range expected.NotEliminated {
+		if slices.Contains(actual.Eliminated, c) {
+			return false
+		}
 	}
 	return true
 }

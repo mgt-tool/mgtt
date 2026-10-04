@@ -168,6 +168,9 @@ func renderSimulateResult(w io.Writer, result *simulate.Result) {
 			strings.Join(result.Scenario.Expect.Path, ", "),
 			strings.Join(result.Scenario.Expect.Eliminated, ", "),
 		)
+		if ne := result.Scenario.Expect.NotEliminated; len(ne) > 0 {
+			fmt.Fprintf(w, "    expected not eliminated: [%s]\n", strings.Join(ne, ", "))
+		}
 		fmt.Fprintf(w, "    actual:   root_cause=%s path=[%s] eliminated=[%s]\n",
 			result.Actual.RootCause,
 			strings.Join(result.Actual.Path, ", "),

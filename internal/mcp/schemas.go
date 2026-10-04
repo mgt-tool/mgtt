@@ -27,7 +27,8 @@ const AboutOutputSchema = `{
     "readonly_only":{"type":"boolean"},
     "on_write":{"type":"string","enum":["pause","run","fail"]},
     "max_execute_per_incident":{"type":"integer"},
-    "probe_timeout_seconds":{"type":"integer"}
+    "probe_timeout_seconds":{"type":"integer"},
+    "toolset":{"type":"string","enum":["all","diagnose","authoring"]}
   },
   "required":["version","transports","readonly_only","on_write","max_execute_per_incident","probe_timeout_seconds"]
 }`
@@ -195,4 +196,59 @@ const IncidentSnapshotOutputSchema = `{
     "cannot_rule_out":{"type":"array","items":{"type":"object","properties":{"component":{"type":"string"},"facts":{"type":"object","additionalProperties":{"type":"string","enum":["forbidden","transient"]}}},"required":["component","facts"]}}
   },
   "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","facts"]
+}`
+
+// TypesListOutputSchema describes the installed vocabulary listing.
+const TypesListOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "types":{"type":"array","items":{"type":"object","properties":{
+      "provider":{"type":"string"},"type":{"type":"string"},
+      "description":{"type":"string"},"facts":{"type":"integer"}},
+      "required":["provider","type","facts"]}}
+  },
+  "required":["types"]
+}`
+
+// TypesDescribeOutputSchema describes one type.
+const TypesDescribeOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "provider":{"type":"string"},
+    "type":{"type":"string"},
+    "description":{"type":"string"},
+    "facts":{"type":"array","items":{"type":"object","properties":{
+      "name":{"type":"string"},"type":{"type":"string"},"cost":{"type":"string"},"access":{"type":"string"}},
+      "required":["name"]}},
+    "healthy":{"type":"array","items":{"type":"string"}},
+    "states":{"type":"array","items":{"type":"object","properties":{
+      "name":{"type":"string"},"when":{"type":"string"},"description":{"type":"string"},
+      "triggered_by":{"type":"array","items":{"type":"string"}},
+      "can_cause":{"type":"array","items":{"type":"string"}}},
+      "required":["name"]}},
+    "default_active_state":{"type":"string"},
+    "variables":{"type":"array","items":{"type":"object","properties":{
+      "name":{"type":"string"},"description":{"type":"string"},
+      "required":{"type":"boolean"},"default":{"type":"string"}},
+      "required":["name"]}}
+  },
+  "required":["provider","type","facts","healthy","states"]
+}`
+
+// ModelValidateOutputSchema describes a validation report.
+const ModelValidateOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "ok":{"type":"boolean"},
+    "components":{"type":"integer"},
+    "errors":{"type":"array","items":{"$ref":"#/$defs/finding"}},
+    "warnings":{"type":"array","items":{"$ref":"#/$defs/finding"}}
+  },
+  "required":["ok","components","errors","warnings"],
+  "$defs":{
+    "finding":{"type":"object","properties":{
+      "component":{"type":"string"},"field":{"type":"string"},
+      "message":{"type":"string"},"suggestion":{"type":"string"}},
+      "required":["field","message"]}
+  }
 }`

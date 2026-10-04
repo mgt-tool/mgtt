@@ -20,6 +20,9 @@ type PathTree struct {
 	// CannotRuleOut names the components the facts left Unknown because
 	// some could not be read. RootCause is only as good as what was seen.
 	CannotRuleOut []strategy.Unseen
+	// RedundancyDegraded names components seen broken that a satisfied
+	// redundancy group covers: not a root cause, not healthy either.
+	RedundancyDegraded []string
 }
 
 // Path represents a single failure path through the dependency graph.

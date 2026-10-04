@@ -193,6 +193,13 @@ func pass3DepRefs(m *Model, result *ValidationResult) {
 	for _, name := range m.Order {
 		comp := m.Components[name]
 		for _, dep := range comp.Depends {
+			if dep.Need < 0 || dep.Need > len(dep.On) {
+				result.Errors = append(result.Errors, ValidationError{
+					Component: name,
+					Field:     "depends",
+					Message:   fmt.Sprintf("need: %d over %d component(s) [%s]: want 1 to %d", dep.Need, len(dep.On), strings.Join(dep.On, ", "), len(dep.On)),
+				})
+			}
 			for _, target := range dep.On {
 				if _, ok := m.Components[target]; !ok {
 					suggestion := closestMatch(target, m.Components)

@@ -343,11 +343,16 @@ func renderRootCauseSummary(w io.Writer, tree *engine.PathTree) {
 		for _, u := range tree.CannotRuleOut {
 			fmt.Fprintf(w, "  Cannot rule out: %s\n", u)
 		}
+		for _, d := range tree.RedundancyDegraded {
+			fmt.Fprintf(w, "  Redundancy degraded: %s\n", d)
+		}
 	}()
 	if tree.RootCause == "" {
 		fmt.Fprintln(w)
 		if len(tree.CannotRuleOut) > 0 {
 			fmt.Fprintln(w, "  No root cause among the components that could be seen.")
+		} else if len(tree.RedundancyDegraded) > 0 {
+			fmt.Fprintln(w, "  No root cause: redundancy is absorbing the failures below.")
 		} else {
 			fmt.Fprintln(w, "  All components healthy -- no root cause found.")
 		}

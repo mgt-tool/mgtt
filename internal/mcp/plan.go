@@ -50,6 +50,9 @@ type PlanResult struct {
 	// their facts could not be read; root_cause is only as good as what
 	// was seen.
 	CannotRuleOut []UnseenInfo `json:"cannot_rule_out,omitempty"`
+	// RedundancyDegraded names broken components a redundancy group
+	// covers: not the root cause, not healthy.
+	RedundancyDegraded []string `json:"redundancy_degraded,omitempty"`
 }
 
 // UnseenInfo is one component the facts could not rule out, with the
@@ -81,12 +84,13 @@ func (h *Handler) Plan(p PlanParams) (*PlanResult, error) {
 		}
 		tree := engine.PlanWith(m, reg, inc.Store, entry, strategy.ParseSuspectHints(inc.Store.Meta.Suspects))
 		return &PlanResult{
-			Entry:         tree.Entry,
-			Paths:         mapPaths(tree.Paths),
-			Eliminated:    mapPaths(tree.Eliminated),
-			RootCause:     tree.RootCause,
-			Suggested:     toSuggested(tree.Suggested, m),
-			CannotRuleOut: mapUnseen(tree.CannotRuleOut),
+			Entry:              tree.Entry,
+			Paths:              mapPaths(tree.Paths),
+			Eliminated:         mapPaths(tree.Eliminated),
+			RootCause:          tree.RootCause,
+			Suggested:          toSuggested(tree.Suggested, m),
+			CannotRuleOut:      mapUnseen(tree.CannotRuleOut),
+			RedundancyDegraded: tree.RedundancyDegraded,
 		}, nil
 	})
 }

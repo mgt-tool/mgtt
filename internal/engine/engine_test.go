@@ -322,6 +322,9 @@ func TestEngineParity_SimulateVsDiagnose(t *testing.T) {
 		{"store overloaded", map[string]map[string]any{"store": {"available": true, "connection_count": 600}}, "store"},
 		{"api down", map[string]map[string]any{"api": {"ready_replicas": 0, "desired_replicas": 3, "restart_count": 12, "endpoints": 0}}, "api"},
 		{"frontend down", map[string]map[string]any{"frontend": {"ready_replicas": 0, "desired_replicas": 2, "restart_count": 12, "endpoints": 0}}, "frontend"},
+		// The entry broken with everything below healthy: the path engine
+		// had no path that ended at the entry, so it named nothing.
+		{"edge down", map[string]map[string]any{"edge": {"upstream_count": 0}}, "edge"},
 	}
 
 	for _, tc := range cases {

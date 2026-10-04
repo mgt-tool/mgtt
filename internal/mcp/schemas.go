@@ -90,6 +90,7 @@ const PlanOutputSchema = `{
     "eliminated":{"type":"array","items":{"$ref":"#/$defs/path"}},
     "suggested":{"$ref":"#/$defs/suggested"},
     "root_cause":{"type":"string"},
+    "redundancy_degraded":{"type":"array","items":{"type":"string"}},
     "cannot_rule_out":{"type":"array","items":{"type":"object","properties":{"component":{"type":"string"},"facts":{"type":"object","additionalProperties":{"type":"string","enum":["forbidden","transient"]}}},"required":["component","facts"]}}
   },
   "required":["entry","paths"],

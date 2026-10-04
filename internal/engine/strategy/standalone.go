@@ -49,7 +49,9 @@ func standaloneUnhealthyRoot(in Input, reachable []string) *scenarios.Scenario {
 		if comp == nil {
 			continue
 		}
-		if componentIsUnhealthy(in, name, comp) {
+		// A broken member that redundancy covers broke nothing it serves:
+		// degraded, not a root cause.
+		if componentIsUnhealthy(in, name, comp) && !RedundancyCovered(in.Model, in.Registry, in.Store, name) {
 			unhealthy[name] = true
 		}
 	}

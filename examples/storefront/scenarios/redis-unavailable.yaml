@@ -6,7 +6,7 @@ inject:
   mq:                       { available: true,  consumer_count: 22,  queue_depth: 38 }
   opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
   media-bucket:             { accessible: true }
-  external-secrets:         { deployment_ready: true, crd_registered: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true, restart_count: 0 }
   acme-shop-php-fpm-blue:   { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 1 }
   acme-shop-php-fpm-green:  { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 1 }
 

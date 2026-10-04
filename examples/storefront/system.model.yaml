@@ -125,7 +125,7 @@ components:
       replace: [ready_replicas >= 1]   # single replica on stage
     # A crash-looping or degraded pod that still has a replica ready
     # serves search on stage; deliberately not an incident here.
-    healthy_diverges_from: [crashed, degraded]
+    healthy_diverges_from: [crashed, degraded, rolling, rollout_stuck, live]
 
   # ─── AWS managed data layer ─────────────────────────────────────
   # AWS types use short readable keys (`rds`, `redis`, `mq`) while
@@ -144,6 +144,7 @@ components:
     resource: acme-shop-{env}-redis
     healthy:
       replace: [available == true]     # cache_hit_ratio is 0 on idle stage
+    healthy_diverges_from: [cold]      # so a cold cache is not an incident here
 
   mq:
     type: mq_broker
@@ -151,6 +152,7 @@ components:
     resource: acme-shop-{env}-mq
     healthy:
       replace: [available == true, queue_depth < 10000]   # consumers scaled to 0 on stage
+    healthy_diverges_from: [no_consumers]
 
   media-bucket:
     type: s3_bucket

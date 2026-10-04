@@ -1,7 +1,7 @@
 # GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
-source_hash: sha256:3a8bf97341cdb0ee68ea0f84a0fc37fa01e3a432e866b044210f222ee7d16371
+source_hash: sha256:bd4bbc8f35df01d61023f690e403ee67788b7874c28c4511011b7bd4a2c0639c
 format: graph/v1
-scenario_count: 12755
+scenario_count: 15982
 components:
   acme-shop-consumer-blue:
     observes:
@@ -313,6 +313,11 @@ components:
       - enabled
       - error_rate_5xx
     states:
+      - name: erroring
+        emits:
+          - origin_exposed
+          - cache_miss
+          - latency_spike
       - name: disabled
         emits:
           - origin_exposed
@@ -368,6 +373,16 @@ components:
       - consumer_count
       - queue_depth
     states:
+      - name: backlogged
+        emits:
+          - publish_failure
+          - consumer_disconnect
+          - message_backlog
+      - name: no_consumers
+        emits:
+          - publish_failure
+          - consumer_disconnect
+          - message_backlog
       - name: stopped
         emits:
           - publish_failure
@@ -422,6 +437,11 @@ components:
       - available
       - connection_count
     states:
+      - name: saturated
+        emits:
+          - upstream_failure
+          - connection_refused
+          - query_timeout
       - name: stopped
         emits:
           - upstream_failure
@@ -439,6 +459,11 @@ components:
       - cache_hit_ratio
       - connection_count
     states:
+      - name: cold
+        emits:
+          - upstream_failure
+          - connection_refused
+          - cache_miss_storm
       - name: stopped
         emits:
           - upstream_failure

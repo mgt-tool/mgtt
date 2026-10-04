@@ -37,9 +37,17 @@ components:
   # ─── Service layer (color-selecting) ────────────────────────────
   acme-shop-svc:
     type: service
+    # The Service selects one color at a time (selector color=blue or
+    # color=green), and only that color serves: active/passive, so not a
+    # redundancy group. Each edge holds while the selector names its color;
+    # before selector_value is probed, both edges are walked.
+    vars:
+      selector_key: color
     depends:
       - on: acme-shop-nginx-blue
+        while: selector_value == blue
       - on: acme-shop-nginx-green
+        while: selector_value == green
 
   # ─── nginx tier (per color) ─────────────────────────────────────
   acme-shop-nginx-blue:

@@ -165,6 +165,44 @@ func TestStatic_FailsOnUndeclaredFactInStateWhen(t *testing.T) {
 	}
 }
 
+// A bare word compared against a string fact is an enum literal, the way the
+// evaluator reads it (phase == Bound), not a reference to a fact named Bound.
+func TestStatic_BareWordAgainstStringFactIsLiteral(t *testing.T) {
+	src := strings.Replace(minimalOK, `      f:
+        type: mgtt.int`, `      phase:
+        type: mgtt.string
+        probe:
+          cmd: "echo Bound"
+      f:
+        type: mgtt.int`, 1)
+	src = strings.Replace(src, `when: "f > 0"`, `when: "phase == Bound"`, 1)
+	r := Static(loadYAML(t, src))
+	if !r.OK() {
+		t.Fatalf("enum literal on a string fact should pass: %+v", r.Failures)
+	}
+}
+
+// Against a numeric fact a bare word can only be another fact, so a typo
+// there is still caught.
+func TestStatic_BareWordAgainstNumericFactIsFactRef(t *testing.T) {
+	src := strings.Replace(minimalOK, `when: "f > 0"`, `when: "f > desierd"`, 1)
+	r := Static(loadYAML(t, src))
+	if !containsAny(r.Failures, "desierd") {
+		t.Fatalf("undeclared fact on a numeric comparison should fail: %+v", r.Failures)
+	}
+}
+
+// A provider with a runner binary dispatches on type and fact and never reads
+// probe.cmd, so an empty one is not a failure there.
+func TestStatic_EmptyCmdAllowedWithRunner(t *testing.T) {
+	src := strings.Replace(minimalOK, `          cmd: "echo 1"
+`, "", 1)
+	r := Static(loadYAML(t, src))
+	if containsAny(r.Failures, "probe.cmd is empty") {
+		t.Fatalf("source-installed provider has a runner; cmd is optional: %+v", r.Failures)
+	}
+}
+
 func containsAny(xs []string, sub string) bool {
 	for _, x := range xs {
 		if strings.Contains(x, sub) {

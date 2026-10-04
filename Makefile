@@ -5,6 +5,7 @@
 #   make check        the same, plus: the version is one the changelog knows
 #   make dist         every release platform into dist/, with SHA256SUMS
 #   make docker       the image, tagged mgtt:<version>
+#   make downstream   this checkout against every repository that uses it
 #   make tag          tag v<VERSION> and push it, which releases it
 #   make clean
 #
@@ -18,7 +19,7 @@ TAG       := v$(VERSION)
 LDFLAGS   := -s -w -X github.com/mgt-tool/mgtt/internal/cli.version=$(TAG)
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: build test check dist docker tag clean
+.PHONY: build test check dist docker downstream tag clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o mgtt ./cmd/mgtt
@@ -55,6 +56,13 @@ tag:
 	git tag -a $(TAG) -m "mgtt $(TAG)"
 	git push origin $(TAG)
 	@echo "tagged $(TAG); the release workflow takes it from here"
+
+# Builds and tests this working tree (uncommitted changes included), then
+# builds every provider and mgtt2writ against it and runs the suites. All
+# pinned; point one elsewhere with e.g. KUBERNETES_REF=my-branch. See
+# downstream/Dockerfile.
+downstream:
+	sh downstream/build.sh
 
 clean:
 	rm -rf mgtt dist

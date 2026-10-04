@@ -1,0 +1,16 @@
+name: redis unavailable
+
+inject:
+  redis:                    { available: false, connection_count: 0,   cache_hit_ratio: 0.0 }
+  rds:                      { available: true,  connection_count: 480 }   # stressed but within bound
+  mq:                       { available: true,  consumer_count: 22,  queue_depth: 38 }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  media-bucket:             { accessible: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true }
+  acme-shop-php-fpm-blue:   { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 1 }
+  acme-shop-php-fpm-green:  { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 1 }
+
+expect:
+  root_cause: redis
+  path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue, redis]
+  eliminated: [external-secrets, acme-shop-nginx-green, acme-shop-php-fpm-green, mq, opensearch, rds, media-bucket, ssm-app-config]

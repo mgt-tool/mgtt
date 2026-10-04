@@ -1,0 +1,10 @@
+# Known breakages, one per line: SUITE  REASON (plan step that fixes it).
+# A listed suite passes while it fails and fails once it passes: the change
+# that fixes it removes its line here.
+provider-docker      tests call Registry.Facts (mgtt-provider-docker#1); expressions read component vars (max_restart_count) the evaluator never resolves (A8)
+provider-quickwit    tests call Registry.Facts (mgtt-provider-quickwit#1); expressions read component vars (target_success_rate) the evaluator never resolves (A8)
+provider-tempo       tests call Registry.Facts (mgtt-provider-tempo#1); expressions read component vars (target_max_error_rate) the evaluator never resolves (A8)
+provider-terraform   tests call Registry.Types/Facts (mgtt-provider-terraform#1)
+storefront           rds healthy override drops available == true (G5/D1); unprobed leaf behind a sick casualty wins by path length (WS-A)
+storefront-speed     ~30s per occam probe decision on 12,755 chains (G2/WS-B)
+mcp                  dotted tool names such as incident.start (F0)

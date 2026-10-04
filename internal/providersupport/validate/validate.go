@@ -5,7 +5,7 @@
 //
 // Static checks (always safe in CI):
 //   - meta fields populated
-//   - every fact has a probe.cmd
+//   - every fact has a probe.cmd, unless a runner binary serves the probes
 //   - default_active_state references a declared state
 //   - auth.access.writes is "none" (or warn if any other value)
 //   - meta.requires.mgtt is satisfied
@@ -50,7 +50,7 @@ func staticInto(p *providersupport.Provider, r *Report) {
 	}
 	checkAbsoluteEntrypoint(p.Runtime.Entrypoint, r)
 	for typeName, typ := range p.Types {
-		checkType(typeName, typ, r)
+		checkType(typeName, typ, hasRunner(p), r)
 	}
 	checkNeedsVocabulary(p.Runtime.Needs, r)
 	if r.OK() && len(r.Warnings) == 0 {
@@ -124,20 +124,20 @@ func checkNeedsVocabulary(needs map[string]string, r *Report) {
 // checkType validates one type's default state + failure-mode + healthy
 // + state-predicate + fact-probe rules. Split out of Static so the per-
 // type concerns don't overwhelm the shared preamble.
-func checkType(typeName string, typ *providersupport.Type, r *Report) {
+func checkType(typeName string, typ *providersupport.Type, runner bool, r *Report) {
 	declaredStates := make(map[string]bool, len(typ.States))
 	for _, s := range typ.States {
 		declaredStates[s.Name] = true
 	}
-	declaredFacts := make(map[string]bool, len(typ.Facts))
-	for f := range typ.Facts {
-		declaredFacts[f] = true
+	declaredFacts := make(map[string]string, len(typ.Facts))
+	for name, f := range typ.Facts {
+		declaredFacts[name] = f.TypeName
 	}
 	checkDefaultActiveState(typeName, typ, declaredStates, r)
 	checkFailureModeStates(typeName, typ, declaredStates, r)
 	checkHealthyFactRefs(typeName, typ, declaredFacts, r)
 	checkStateWhenFactRefs(typeName, typ, declaredFacts, r)
-	checkFactProbes(typeName, typ, r)
+	checkFactProbes(typeName, typ, runner, r)
 }
 
 func checkDefaultActiveState(typeName string, typ *providersupport.Type, declaredStates map[string]bool, r *Report) {
@@ -159,10 +159,10 @@ func checkFailureModeStates(typeName string, typ *providersupport.Type, declared
 }
 
 // healthy and state.when may reference only declared facts on this type.
-func checkHealthyFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]bool, r *Report) {
+func checkHealthyFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]string, r *Report) {
 	for i, h := range typ.Healthy {
-		for _, ref := range referencedFacts(h) {
-			if !declaredFacts[ref] {
+		for _, ref := range referencedFacts(h, declaredFacts) {
+			if _, ok := declaredFacts[ref]; !ok {
 				r.Failures = append(r.Failures, fmt.Sprintf(
 					"%s: healthy[%d] references undeclared fact %q", typeName, i, ref))
 			}
@@ -170,13 +170,13 @@ func checkHealthyFactRefs(typeName string, typ *providersupport.Type, declaredFa
 	}
 }
 
-func checkStateWhenFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]bool, r *Report) {
+func checkStateWhenFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]string, r *Report) {
 	for _, s := range typ.States {
 		if s.When == nil {
 			continue
 		}
-		for _, ref := range referencedFacts(s.When) {
-			if !declaredFacts[ref] {
+		for _, ref := range referencedFacts(s.When, declaredFacts) {
+			if _, ok := declaredFacts[ref]; !ok {
 				r.Failures = append(r.Failures, fmt.Sprintf(
 					"%s: state %q references undeclared fact %q", typeName, s.Name, ref))
 			}
@@ -184,9 +184,16 @@ func checkStateWhenFactRefs(typeName string, typ *providersupport.Type, declared
 	}
 }
 
-func checkFactProbes(typeName string, typ *providersupport.Type, r *Report) {
+// hasRunner reports whether probes go to a provider binary, which dispatches
+// on type and fact and never reads probe.cmd: an explicit entrypoint, or the
+// bin/mgtt-provider-<name> that every source or image install provides.
+func hasRunner(p *providersupport.Provider) bool {
+	return p.Runtime.Entrypoint != "" || p.Install.Source != nil || p.Install.Image != nil
+}
+
+func checkFactProbes(typeName string, typ *providersupport.Type, runner bool, r *Report) {
 	for factName, f := range typ.Facts {
-		if f.Probe.Cmd == "" {
+		if f.Probe.Cmd == "" && !runner {
 			r.Failures = append(r.Failures, fmt.Sprintf(
 				"%s/%s: probe.cmd is empty", typeName, factName))
 		}
@@ -202,32 +209,38 @@ func checkFactProbes(typeName string, typ *providersupport.Type, r *Report) {
 // evaluation context. Cross-component references (CmpNode.Component != "")
 // are also ignored because cross-component validation is a model concern,
 // not a provider concern.
-func referencedFacts(n expr.Node) []string {
+//
+// factTypes maps each declared fact to its type name. It decides what a bare
+// word on the right-hand side is, the same way the evaluator does: against a
+// string fact it is a literal ("phase == Bound"), against any other fact it is
+// a second fact ("ready_replicas < desired_replicas").
+func referencedFacts(n expr.Node, factTypes map[string]string) []string {
 	var out []string
-	walk(n, &out)
+	walk(n, factTypes, &out)
 	return out
 }
 
-func walk(n expr.Node, out *[]string) {
+func walk(n expr.Node, factTypes map[string]string, out *[]string) {
 	switch v := n.(type) {
 	case *expr.AndNode:
-		walk(v.L, out)
-		walk(v.R, out)
+		walk(v.L, factTypes, out)
+		walk(v.R, factTypes, out)
 	case *expr.OrNode:
-		walk(v.L, out)
-		walk(v.R, out)
+		walk(v.L, factTypes, out)
+		walk(v.R, factTypes, out)
 	case *expr.CmpNode:
 		if v.Component != "" || v.Fact == "" || v.Fact == "state" {
 			return
 		}
 		*out = append(*out, v.Fact)
-		// If the RHS is a bare identifier, it's a fact reference too
-		// (e.g. "ready_replicas < desired_replicas").
-		if s, ok := v.Value.(string); ok && isIdentifier(s) {
+		if s, ok := v.Value.(string); ok && isIdentifier(s) && factTypes[v.Fact] != stringFactType {
 			*out = append(*out, s)
 		}
 	}
 }
+
+// stringFactType is the fact type whose comparisons take bare-word literals.
+const stringFactType = "mgtt.string"
 
 func isIdentifier(s string) bool {
 	if s == "" {

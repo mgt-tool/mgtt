@@ -1,0 +1,35 @@
+name: all components healthy
+
+inject:
+  acme-shop-nginx-blue:     { ready_replicas: 2, desired_replicas: 2, condition_available: true, restart_count: 0 }
+  acme-shop-nginx-green:    { ready_replicas: 2, desired_replicas: 2, condition_available: true, restart_count: 0 }
+  acme-shop-php-fpm-blue:   { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 0 }
+  acme-shop-php-fpm-green:  { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 0 }
+  acme-shop-consumer-blue:  { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  acme-shop-consumer-green: { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  acme-shop-cron:           { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  rds:                      { available: true, connection_count: 120 }
+  redis:                    { available: true, connection_count: 200, cache_hit_ratio: 0.95 }
+  mq:                       { available: true, consumer_count: 22, queue_depth: 34 }
+  media-bucket:             { accessible: true }
+  cloudfront:               { enabled: true, deployed: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true }
+
+expect:
+  root_cause: none
+  eliminated:
+    - cloudflare
+    - external-secrets
+    - acme-shop-ingress
+    - acme-shop-nginx-blue
+    - acme-shop-nginx-green
+    - acme-shop-php-fpm-blue
+    - acme-shop-php-fpm-green
+    - acme-shop-svc
+    - mq
+    - opensearch
+    - rds
+    - redis
+    - media-bucket
+    - ssm-app-config

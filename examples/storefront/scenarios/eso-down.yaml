@@ -1,0 +1,18 @@
+name: external-secrets operator down
+
+inject:
+  ssm-app-config:           { exists: true, version: 7 }
+  external-secrets:         { deployment_ready: false, crd_registered: true, restart_count: 0 }
+  rds:                      { available: true, connection_count: 100 }
+  redis:                    { available: true, connection_count: 200, cache_hit_ratio: 0.93 }
+  mq:                       { available: true, consumer_count: 0, queue_depth: 1800 }
+  media-bucket:             { accessible: true }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  acme-shop-php-fpm-blue:   { ready_replicas: 0, desired_replicas: 3, condition_available: false, condition_progressing: false, restart_count: 0 }
+  acme-shop-php-fpm-green:  { ready_replicas: 0, desired_replicas: 3, condition_available: false, condition_progressing: false, restart_count: 0 }
+  acme-shop-cron:           { ready_replicas: 0, desired_replicas: 1, condition_available: false, condition_progressing: false, restart_count: 0 }
+
+expect:
+  root_cause: external-secrets
+  path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue, external-secrets]
+  eliminated: [mq, opensearch, rds, redis, media-bucket, ssm-app-config]

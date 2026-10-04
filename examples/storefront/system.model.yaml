@@ -1,0 +1,178 @@
+meta:
+  name: acme-shop
+  version: "1.0"
+  # Providers supply the types (cdn, deployment, rds_instance, ...) and
+  # the probes that populate facts. This system runs on EKS (kubernetes)
+  # with its data layer on AWS managed services, so both are needed.
+  providers:
+    - mgt-tool/kubernetes@^3.0.0
+    - mgt-tool/aws@^1.0.0
+  # Model-wide variables. Substituted into probe arguments via {name}
+  # placeholders (e.g. `resource: acme-shop-{env}-rds`). A component
+  # can override any of these with its own `vars:` block — see
+  # `external-secrets` below.
+  vars:
+    namespace: default
+    cluster: acme-shop-stage
+    region: eu-central-1
+    env: stage          # flip to `prod` on the prod branch
+  scenarios: none       # see note below on enumerated scenarios
+
+components:
+
+  # ─── Edge / public entry ────────────────────────────────────────
+  # Kubernetes-owned types (cdn, ingress, service, deployment, operator)
+  # don't need a per-component `providers:` line — mgtt resolves them
+  # by type lookup against meta.providers.
+  cloudflare:
+    type: cdn
+    depends:
+      - on: acme-shop-ingress
+
+  acme-shop-ingress:
+    type: ingress
+    depends:
+      - on: acme-shop-svc
+
+  # ─── Service layer (color-selecting) ────────────────────────────
+  acme-shop-svc:
+    type: service
+    depends:
+      - on: acme-shop-nginx-blue
+      - on: acme-shop-nginx-green
+
+  # ─── nginx tier (per color) ─────────────────────────────────────
+  acme-shop-nginx-blue:
+    type: deployment
+    depends:
+      - on: acme-shop-php-fpm-blue
+
+  acme-shop-nginx-green:
+    type: deployment
+    depends:
+      - on: acme-shop-php-fpm-green
+
+  # ─── php-fpm tier (per color) ───────────────────────────────────
+  # All backend work lives here; depends on the full shared data
+  # layer. The app-config Secret selects which color's env is live.
+  acme-shop-php-fpm-blue:
+    type: deployment
+    depends:
+      - on: external-secrets
+      - on: rds
+      - on: redis
+      - on: mq
+      - on: opensearch
+      - on: media-bucket
+
+  acme-shop-php-fpm-green:
+    type: deployment
+    depends:
+      - on: external-secrets
+      - on: rds
+      - on: redis
+      - on: mq
+      - on: opensearch
+      - on: media-bucket
+
+  # ─── Async workers (per color) ──────────────────────────────────
+  # `depends: [{on: x}, ...]` is inline YAML — same structure as the
+  # multi-line `- on: x` form above. Pick whichever reads cleaner.
+  acme-shop-consumer-blue:
+    type: deployment
+    depends: [{on: mq}, {on: rds}, {on: redis}, {on: external-secrets}]
+
+  acme-shop-consumer-green:
+    type: deployment
+    depends: [{on: mq}, {on: rds}, {on: redis}, {on: external-secrets}]
+
+  # ─── Cron (singleton, color-agnostic) ───────────────────────────
+  acme-shop-cron:
+    type: deployment
+    depends: [{on: external-secrets}, {on: rds}, {on: redis}, {on: mq}]
+
+  scheduled_jobs:
+    type: business_process
+    depends: [{on: acme-shop-cron}]
+
+  async_jobs:
+    type: business_process
+    depends: [{on: acme-shop-consumer-blue}, {on: acme-shop-consumer-green}, {on: mq}]
+
+  # ─── In-cluster search ──────────────────────────────────────────
+  opensearch:
+    type: deployment
+    # `healthy:` is a list of boolean rules. Each has the form
+    # `[<component>.]<fact> <op> <value>` with `<op>` in
+    # `== != < > <= >=`. The `<component>.` prefix is optional —
+    # omit it to reference this component's own fact (what we're
+    # doing with `ready_replicas` here), or include it to reach
+    # across (e.g. `redis.available == true`). Fact names come from
+    # the type's probes — `deployment` is owned by the kubernetes
+    # provider. All rules must hold for the component to count as
+    # healthy; missing facts are treated as "don't know" and skipped
+    # rather than failed. A component-level `healthy:` REPLACES the
+    # type default outright (it does not merge) — see the override
+    # notes below for why we override for opensearch, rds, redis, mq.
+    healthy:
+      - ready_replicas >= 1
+
+  # ─── AWS managed data layer ─────────────────────────────────────
+  # AWS types use short readable keys (`rds`, `redis`, `mq`) while
+  # `resource:` carries the real AWS identifier. Per-component
+  # `providers:` pins which provider resolves the type. `{env}`
+  # expands from meta.vars, so the same file ships unchanged across
+  # stage and prod — only the branch-specific `vars.env` flips.
+  rds:
+    type: rds_instance
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: acme-shop-{env}-rds
+    healthy:
+      - connection_count < 500
+
+  redis:
+    type: elasticache_cluster
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: acme-shop-{env}-redis
+    healthy:
+      - available == true
+
+  mq:
+    type: mq_broker
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: acme-shop-{env}-mq
+    healthy:
+      - queue_depth < 10000
+
+  media-bucket:
+    type: s3_bucket
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: acme-shop-stage-media-8f3e9c
+
+  cloudfront:
+    type: cloudfront_distribution
+    # Strictly redundant — `cloudfront_distribution` only lives in the
+    # aws provider, so mgtt would resolve it from meta.providers without
+    # this line. Kept for self-documentation: the aws-vs-k8s split stays
+    # obvious at a glance, and the version pin survives even if a future
+    # provider happens to introduce a clashing type name.
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: EABCDEF123456X
+    depends:
+      - on: media-bucket
+
+  # ─── Config / secrets sources ───────────────────────────────────
+  ssm-app-config:
+    type: ssm_parameter
+    providers: [mgt-tool/aws@^1.0.0]
+    resource: /platform/defaults/app-config
+
+  external-secrets:
+    type: operator
+    # Component-scoped `vars:` override `meta.vars:` for this component
+    # only — probes against ESO run in the `external-secrets` namespace
+    # instead of the model-wide `default`.
+    vars:
+      namespace: external-secrets
+    depends:
+      - on: ssm-app-config

@@ -173,8 +173,10 @@ func TestPlan_FrontendDegraded(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
 		"frontend": {"ready_replicas": 0, "restart_count": 8, "desired_replicas": 2},
-		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
-		"store":    {"available": true, "connection_count": 98},
+		// Every healthy rule needs its fact: an unread restart_count would
+		// leave api Unknown, not healthy.
+		"api":   {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3, "restart_count": 0},
+		"store": {"available": true, "connection_count": 98},
 	})
 
 	tree := Plan(m, reg, store, "")
@@ -201,8 +203,8 @@ func TestPlan_AllHealthy(t *testing.T) {
 	m, reg := loadStorefront(t)
 	store := newStore(map[string]map[string]any{
 		"edge":     {"upstream_count": 4},
-		"frontend": {"ready_replicas": 2, "desired_replicas": 2, "endpoints": 2},
-		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3},
+		"frontend": {"ready_replicas": 2, "desired_replicas": 2, "endpoints": 2, "restart_count": 0},
+		"api":      {"ready_replicas": 3, "desired_replicas": 3, "endpoints": 3, "restart_count": 0},
 		"store":    {"available": true, "connection_count": 87},
 	})
 

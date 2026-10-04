@@ -63,8 +63,12 @@ type Component struct {
 	// a bare list and "replace" both replace them; "add" keeps them and
 	// requires these as well. "" is the old spelling, kept for
 	// compatibility; validate warns about the type rules it drops.
-	HealthyMode  string
-	FailureModes map[string][]string // state → can_cause list
+	HealthyMode string
+	// HealthyDivergesFrom names states in which this component's healthy
+	// rules knowingly disagree with the type's default state -- a
+	// deliberate relaxation -- so validate does not warn about them.
+	HealthyDivergesFrom []string
+	FailureModes        map[string][]string // state → can_cause list
 	// Vars override Meta.Vars on a per-component basis for probe
 	// substitution and provider argv. Use this when a component lives
 	// in a different namespace/region/etc from the model-wide default.

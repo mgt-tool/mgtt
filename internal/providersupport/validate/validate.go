@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/mgt-tool/mgtt/internal/expr"
+	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
 )
@@ -139,6 +140,22 @@ func checkType(typeName string, typ *providersupport.Type, vars map[string]provi
 	checkHealthyFactRefs(typeName, typ, refs, r)
 	checkStateWhenFactRefs(typeName, typ, refs, r)
 	checkFactProbes(typeName, typ, runner, r)
+	checkHealthMatchesStates(typeName, typ, r)
+}
+
+// checkHealthMatchesStates warns when the type's healthy rules and its
+// states disagree for some facts: healthy outside the default state, or
+// unhealthy in it. Every model using the type inherits the disagreement,
+// and simulate (states) and diagnose (rules) read those facts
+// differently.
+func checkHealthMatchesStates(typeName string, typ *providersupport.Type, r *Report) {
+	for _, d := range model.HealthStateDisagreements(typ.Healthy, typ, "x", nil) {
+		if d.Healthy {
+			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: healthy rules hold in state %q, which is not the default state %q (e.g. %s)", typeName, d.State, typ.DefaultActiveState, d.WitnessString()))
+		} else {
+			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: healthy rules fail in the default state %q (e.g. %s)", typeName, d.State, d.WitnessString()))
+		}
+	}
 }
 
 func checkDefaultActiveState(typeName string, typ *providersupport.Type, declaredStates map[string]bool, r *Report) {

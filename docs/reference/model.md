@@ -48,6 +48,18 @@ Rules have the form `<fact> <op> <value>`, with `==`, `!=`, `<`, `>`, `<=` or `>
 
 A variable that's set nowhere leaves the rule undecided, and `validate` warns.
 
+A type says what healthy means twice: in its rules, and in which of its states is the default. If an override makes them disagree, `validate` warns and gives the facts where it happens. Rules that are loosened so they still hold in `saturated` mean simulate (which reads states) and diagnose (which reads rules) disagree there. When the divergence is deliberate, list those states:
+
+```yaml
+opensearch:
+  type: deployment
+  healthy:
+    replace: [ready_replicas >= 1]
+  healthy_diverges_from: [crashed, degraded]   # one ready replica serves search on stage
+```
+
+Disagreements in a type's own defaults are the provider's to fix; `mgtt provider validate` reports them.
+
 ### Dependencies
 
 `api` depends on `rds` means a broken `rds` can break `api`. Use `while:` for a conditional edge, such as a blue/green service that follows its live color (`while: selector_value == blue`). A redundancy group with `need:` holds while at least that many members are *proven* healthy. A member that couldn't be read doesn't count. Active/passive pairs are not groups: model them with `while:`.

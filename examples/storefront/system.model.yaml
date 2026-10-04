@@ -123,6 +123,9 @@ components:
     # notes below for why we override for opensearch, rds, redis, mq.
     healthy:
       replace: [ready_replicas >= 1]   # single replica on stage
+    # A crash-looping or degraded pod that still has a replica ready
+    # serves search on stage; deliberately not an incident here.
+    healthy_diverges_from: [crashed, degraded]
 
   # ─── AWS managed data layer ─────────────────────────────────────
   # AWS types use short readable keys (`rds`, `redis`, `mq`) while

@@ -202,7 +202,7 @@ func TestProbe_MaxExecuteZeroIsUnlimited(t *testing.T) {
 }
 
 func TestProbe_MaxExecuteDoesNotCountAgentFacts(t *testing.T) {
-	// fact.add entries (collector=agent) don't consume the probe budget.
+	// fact_add entries (collector=agent) don't consume the probe budget.
 	// A budget of 1 with 3 agent-collected facts should still allow a probe.
 	h, incidentID := startSafetyFixture(t, Config{MaxExecutePerIncident: 1})
 	for _, k := range []string{"a", "b", "c"} {

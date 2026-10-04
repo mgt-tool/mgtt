@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking (MCP)
+
+- **MCP tool names use underscores:** `incident_start`, `incident_end`, `incident_snapshot`, `fact_add`, `facts_list`, `scenarios_list`, `scenarios_alive` (`about`, `plan`, `probe` are unchanged). Some clients and model APIs accept only `[A-Za-z0-9_-]` in tool names and rejected the whole tool list over the dotted ones. Agents discover names from `tools/list`, so most need no change; for one that calls the old names directly, `mgtt mcp serve --legacy-tool-names` registers them as deprecated aliases for one release.
+
+### Added
+
+- The MCP server sends `instructions`: the diagnosis workflow and what a `forbidden` or `transient` probe result means, for clients that hand them to the model.
+- **`make downstream`** builds this checkout and every repository that depends on it -- the six providers, compiled against this engine through a `replace`, and mgtt2writ with writ -- in one pinned Docker image, then runs the suites: provider unit tests and `provider validate`, the minishop verification contract, the storefront scenarios and probe-decision budget, the mgtt2writ pipeline and MCP tool-name portability. Images are pinned by digest and repositories by commit. Known breakages sit in `downstream/xfail`, each naming the step that fixes it; a listed suite that starts passing fails the build until its line goes.
+- `examples/storefront/`: the blue/green storefront model and its five scenarios as files, extracted from the docs page.
+
 ### Changed
 
 - **Scenario-guided diagnosis decides a probe about 800x faster on large models.** Occam recounted each candidate's cross-elimination score inside the sort comparator, O(n² log n) in live scenarios; one decision on the 20-component storefront (12,755 scenarios) took about 30 s. The score is now computed in one pass over the live set, O(n·L): about 37 ms per decision there. Decisions are unchanged, checked against the old implementation on 300 randomised fact stores.
@@ -14,14 +24,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **The MCP `probe` tool runs probes the way the CLI does.** It used to run every probe as a shell command, skipping provider runners. A fact with no `probe.cmd` -- every fact of a runner-backed provider such as aws -- came back `operator_prompt_required`, so an agent could never probe aws at all, and kubernetes probes bypassed the provider binary the CLI uses. `mgtt plan`, `mgtt diagnose` and MCP now share one dispatcher (`probe/dispatch`): the same runner routing, `MGTT_FIXTURES` support, and the same recording of outcomes. A probe the backend refuses or that times out is recorded as an unknown fact everywhere; over MCP it now returns `forbidden` or `transient` instead of an unrecorded `error`, and `mgtt plan` keeps going instead of stopping. `operator_prompt_required` now means what it says: no command and no runner.
 - A provider gets a runner only when its binary exists or its manifest declares an entrypoint. A types-only provider used to be routed to a `bin/mgtt-provider-<name>` that was never built; its `probe.cmd` now runs.
-
-### Added
-
-- **`make downstream`** builds this checkout and every repository that depends on it -- the six providers, compiled against this engine through a `replace`, and mgtt2writ with writ -- in one pinned Docker image, then runs the suites: provider unit tests and `provider validate`, the minishop verification contract, the storefront scenarios and probe-decision budget, the mgtt2writ pipeline and MCP tool-name portability. Images are pinned by digest and repositories by commit. Known breakages sit in `downstream/xfail`, each naming the step that fixes it; a listed suite that starts passing fails the build until its line goes.
-- `examples/storefront/`: the blue/green storefront model and its five scenarios as files, extracted from the docs page.
-
-### Fixed
-
 - **Facts that could not be read no longer clear a component.** The path engine eliminated any component with a recorded fact unless a rule came out definitively false, so a component whose probes all returned 403 or timed out was reported healthy and its casualty blamed instead. Health is now three-valued (`strategy.ComponentVerdict`): a component is eliminated only when every effective `healthy:` rule resolves true. Forbidden, transient and missing facts leave it Unknown, and Unknown is never eliminated.
 - `mgtt provider validate` no longer requires `probe.cmd` on providers whose probes go to a runner binary, which never reads it. aws failed 39 checks for this.
 - `mgtt provider validate` reads a bare word compared against a string fact (`phase == Bound`) as the literal the evaluator compares it as, not as a reference to an undeclared fact. kubernetes failed 18 checks for this. Against a numeric fact a bare word is still a fact reference, so a typo there is still caught.

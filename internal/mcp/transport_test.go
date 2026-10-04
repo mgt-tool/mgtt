@@ -46,9 +46,9 @@ func TestTransport_FullDiagnosisLoopOverMCP(t *testing.T) {
 		t.Errorf("about.version: got %q want %q", about.Version, "e2e")
 	}
 
-	// 2. incident.start
+	// 2. incident_start
 	var startResult IncidentStartResult
-	mustCallTool(t, client, "incident.start", map[string]any{
+	mustCallTool(t, client, "incident_start", map[string]any{
 		"model_ref": modelPath,
 		"id":        "e2e-incident",
 	}, &startResult)
@@ -56,21 +56,21 @@ func TestTransport_FullDiagnosisLoopOverMCP(t *testing.T) {
 		t.Fatalf("incident_id: got %q", startResult.IncidentID)
 	}
 
-	// 3. fact.add — the agent reports an operator observation.
+	// 3. fact_add — the agent reports an operator observation.
 	var addResult FactAddResult
-	mustCallTool(t, client, "fact.add", map[string]any{
+	mustCallTool(t, client, "fact_add", map[string]any{
 		"incident_id": startResult.IncidentID,
 		"component":   "api",
 		"key":         "operator_says_healthy",
 		"value":       true,
 	}, &addResult)
 	if !addResult.Appended {
-		t.Error("fact.add should report appended: true")
+		t.Error("fact_add should report appended: true")
 	}
 
-	// 4. facts.list — round-trip.
+	// 4. facts_list — round-trip.
 	var listResult FactsListResult
-	mustCallTool(t, client, "facts.list", map[string]any{
+	mustCallTool(t, client, "facts_list", map[string]any{
 		"incident_id": startResult.IncidentID,
 	}, &listResult)
 	if len(listResult.Facts) != 1 {
@@ -86,9 +86,9 @@ func TestTransport_FullDiagnosisLoopOverMCP(t *testing.T) {
 		t.Errorf("plan: expected no suggestion after healthy fact, got %+v", planResult.Suggested)
 	}
 
-	// 6. incident.snapshot — full bundle.
+	// 6. incident_snapshot — full bundle.
 	var snap IncidentSnapshotResult
-	mustCallTool(t, client, "incident.snapshot", map[string]any{
+	mustCallTool(t, client, "incident_snapshot", map[string]any{
 		"incident_id": startResult.IncidentID,
 	}, &snap)
 	if snap.Status != "open" {
@@ -98,19 +98,19 @@ func TestTransport_FullDiagnosisLoopOverMCP(t *testing.T) {
 		t.Errorf("snapshot.facts: got %d want 1", len(snap.Facts))
 	}
 
-	// 7. incident.end with verdict.
+	// 7. incident_end with verdict.
 	var endResult IncidentEndResult
-	mustCallTool(t, client, "incident.end", map[string]any{
+	mustCallTool(t, client, "incident_end", map[string]any{
 		"incident_id": startResult.IncidentID,
 		"verdict":     "operator confirmed healthy",
 	}, &endResult)
 	if !endResult.Saved {
-		t.Error("incident.end should report saved: true")
+		t.Error("incident_end should report saved: true")
 	}
 
 	// 8. Second snapshot reflects closed + verdict.
 	var closed IncidentSnapshotResult
-	mustCallTool(t, client, "incident.snapshot", map[string]any{
+	mustCallTool(t, client, "incident_snapshot", map[string]any{
 		"incident_id": startResult.IncidentID,
 	}, &closed)
 	if closed.Status != "closed" {

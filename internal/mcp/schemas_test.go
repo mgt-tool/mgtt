@@ -20,14 +20,14 @@ import (
 func TestOutputSchemas_ParseAsJSON(t *testing.T) {
 	cases := map[string]string{
 		"about":             AboutOutputSchema,
-		"incident.start":    IncidentStartOutputSchema,
-		"incident.end":      IncidentEndOutputSchema,
-		"fact.add":          FactAddOutputSchema,
-		"facts.list":        FactsListOutputSchema,
+		"incident_start":    IncidentStartOutputSchema,
+		"incident_end":      IncidentEndOutputSchema,
+		"fact_add":          FactAddOutputSchema,
+		"facts_list":        FactsListOutputSchema,
 		"plan":              PlanOutputSchema,
 		"probe":             ProbeOutputSchema,
-		"scenarios.list":    ScenariosListOutputSchema,
-		"incident.snapshot": IncidentSnapshotOutputSchema,
+		"scenarios_list":    ScenariosListOutputSchema,
+		"incident_snapshot": IncidentSnapshotOutputSchema,
 	}
 	for tool, schema := range cases {
 		if schema == "" {

@@ -61,7 +61,7 @@ func TestProbe_ExecuteRecognisesOperatorPromptProbe(t *testing.T) {
 	if result.Status != "operator_prompt_required" {
 		t.Errorf("status: got %q want %q", result.Status, "operator_prompt_required")
 	}
-	// No fact appended for prompt probes — that's fact.add's job.
+	// No fact appended for prompt probes — that's fact_add's job.
 	list, _ := h.FactsList(FactsListParams{IncidentID: incidentID})
 	if len(list.Facts) != 0 {
 		t.Errorf("operator-prompt probe must not append a fact; got %d", len(list.Facts))

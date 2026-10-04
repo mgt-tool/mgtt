@@ -5,4 +5,3 @@ provider-docker      expressions read component vars (max_restart_count) the eva
 provider-quickwit    expressions read component vars (target_success_rate) the evaluator never resolves (A8)
 provider-tempo       expressions read component vars (target_max_error_rate) the evaluator never resolves (A8)
 storefront           rds healthy override drops available == true (G5/D1); unprobed leaf behind a sick casualty wins by path length (WS-A)
-mcp                  dotted tool names such as incident.start (F0)

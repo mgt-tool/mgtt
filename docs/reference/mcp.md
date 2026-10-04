@@ -72,17 +72,27 @@ tag so the agent can hand off or queue for human approval.
 | Tool | Purpose |
 |------|---------|
 | `about` | Server version, transports, safety posture. |
-| `incident.start` | Create an incident from a model path. Returns `incident_id`. |
-| `incident.end` | Close an incident with optional verdict. |
-| `incident.snapshot` | Full diagnostic-memory bundle — scenarios (alive + eliminated), facts, suggested next probe, status. |
+| `incident_start` | Create an incident from a model path. Returns `incident_id`. |
+| `incident_end` | Close an incident with optional verdict. |
+| `incident_snapshot` | Full diagnostic-memory bundle — scenarios (alive + eliminated), facts, suggested next probe, status. |
 | `plan` | Compute the current path tree and suggested next probe. Does not execute. |
-| `probe` | Render or execute the engine's next suggested probe. `execute=false` renders only. |
-| `fact.add` | Append an observation (agent-collected). |
-| `facts.list` | List facts, optionally filtered to one component. |
-| `scenarios.list` | All enumerated failure chains for the incident's model. |
-| `scenarios.alive` | Chains still consistent with observed facts. |
+| `probe` | Render or execute the engine's next suggested probe. `execute=false` renders only. A refused or timed-out probe returns `forbidden` / `transient` and is recorded as an unknown fact; `operator_prompt_required` means the fact has no command and its provider no runner. |
+| `fact_add` | Append an observation (agent-collected). |
+| `facts_list` | List facts, optionally filtered to one component. |
+| `scenarios_list` | All enumerated failure chains for the incident's model. |
+| `scenarios_alive` | Chains still consistent with observed facts. |
 
-Each tool's JSON schema ships in `internal/mcp/schemas.go`.
+Each tool's JSON schema ships in `internal/mcp/schemas.go`. The server also
+sends MCP `instructions` describing the workflow (`incident_start`, then
+`plan` / `probe` until a root cause), for clients that pass them to the model.
+
+### Tool names before 0.4
+
+Up to 0.3 the tools were named with dots (`incident.start`, `facts.list`, ...).
+Some clients and model APIs accept only `[A-Za-z0-9_-]` in tool names and
+reject the whole tool list over one dotted name, so 0.4 uses underscores.
+`mgtt mcp serve --legacy-tool-names` also registers the dotted names as
+deprecated aliases, for one release, for agents that call them by name.
 
 ## State
 

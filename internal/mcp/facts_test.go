@@ -39,7 +39,7 @@ func TestFactAdd_AppendsFactToIncident(t *testing.T) {
 		t.Error("appended: got false, want true")
 	}
 
-	// Round-trip: facts.list sees it.
+	// Round-trip: facts_list sees it.
 	list, err := h.FactsList(FactsListParams{IncidentID: incidentID})
 	if err != nil {
 		t.Fatalf("FactsList: %v", err)

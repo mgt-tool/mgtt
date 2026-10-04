@@ -49,11 +49,16 @@ type Component struct {
 	// probe (e.g. an AWS RDS DB instance id or a k8s resource name).
 	// Empty falls back to Name at probe time, preserving the historical
 	// "component key is the resource name" behavior.
-	Resource     string
-	Providers    []string // nil → inherit Meta.Providers
-	Depends      []Dependency
-	HealthyRaw   []string            // raw expression strings, compiled in Phase 2
-	Healthy      []expr.Node         // compiled from HealthyRaw
+	Resource   string
+	Providers  []string // nil → inherit Meta.Providers
+	Depends    []Dependency
+	HealthyRaw []string    // raw expression strings, compiled in Phase 2
+	Healthy    []expr.Node // compiled from HealthyRaw
+	// HealthyMode says how Healthy combines with the type's rules: "" for
+	// a bare list and "replace" both replace them; "add" keeps them and
+	// requires these as well. "" is the old spelling, kept for
+	// compatibility; validate warns about the type rules it drops.
+	HealthyMode  string
 	FailureModes map[string][]string // state → can_cause list
 	// Vars override Meta.Vars on a per-component basis for probe
 	// substitution and provider argv. Use this when a component lives

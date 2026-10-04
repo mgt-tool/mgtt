@@ -180,24 +180,23 @@ redis:
 
 — you've lost the `available == true` check. A redis with `available=false` but some residual cache hits could pass your rule.
 
-The fix is to restate every rule you want enforced, in full:
+`mgtt model validate` warns about every type rule a bare list drops, naming it. Say what you mean instead, with one of two keys:
 
 ```yaml
 redis:
   type: elasticache_cluster
   healthy:
-    - available == true
-    - cache_hit_ratio > 70
+    add: [connection_count < 900]     # the type's rules AND this one
 ```
-
-Or, on environments where a stricter default is itself a false-positive (idle stage has `cache_hit_ratio = 0`), narrow the rule to only what's meaningful:
 
 ```yaml
 redis:
   type: elasticache_cluster
   healthy:
-    - available == true               # cache_hit_ratio omitted on purpose
+    replace: [available == true]      # only this; cache_hit_ratio dropped on purpose
 ```
+
+`add:` keeps every type rule and requires yours as well. `replace:` replaces them, like a bare list, but declares the drop deliberate, so validate does not warn. A bare list still works and still means replace; it is the spelling that warns. A `healthy:` with both keys, or any other key, fails to load.
 
 Component-level rules win because per-environment health criteria vary: a 70% cache-hit ratio is great on prod, meaningless on an idle stage. Merging the provider's prod-shaped default with a per-env override would produce confusing AND-conjunctions that fail in ways the operator didn't author. See the [Type Catalog](type-catalog.md) for each provider type's default rules — read before overriding.
 

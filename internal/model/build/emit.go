@@ -96,7 +96,14 @@ func componentNode(c *model.Component) *yaml.Node {
 		n.Content = append(n.Content, strNode("vars"), stringMapNode(c.Vars))
 	}
 	if len(c.HealthyRaw) > 0 {
-		n.Content = append(n.Content, strNode("healthy"), strSeqNode(c.HealthyRaw))
+		rules := strSeqNode(c.HealthyRaw)
+		if c.HealthyMode != "" {
+			// Keep the author's replace: / add: rather than flattening it
+			// to a bare list, which would mean replace and bring back the
+			// dropped-rule warnings.
+			rules = &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{strNode(c.HealthyMode), rules}}
+		}
+		n.Content = append(n.Content, strNode("healthy"), rules)
 	}
 	if deps := dependsNode(c.Depends); deps != nil {
 		n.Content = append(n.Content, strNode("depends"), deps)

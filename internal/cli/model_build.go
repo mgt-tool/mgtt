@@ -189,6 +189,7 @@ func mergeHandAuthored(prev, next *model.Model) {
 		}
 		if len(nextComp.HealthyRaw) == 0 && len(prevComp.HealthyRaw) > 0 {
 			nextComp.HealthyRaw = append([]string(nil), prevComp.HealthyRaw...)
+			nextComp.HealthyMode = prevComp.HealthyMode
 			nextComp.Healthy = append([]expr.Node(nil), prevComp.Healthy...)
 		}
 		if len(nextComp.FailureModes) == 0 && len(prevComp.FailureModes) > 0 {

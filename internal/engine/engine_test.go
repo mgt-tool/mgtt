@@ -225,6 +225,23 @@ func TestPlan_AllHealthy(t *testing.T) {
 	}
 }
 
+// The longest alive path may end in a component nobody has observed; it
+// keeps the engine probing but is not a verdict. The root cause is the
+// deepest tail actually seen unhealthy.
+func TestPickRootCause_SkipsUnobservedTail(t *testing.T) {
+	alive := []Path{
+		{Components: []string{"edge", "frontend"}},
+		{Components: []string{"edge", "api", "store"}},
+	}
+	seen := map[string]bool{"frontend": true}
+	if rc := pickRootCause(alive, func(c string) bool { return seen[c] }); rc != "frontend" {
+		t.Errorf("root cause = %q, want %q", rc, "frontend")
+	}
+	if rc := pickRootCause(alive, func(string) bool { return false }); rc != "" {
+		t.Errorf("root cause = %q, want none", rc)
+	}
+}
+
 // TestPickRootCause_PreservesDeclarationOrder guards against a regression
 // where pickRootCause sorted its argument in place. Because that slice
 // shares its backing array with PathTree.Paths (already sorted into
@@ -237,7 +254,7 @@ func TestPickRootCause_PreservesDeclarationOrder(t *testing.T) {
 		{ID: "PATH C", Components: []string{"edge", "frontend"}},
 	}
 
-	if rc := pickRootCause(alive); rc != "store" {
+	if rc := pickRootCause(alive, func(string) bool { return true }); rc != "store" {
 		t.Errorf("root cause = %q, want %q", rc, "store")
 	}
 

@@ -67,7 +67,7 @@ ARG DOCKER_REF=500dad9041b284cb631a3223c0961a639b92e248
 RUN provider.sh docker "$DOCKER_REPO" "$DOCKER_REF"
 
 ARG KUBERNETES_REPO=https://github.com/mgt-tool/mgtt-provider-kubernetes.git
-ARG KUBERNETES_REF=633739026fc92cf1ed98444daeb52283e608481e
+ARG KUBERNETES_REF=b30b2ede1914de9e577893d8bdf7b9bfe132c82c
 RUN provider.sh kubernetes "$KUBERNETES_REPO" "$KUBERNETES_REF"
 
 ARG QUICKWIT_REPO=https://github.com/mgt-tool/mgtt-provider-quickwit.git

@@ -75,9 +75,17 @@ components:
   # ─── Service layer (color-selecting) ────────────────────────────
   acme-shop-svc:
     type: service
+    # The Service selects one color at a time (selector color=blue or
+    # color=green), and only that color serves: active/passive, so not a
+    # redundancy group. Each edge holds while the selector names its color;
+    # before selector_value is probed, both edges are walked.
+    vars:
+      selector_key: color
     depends:
       - on: acme-shop-nginx-blue
+        while: selector_value == blue
       - on: acme-shop-nginx-green
+        while: selector_value == green
 
   # ─── nginx tier (per color) ─────────────────────────────────────
   acme-shop-nginx-blue:
@@ -233,6 +241,8 @@ components:
 - `redis` — the `elasticache_cluster` default includes `cache_hit_ratio > 80`, which trips on idle stage (ratio is 0 when nothing reads). `replace: [available == true]` drops it on purpose. A real Redis outage still flips `available` to false.
 - `mq` — `replace:` keeps `available == true` and `queue_depth < 10000`, and drops `consumer_count > 0` from the default. On stage, consumers are scaled to 0 and never attach to the broker, so the rule flagged idle-by-design as an incident. `queue_depth < 10000` is the real safety bound: a backed-up queue is the symptom regardless of how many consumers are attached.
 
+**The Service follows the live color with `while:`, not a redundancy group.** Only the selected color serves, and traffic does not fail over to the idle one, so the pair is active/passive: a dead live color is an outage, a dead idle color is not. `need: 1` would hide the first. Each edge on `acme-shop-svc` holds while `selector_value` (the Service's `color` selector label, read through `selector_key: color`) names that color. Until it is probed, the guard cannot be decided and both edges are walked, which is what the model did before it had the guard. Before the guard, an idle green that crash-looped was blamed for an outage it was not causing (scenario 8).
+
 **Business-process components** (`scheduled_jobs`, `async_jobs`) give the engine a user-visible symptom layer for chains rooted at cron or mq. Treating them as generic components with operator-observable facts (are jobs processed on time, is the queue draining) gives mgtt a terminal to reason from.
 
 **External Secrets Operator is modelled, not the Secret it produces.** The operator's health is the real signal — a healthy operator implies a fresh Secret. And the view-only IAM policy used by the CI diagnose role excludes `secrets`, so probing the Secret directly would 403. The operator is probed with `deployment_ready` only (not `crd_registered` or `webhook_*`), because cluster-scoped CRD gets also aren't in the view policy, and this ESO install ships no webhook configuration — setting the vars for probes that would come back forbidden just adds noise.
@@ -277,7 +287,7 @@ At this point the model is syntactically correct and every type/fact resolves ag
 
 ## Scenarios
 
-Seven scenarios live in `scenarios/`, each testing a different lesson the engine has to get right.
+Nine scenarios live in `scenarios/`, each testing a different lesson the engine has to get right.
 
 ### 1. All healthy — no false positives
 
@@ -450,6 +460,26 @@ The engine cannot see rds, so it names the deepest component it did see broken, 
 
 `scenarios/rds-deleted.yaml` has every RDS probe answering `not_found`. The model says the instance exists, so its absence is the root cause: `root_cause: rds`, with the same path as scenario 3. Without that rule, a deleted database would be an all-clear, and the php-fpm pods crashing on top of it would take the blame.
 
+### 8. Idle green down — not an incident
+
+`scenarios/idle-color-down.yaml`: the Service selects blue, everything on blue is healthy, and green is crash-looping.
+
+```yaml
+inject:
+  acme-shop-svc:            { endpoint_count: 2, selector_value: blue }
+  acme-shop-nginx-green:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 11 }
+  # ... every other component healthy
+
+expect:
+  root_cause: none
+```
+
+Green serves nobody, so nothing a user touches is broken. Run against the model without the `while:` guards, this scenario fails: the root cause comes out `acme-shop-nginx-green`.
+
+### 9. Live green down — the same facts, the other selector
+
+`scenarios/live-color-down.yaml` is scenario 8 with `selector_value: green`. Now green is the live color and its failure is the outage: `root_cause: acme-shop-nginx-green`, through `acme-shop-svc`. The two scenarios together pin the guard in both directions.
+
 ---
 
 
@@ -465,8 +495,10 @@ $ mgtt simulate --all
   external-secrets operator down                ✓ passed
   rds probes refused                            ✓ passed
   rds deleted                                   ✓ passed
+  idle green down, blue live                    ✓ passed
+  live green down                               ✓ passed
 
-  7/7 scenarios passed
+  9/9 scenarios passed
 ```
 
 No cluster, no credentials. This runs on every PR in ~400ms:

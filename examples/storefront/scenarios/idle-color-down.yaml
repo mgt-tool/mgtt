@@ -1,0 +1,25 @@
+name: idle green down, blue live
+# The Service selects blue; green is idle and crash-looping. Nothing a
+# user touches is broken, so there is no root cause. Without the while:
+# guards on acme-shop-svc the model hard-depended on both colors and
+# blamed green -- the false root cause that made this example a lesson.
+
+inject:
+  acme-shop-svc:            { endpoint_count: 2, selector_value: blue }
+  acme-shop-nginx-blue:     { ready_replicas: 2, desired_replicas: 2, condition_available: true, restart_count: 0 }
+  acme-shop-nginx-green:    { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 11 }
+  acme-shop-php-fpm-blue:   { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 0 }
+  acme-shop-php-fpm-green:  { ready_replicas: 3, desired_replicas: 3, condition_available: true, restart_count: 0 }
+  acme-shop-consumer-blue:  { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  acme-shop-consumer-green: { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  acme-shop-cron:           { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  rds:                      { available: true, connection_count: 120 }
+  redis:                    { available: true, connection_count: 200, cache_hit_ratio: 0.95 }
+  mq:                       { available: true, consumer_count: 22, queue_depth: 34 }
+  media-bucket:             { accessible: true }
+  cloudfront:               { enabled: true, deployed: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true }
+
+expect:
+  root_cause: none

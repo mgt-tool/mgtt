@@ -11,7 +11,7 @@ The **engine** only reasons. It has no network access and no credentials. **Prov
 
 ## Failure chains
 
-`mgtt model validate --write-scenarios` lists every failure chain the model allows, as `root state → effect → … → symptom`, and writes them to `scenarios.yaml`. Commit that file. Validate refuses a stale one, so a model change and its consequences land in the same diff. For very large models, set `meta.scenarios: none` to skip generation; `diagnose` then walks the dependency graph instead.
+Every failure the model allows is a chain, `root state → effect → … → symptom`. `mgtt model validate --write-scenarios` saves them to `scenarios.yaml` in compact form: the graph of failure states, not one entry per chain. Even a 20-component model fits in about 10 KB. Commit the file. Validate rejects a stale copy, so a model change and its consequences land in the same diff. A model with `meta.scenarios: none` skips the file, and `diagnose` then walks the dependency graph instead.
 
 ## Diagnose: narrowing to one chain
 

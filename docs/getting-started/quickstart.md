@@ -129,7 +129,7 @@ Next, generate the failure-chain index that `diagnose` uses. Commit it; `model v
 
 ```
 $ mgtt model validate --write-scenarios
-  wrote 317 scenarios to scenarios.yaml
+  wrote 710 scenarios to scenarios.yaml
 ```
 
 ## 5. Diagnose

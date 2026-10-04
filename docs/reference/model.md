@@ -9,7 +9,7 @@ meta:
   providers: [mgt-tool/kubernetes@>=3.0.0]
   vars: { namespace: production }  # substituted as {namespace} in probes
   strict_types: false              # true: an untyped component is an error
-  scenarios: none                  # skip scenarios.yaml (very large models)
+  scenarios: none                  # opt out of scenarios.yaml and its drift check
 
 components:
   api:
@@ -79,4 +79,4 @@ Run them with `mgtt simulate --all`, or `--scenario <file>` for one. `--from-sce
 
 ## `scenarios.yaml` (generated)
 
-`mgtt model validate --write-scenarios` writes every failure chain the model allows. Don't edit it. Regenerate it and commit it. `validate` fails when its `source_hash` no longer matches the model and types. `validate --check-scenarios` runs only that check.
+`mgtt model validate --write-scenarios` writes every failure chain the model allows, stored as a failure graph (`format: graph/v1`). Don't edit it. Regenerate it and commit it. `validate` fails once the model would produce a different graph; comments and version bumps don't count. `validate --check-scenarios` runs only that check.

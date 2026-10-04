@@ -126,3 +126,25 @@ func TestValidate_UnsetVarWarning(t *testing.T) {
 		t.Fatalf("want one vars warning, on unset; got %v", got)
 	}
 }
+
+func TestValidate_Source(t *testing.T) {
+	m := &model.Model{
+		Meta: model.Meta{Name: "s", Version: "1"},
+		Components: map[string]*model.Component{
+			"a": {Name: "a", Type: "x", Source: "discovered"},
+			"b": {Name: "b", Type: "x", Source: "authored"},
+			"c": {Name: "c", Type: "x"},
+			"d": {Name: "d", Type: "x", Source: "found"},
+		},
+		Order: []string{"a", "b", "c", "d"},
+	}
+	var bad []string
+	for _, e := range model.Validate(m, nil).Errors {
+		if e.Field == "source" {
+			bad = append(bad, e.Component)
+		}
+	}
+	if len(bad) != 1 || bad[0] != "d" {
+		t.Fatalf("only d's source is invalid; got %v", bad)
+	}
+}

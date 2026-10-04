@@ -169,3 +169,49 @@ func TestReportDiscoverFailures_DistinguishesNoDiscoverFromFailure(t *testing.T)
 		t.Errorf("got:\n%s\nwant:\n%s", buf.String(), want)
 	}
 }
+
+// A component written by hand -- a business process, an external
+// service -- is not in discovery and must survive every rebuild without
+// flags; build says it kept it, and flags a dependency that dangles.
+func TestModelBuild_KeepsAuthoredComponents(t *testing.T) {
+	home := t.TempDir()
+	installStubProviderInline(t, home, "kubernetes", `{"components":[{"name":"api","type":"deployment"},{"name":"old-svc","type":"service"}]}`)
+	out := filepath.Join(t.TempDir(), "system.model.yaml")
+	var o, e bytes.Buffer
+	if code := runModelBuild(context.Background(), modelBuildFlags{mgttHome: home, output: out}, &o, &e); code != 0 {
+		t.Fatalf("first build: %s", e.String())
+	}
+	data, _ := os.ReadFile(out)
+	if !strings.Contains(string(data), "source: discovered") {
+		t.Fatalf("build must mark what it discovered:\n%s", data)
+	}
+	// An operator adds a hand-written component that reads old-svc.
+	hand := "  checkout:\n    type: business_process\n    depends:\n      - on: api\n      - on: old-svc\n"
+	if err := os.WriteFile(out, append(data, []byte(hand)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rebuild with the same discovery: checkout is kept, no flags needed.
+	o.Reset()
+	e.Reset()
+	if code := runModelBuild(context.Background(), modelBuildFlags{mgttHome: home, output: out}, &o, &e); code != 0 {
+		t.Fatalf("rebuild must keep an authored component without flags; stderr: %s", e.String())
+	}
+	if data, _ := os.ReadFile(out); !strings.Contains(string(data), "checkout:") {
+		t.Fatalf("authored checkout dropped:\n%s", data)
+	}
+	if !strings.Contains(o.String(), "Kept (authored, not from discovery): checkout") {
+		t.Errorf("build should say it kept checkout; got: %s", o.String())
+	}
+
+	// old-svc leaves discovery and is allowed to go: checkout now dangles.
+	installStubProviderInline(t, home, "kubernetes", `{"components":[{"name":"api","type":"deployment"}]}`)
+	o.Reset()
+	e.Reset()
+	if code := runModelBuild(context.Background(), modelBuildFlags{mgttHome: home, output: out, allowDeletes: true}, &o, &e); code != 0 {
+		t.Fatalf("rebuild: %s", e.String())
+	}
+	if !strings.Contains(o.String(), "Dangling: checkout depends on old-svc") {
+		t.Errorf("build should flag checkout's dangling dependency; got: %s", o.String())
+	}
+}

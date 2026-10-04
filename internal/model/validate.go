@@ -192,6 +192,13 @@ func pass1Structural(m *Model, result *ValidationResult) {
 func pass3DepRefs(m *Model, result *ValidationResult) {
 	for _, name := range m.Order {
 		comp := m.Components[name]
+		if comp.Source != "" && comp.Source != SourceDiscovered && comp.Source != "authored" {
+			result.Errors = append(result.Errors, ValidationError{
+				Component: name,
+				Field:     "source",
+				Message:   fmt.Sprintf("source: %q; want discovered, authored, or nothing (authored)", comp.Source),
+			})
+		}
 		for _, dep := range comp.Depends {
 			if dep.Need < 0 || dep.Need > len(dep.On) {
 				result.Errors = append(result.Errors, ValidationError{

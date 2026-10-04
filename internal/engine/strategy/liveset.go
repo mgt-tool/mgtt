@@ -63,14 +63,13 @@ func stepConsistent(step scenarios.Step, store *facts.Store, m *model.Model, reg
 }
 
 // absentStepConsistent resolves liveness when the probe layer reports
-// the component doesn't exist. Scenarios requiring a non-default state
-// are contradicted; the default-active ("healthy") state stays live
-// because a missing component is trivially "not in any failure state".
+// the component doesn't exist. A component the model says is there and
+// the system says is not is a finding, not an all-clear: its default
+// ("healthy") state is contradicted, and every failure state stays live --
+// absence fits any of them and confirms none, so the failure can still be
+// traced through it to the symptom.
 func absentStepConsistent(step scenarios.Step, t *providersupport.Type) bool {
-	if t.DefaultActiveState == "" || step.State != t.DefaultActiveState {
-		return false
-	}
-	return true
+	return t.DefaultActiveState == "" || step.State != t.DefaultActiveState
 }
 
 // matchedStepConsistent evaluates the step.State's when-predicate

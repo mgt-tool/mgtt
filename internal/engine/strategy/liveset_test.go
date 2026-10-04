@@ -222,10 +222,11 @@ func TestFilterLive_UndefinedPredicateKeeps(t *testing.T) {
 }
 
 // TestFilterLive_AbsentComponentEliminatesFailureStates verifies that
-// once the probe layer has recorded a not_found fact, scenarios that
-// require a non-default state on that component are eliminated — a
-// missing component can't be "stopped", "draining", etc.
-func TestFilterLive_AbsentComponentEliminatesFailureStates(t *testing.T) {
+// once the probe layer has recorded a not_found fact, the component the
+// model expects is missing: that is a finding. Its healthy default state
+// is contradicted and its failure states stay live, so a deleted database
+// can still be the root cause.
+func TestFilterLive_AbsentComponentKeepsFailureStates(t *testing.T) {
 	typ := &providersupport.Type{
 		Name:               "service",
 		DefaultActiveState: "live",
@@ -257,18 +258,15 @@ func TestFilterLive_AbsentComponentEliminatesFailureStates(t *testing.T) {
 		{ID: "live", Chain: []scenarios.Step{{Component: "svc", State: "live"}}},
 	}
 	live := FilterLive(scs, store, m, reg)
-	if len(live) != 1 {
-		t.Fatalf("want 1 live (default-state); got %d: %+v", len(live), live)
-	}
-	if live[0].ID != "live" {
-		t.Errorf("absent component: only the default-active state should stay live; got %s", live[0].ID)
+	if len(live) != 1 || live[0].ID != "stopped" {
+		t.Fatalf("absent component: want only the failure state live; got %+v", live)
 	}
 }
 
-// TestFilterLive_AbsentComponentWithoutDefaultStateEliminatesAll — when
-// the type declares no default_active_state, an absent component has
-// no "harmless" survivor state and every scenario referencing it dies.
-func TestFilterLive_AbsentComponentWithoutDefaultStateEliminatesAll(t *testing.T) {
+// TestFilterLive_AbsentComponentWithoutDefaultStateKeepsAll — when the
+// type declares no default_active_state, no state of an absent component
+// is the healthy one, so none is contradicted.
+func TestFilterLive_AbsentComponentWithoutDefaultStateKeepsAll(t *testing.T) {
 	typ := &providersupport.Type{
 		Name: "service",
 		States: []providersupport.StateDef{
@@ -297,7 +295,7 @@ func TestFilterLive_AbsentComponentWithoutDefaultStateEliminatesAll(t *testing.T
 		{ID: "any", Chain: []scenarios.Step{{Component: "svc", State: "any"}}},
 	}
 	live := FilterLive(scs, store, m, reg)
-	if len(live) != 0 {
-		t.Fatalf("type with no default_active_state: absent component eliminates every scenario; got %d live", len(live))
+	if len(live) != 1 {
+		t.Fatalf("type with no default_active_state: absent component keeps its scenario; got %d live", len(live))
 	}
 }

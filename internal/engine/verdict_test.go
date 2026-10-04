@@ -95,3 +95,22 @@ func sliceContains(xs []string, x string) bool {
 	}
 	return false
 }
+
+// A component the model expects and the probes cannot find is the
+// finding: with api crash-looping and every store probe not_found, the
+// deleted store is the root cause, not api.
+func TestPlan_AbsentComponentIsTheRootCause(t *testing.T) {
+	m, reg := loadStorefront(t)
+	store := newStore(map[string]map[string]any{
+		"api": {"ready_replicas": 0, "restart_count": 12, "desired_replicas": 3, "endpoints": 0},
+	})
+	for _, k := range []string{"available", "connection_count"} {
+		store.Append("store", facts.Fact{Key: k, Status: facts.FactStatusNotFound, At: time.Now()})
+	}
+
+	tree := Plan(m, reg, store, "")
+
+	if tree.RootCause != "store" {
+		t.Errorf("root_cause = %q, want store (not found)", tree.RootCause)
+	}
+}

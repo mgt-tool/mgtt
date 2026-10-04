@@ -252,3 +252,38 @@ const ModelValidateOutputSchema = `{
       "required":["field","message"]}
   }
 }`
+
+// ScenarioSimulateOutputSchema describes a simulation report.
+const ScenarioSimulateOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "passed":{"type":"integer"},
+    "failed":{"type":"integer"},
+    "results":{"type":"array","items":{"type":"object","properties":{
+      "name":{"type":"string"},"pass":{"type":"boolean"},
+      "expected":{"$ref":"#/$defs/conclusion"},"actual":{"$ref":"#/$defs/conclusion"}},
+      "required":["name","pass","expected","actual"]}}
+  },
+  "required":["passed","failed","results"],
+  "$defs":{
+    "conclusion":{"type":"object","properties":{
+      "root_cause":{"type":"string"},
+      "path":{"type":"array","items":{"type":"string"}},
+      "eliminated":{"type":"array","items":{"type":"string"}},
+      "not_eliminated":{"type":"array","items":{"type":"string"}},
+      "cannot_rule_out":{"type":"array","items":{"type":"string"}},
+      "redundancy_degraded":{"type":"array","items":{"type":"string"}}},
+      "required":["root_cause"]}
+  }
+}`
+
+// GuideOutputSchema describes a guide topic.
+const GuideOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "topic":{"type":"string"},
+    "text":{"type":"string"},
+    "topics":{"type":"array","items":{"type":"string"}}
+  },
+  "required":["topic","text","topics"]
+}`

@@ -4,7 +4,10 @@
 package simulate
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,25 +23,61 @@ func LoadScenario(path string) (*Scenario, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read scenario %q: %w", path, err)
 	}
-
 	var sc Scenario
 	if err := yaml.Unmarshal(data, &sc); err != nil {
 		return nil, fmt.Errorf("parse scenario %q: %w", path, err)
 	}
+	if err := finish(&sc); err != nil {
+		return nil, fmt.Errorf("scenario %q: %w", path, err)
+	}
+	return &sc, nil
+}
 
-	// Normalise injected values: YAML decodes integers as int, but some
-	// environments produce float64. Coerce float64 values that are whole
-	// numbers to int so the fact store and expression evaluator see int.
+// ParseScenarios reads one or more scenarios from data, separated by
+// `---`, as an MCP client sends them inline.
+func ParseScenarios(data []byte) ([]*Scenario, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var out []*Scenario
+	for i := 1; ; i++ {
+		var doc yaml.Node
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parse scenario %d: %w", i, err)
+		}
+		// An empty document -- a leading or trailing `---` -- is not a
+		// scenario that expects nothing.
+		if len(doc.Content) == 0 || doc.Content[0].Kind == yaml.ScalarNode && doc.Content[0].Value == "" {
+			i--
+			continue
+		}
+		var sc Scenario
+		if err := doc.Decode(&sc); err != nil {
+			return nil, fmt.Errorf("parse scenario %d: %w", i, err)
+		}
+		if err := finish(&sc); err != nil {
+			return nil, fmt.Errorf("scenario %d (%q): %w", i, sc.Name, err)
+		}
+		out = append(out, &sc)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no scenarios in the source")
+	}
+	return out, nil
+}
+
+// finish normalises a decoded scenario and checks its unresolved block.
+// YAML decodes integers as int, but some environments produce float64:
+// whole floats become int so the fact store and evaluator see int.
+func finish(sc *Scenario) error {
 	for comp := range sc.Inject {
 		for k, v := range sc.Inject[comp] {
 			sc.Inject[comp][k] = normaliseValue(v)
 		}
 	}
-
-	if err := checkUnresolved(&sc); err != nil {
-		return nil, fmt.Errorf("scenario %q: %w", path, err)
-	}
-	return &sc, nil
+	return checkUnresolved(sc)
 }
 
 // unresolvedStatuses are the outcomes an unresolved: entry may name — the

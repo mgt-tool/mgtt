@@ -6,6 +6,8 @@ package mcp
 import (
 	"strings"
 	"testing"
+
+	"github.com/mgt-tool/mgtt/internal/simulate"
 )
 
 // authoringHandler installs the test write provider (type `service`, fact
@@ -129,5 +131,70 @@ func TestToolsets(t *testing.T) {
 	}
 	if a, _ := NewHandler(Config{Toolset: "authoring"}).About(); a.Toolset != "authoring" {
 		t.Errorf("about.toolset = %q", a.Toolset)
+	}
+}
+
+// Scenarios sent inline as YAML documents run against an inline model;
+// each comes back with its verdict and the conclusion beside the expected.
+func TestScenarioSimulate_Inline(t *testing.T) {
+	h := authoringHandler(t)
+	model := "meta:\n  name: s\n  version: \"1\"\n  providers: [testwriter]\ncomponents:\n  api:\n    type: service\n"
+	scenarios := `name: api broken
+inject:
+  api: { status: degraded }
+expect:
+  root_cause: api
+---
+name: wrongly expects healthy
+inject:
+  api: { status: degraded }
+expect:
+  root_cause: none
+`
+	res, err := h.ScenarioSimulate(ScenarioSimulateParams{ModelSource: model, ScenariosSource: scenarios})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Passed != 1 || res.Failed != 1 || len(res.Results) != 2 {
+		t.Fatalf("want 1 pass, 1 fail; got %+v", res)
+	}
+	bad := res.Results[1]
+	if bad.Pass || bad.Expected.RootCause != "none" || bad.Actual.RootCause != "api" {
+		t.Fatalf("failing scenario should show expected none beside actual api: %+v", bad)
+	}
+	if _, err := h.ScenarioSimulate(ScenarioSimulateParams{ModelSource: model}); err == nil {
+		t.Error("scenarios are required")
+	}
+}
+
+// The guide serves its index by default, every listed topic, and names
+// the topics when asked for one that does not exist.
+func TestGuide(t *testing.T) {
+	h := NewHandler(Config{})
+	idx, err := h.Guide(GuideParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idx.Topic != "index" || !strings.Contains(idx.Text, "authoring loop") {
+		t.Fatalf("index: %+v", idx.Topic)
+	}
+	for _, topic := range idx.Topics {
+		if !strings.Contains(idx.Text, "`"+topic+"`") && topic != "index" {
+			t.Errorf("index does not list topic %q", topic)
+		}
+		if _, err := h.Guide(GuideParams{Topic: topic}); err != nil {
+			t.Errorf("topic %q: %v", topic, err)
+		}
+	}
+	// The scenario example teaches the format; it must parse as one.
+	sa, _ := h.Guide(GuideParams{Topic: "scenarios.authoring"})
+	block := sa.Text[strings.Index(sa.Text, "```yaml\n")+len("```yaml\n"):]
+	block = block[:strings.Index(block, "```")]
+	scs, err := simulate.ParseScenarios([]byte(block))
+	if err != nil || len(scs) != 1 || len(scs[0].Unresolved) != 1 || len(scs[0].Expect.CannotRuleOut) != 1 {
+		t.Errorf("scenarios.authoring example does not parse as its fields say: %v %+v", err, scs)
+	}
+	if _, err := h.Guide(GuideParams{Topic: "nope"}); err == nil || !strings.Contains(err.Error(), "model.health") {
+		t.Errorf("unknown topic should list topics, got %v", err)
 	}
 }

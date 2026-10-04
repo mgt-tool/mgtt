@@ -30,22 +30,39 @@ func (occamStrategy) SuggestProbe(in Input) Decision {
 		return Decision{Done: true, RootCause: &live[0], Reason: "single scenario remains"}
 	}
 
-	sort.SliceStable(live, func(i, j int) bool {
-		if live[i].Length() != live[j].Length() {
-			return live[i].Length() < live[j].Length()
+	// Rank keys are computed once per scenario. A scenario's elimination
+	// count — how many OTHER live scenarios touch the component its next
+	// probe targets — is that component's touch count minus itself, so
+	// one pass over the live set prices every candidate: O(n·L), not the
+	// O(n² log n) of recounting inside the comparator.
+	touches := liveTouchCounts(live)
+	type ranked struct {
+		s       scenarios.Scenario
+		suspect bool
+		elim    int
+	}
+	rs := make([]ranked, len(live))
+	for i, s := range live {
+		rs[i] = ranked{s: s, suspect: touchesAnySuspect(s, in.Suspects)}
+		if p := pickSymptomInward(s, in.Store, in.Model, in.Registry); p != nil {
+			rs[i].elim = touches[p.Component] - 1
 		}
-		si := touchesAnySuspect(live[i], in.Suspects)
-		sj := touchesAnySuspect(live[j], in.Suspects)
-		if si != sj {
-			return si // true comes first
+	}
+	sort.SliceStable(rs, func(i, j int) bool {
+		if rs[i].s.Length() != rs[j].s.Length() {
+			return rs[i].s.Length() < rs[j].s.Length()
 		}
-		ei := crossEliminationCount(live[i], live, in.Store, in.Model, in.Registry)
-		ej := crossEliminationCount(live[j], live, in.Store, in.Model, in.Registry)
-		if ei != ej {
-			return ei > ej
+		if rs[i].suspect != rs[j].suspect {
+			return rs[i].suspect // true comes first
 		}
-		return live[i].ID < live[j].ID
+		if rs[i].elim != rs[j].elim {
+			return rs[i].elim > rs[j].elim
+		}
+		return rs[i].s.ID < rs[j].s.ID
 	})
+	for i := range rs {
+		live[i] = rs[i].s
+	}
 
 	chosen := live[0]
 	probe := pickSymptomInward(chosen, in.Store, in.Model, in.Registry)
@@ -79,24 +96,20 @@ func touchesAnySuspect(s scenarios.Scenario, hints []SuspectHint) bool {
 	return false
 }
 
-func crossEliminationCount(s scenarios.Scenario, live []scenarios.Scenario, store *facts.Store, m *model.Model, reg *providersupport.Registry) int {
-	probe := pickSymptomInward(s, store, m, reg)
-	if probe == nil {
-		return 0
-	}
-	n := 0
-	for _, other := range live {
-		if other.ID == s.ID {
-			continue
-		}
-		for _, step := range other.Chain {
-			if step.Component == probe.Component {
-				n++
-				break
+// liveTouchCounts maps each component to the number of live scenarios
+// whose chain touches it (once per scenario, however many steps).
+func liveTouchCounts(live []scenarios.Scenario) map[string]int {
+	counts := map[string]int{}
+	for _, s := range live {
+		seen := map[string]bool{}
+		for _, step := range s.Chain {
+			if !seen[step.Component] {
+				seen[step.Component] = true
+				counts[step.Component]++
 			}
 		}
 	}
-	return n
+	return counts
 }
 
 // pickSymptomInward walks the chain terminal→root and returns a probe for

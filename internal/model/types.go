@@ -49,9 +49,14 @@ type Component struct {
 	// probe (e.g. an AWS RDS DB instance id or a k8s resource name).
 	// Empty falls back to Name at probe time, preserving the historical
 	// "component key is the resource name" behavior.
-	Resource   string
-	Providers  []string // nil → inherit Meta.Providers
-	Depends    []Dependency
+	Resource  string
+	Providers []string // nil → inherit Meta.Providers
+	Depends   []Dependency
+	// Source is where the component came from: "discovered" when model
+	// build wrote it from a provider's discovery, otherwise authored by
+	// hand ("authored", or absent). model build never deletes an
+	// authored component.
+	Source     string
 	HealthyRaw []string    // raw expression strings, compiled in Phase 2
 	Healthy    []expr.Node // compiled from HealthyRaw
 	// HealthyMode says how Healthy combines with the type's rules: "" for
@@ -160,3 +165,10 @@ func (m *Model) DependenciesOf(name string) []string {
 	}
 	return m.graph.DependenciesOf(name)
 }
+
+// SourceDiscovered marks a component model build wrote from discovery.
+const SourceDiscovered = "discovered"
+
+// Authored reports whether c was written by hand: model build keeps it
+// whether or not discovery returns it.
+func (c *Component) Authored() bool { return c.Source != SourceDiscovered }

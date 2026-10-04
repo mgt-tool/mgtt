@@ -49,6 +49,7 @@ func BuildModel(snapshots map[string]provider.DiscoveryResult) (*model.Model, er
 				Name:      dc.Name,
 				Type:      dc.Type,
 				Providers: []string{providerName},
+				Source:    model.SourceDiscovered,
 			}
 		}
 	}

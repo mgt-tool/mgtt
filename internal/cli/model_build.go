@@ -50,13 +50,14 @@ func runModelBuild(ctx context.Context, f modelBuildFlags, stdout, stderr io.Wri
 	if code != 0 {
 		return code
 	}
-	mergePrev(prev, next, f.tombstone)
+	kept := mergePrev(prev, next, f.tombstone)
 
 	diff := build.ComputeDiff(prev, next)
 	if code := gateDeletions(stderr, diff, f); code != 0 {
 		return code
 	}
 	renderBuildSummary(stdout, snapshots, next, diff)
+	renderAuthored(stdout, next, kept)
 	return writeBuiltModel(stdout, stderr, f.output, next)
 }
 
@@ -92,14 +93,25 @@ func loadPrevModel(path string, stderr io.Writer) (*model.Model, int) {
 	return prev, 0
 }
 
-// mergePrev carries tombstoned components AND hand-authored augmentations
-// (healthy, failure_modes, vars, while-guards) from prev onto next.
-// Discovery only returns structural facts — operators' semantic work on
-// kept components must survive a rebuild.
-func mergePrev(prev, next *model.Model, tombstone []string) {
+// mergePrev carries over from prev what discovery cannot produce:
+// every authored component (any without source: discovered -- business
+// processes, external services, hand-written wiring), tombstoned
+// components, and hand-authored augmentations (healthy, failure_modes,
+// vars, while-guards) on kept ones. Returns the authored components kept
+// although discovery did not return them, sorted.
+func mergePrev(prev, next *model.Model, tombstone []string) []string {
 	if prev == nil {
-		return
+		return nil
 	}
+	var kept []string
+	for name, pc := range prev.Components {
+		if _, discovered := next.Components[name]; discovered || !pc.Authored() {
+			continue
+		}
+		next.Components[name] = pc
+		kept = append(kept, name)
+	}
+	sort.Strings(kept)
 	for _, name := range tombstone {
 		pc, ok := prev.Components[name]
 		if !ok {
@@ -111,6 +123,39 @@ func mergePrev(prev, next *model.Model, tombstone []string) {
 		next.Components[name] = pc
 	}
 	mergeHandAuthored(prev, next)
+	return kept
+}
+
+// renderAuthored names the authored components kept although discovery
+// does not return them, and any of their dependencies on a component the
+// model no longer has.
+func renderAuthored(w io.Writer, next *model.Model, kept []string) {
+	if len(kept) > 0 {
+		fmt.Fprintf(w, "  Kept (authored, not from discovery): %s\n", strings.Join(kept, ", "))
+		fmt.Fprintln(w, "    a component without `source: discovered` is never removed by build; delete it by hand if it is gone")
+	}
+	for _, name := range sortedComponentNames(next) {
+		c := next.Components[name]
+		if !c.Authored() {
+			continue
+		}
+		for _, dep := range c.Depends {
+			for _, on := range dep.On {
+				if next.Components[on] == nil {
+					fmt.Fprintf(w, "  Dangling: %s depends on %s, which the model no longer has\n", name, on)
+				}
+			}
+		}
+	}
+}
+
+func sortedComponentNames(m *model.Model) []string {
+	out := make([]string, 0, len(m.Components))
+	for n := range m.Components {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // gateDeletions enforces the deletion safety contract. Returns a non-zero

@@ -58,6 +58,7 @@ type rawMeta struct {
 type rawComponent struct {
 	Type         string                 `yaml:"type"`
 	Resource     string                 `yaml:"resource"`
+	Source       string                 `yaml:"source"`
 	Providers    []string               `yaml:"providers"`
 	Depends      []rawDependency        `yaml:"depends"`
 	Healthy      rawHealthy             `yaml:"healthy"`
@@ -177,6 +178,7 @@ func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 		Providers:   rc.Providers,
 		HealthyRaw:  rc.Healthy.Rules,
 		HealthyMode: rc.Healthy.Mode,
+		Source:      rc.Source,
 		Vars:        rc.Vars,
 	}
 	if len(rc.FailureModes) > 0 {

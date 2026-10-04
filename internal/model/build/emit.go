@@ -87,6 +87,9 @@ func componentsNode(m *model.Model) *yaml.Node {
 func componentNode(c *model.Component) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	appendStrField(n, "type", c.Type)
+	if c.Source != "" {
+		appendStrField(n, "source", c.Source)
+	}
 	if len(c.Providers) > 0 {
 		n.Content = append(n.Content, strNode("providers"), strSeqNode(c.Providers))
 	}

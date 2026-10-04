@@ -15,6 +15,7 @@ components:
   api:
     type: kubernetes.deployment    # required: <provider>.<type>, or bare <type>
     resource: shop-api-{env}       # real resource name; {var} placeholders allowed
+    source: discovered             # written by `model build`; absent = authored, never deleted by build
     providers: [mgt-tool/aws]      # override meta.providers for this component
     vars: { namespace: payments }  # override meta.vars
     depends:
@@ -28,6 +29,8 @@ components:
     failure_modes:                 # extra propagation the type doesn't declare
       degraded: { can_cause: [upstream_5xx] }
 ```
+
+`source:` says where a component came from. `mgtt model build` writes `source: discovered` on what it found. Any other component is authored: business processes, external services, hand-written wiring. A rebuild keeps authored components whether discovery returns them or not, and names them as kept. Only a discovered component that discovery stops returning goes through the deletion gate (`--allow-deletes`, `--tombstone`).
 
 ### Health rules
 

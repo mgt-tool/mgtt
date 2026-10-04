@@ -8,7 +8,7 @@ Commands that take a model default to `system.model.yaml` in the current directo
 |---|---|
 | `mgtt init` | scaffold `system.model.yaml` |
 | `mgtt model validate [path]` | check structure, types, references and health rules, and that `scenarios.yaml` is current. `--write-scenarios` regenerates it; `--check-scenarios` checks only that |
-| `mgtt model build` | generate the model from provider discovery. `--allow-deletes`, `--tombstone a,b`, `--output` |
+| `mgtt model build` | generate the model from provider discovery, marking what it found `source: discovered`. Components without that marker are authored: kept on every rebuild, listed as kept, with any dependency on a component the model no longer has flagged as dangling. Discovered components that disappear need `--allow-deletes` or `--tombstone a,b`. `--output` |
 | `mgtt model export --json [path]` | the resolved model as JSON, for external checkers |
 | `mgtt model diff [old] [new]` | compare two revisions by meaning: components added and removed; dependency, effective health rule and var changes; and which user-facing symptoms each component's failure gains or loses. `--base <git-rev>` compares the model against a revision, e.g. `--base main` in a model PR |
 | `mgtt model impact <component>` | what breaks if the component fails, from the model alone: everything reached with a chain to it, user-facing symptoms marked `!`, where a redundancy group stops it, and the `while:` guards it depends on when every chain crosses one. `--state a,b` for some failure states only |

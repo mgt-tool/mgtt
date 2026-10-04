@@ -50,7 +50,7 @@ func staticInto(p *providersupport.Provider, r *Report) {
 	}
 	checkAbsoluteEntrypoint(p.Runtime.Entrypoint, r)
 	for typeName, typ := range p.Types {
-		checkType(typeName, typ, hasRunner(p), r)
+		checkType(typeName, typ, p.Variables, hasRunner(p), r)
 	}
 	checkNeedsVocabulary(p.Runtime.Needs, r)
 	if r.OK() && len(r.Warnings) == 0 {
@@ -124,7 +124,7 @@ func checkNeedsVocabulary(needs map[string]string, r *Report) {
 // checkType validates one type's default state + failure-mode + healthy
 // + state-predicate + fact-probe rules. Split out of Static so the per-
 // type concerns don't overwhelm the shared preamble.
-func checkType(typeName string, typ *providersupport.Type, runner bool, r *Report) {
+func checkType(typeName string, typ *providersupport.Type, vars map[string]providersupport.Variable, runner bool, r *Report) {
 	declaredStates := make(map[string]bool, len(typ.States))
 	for _, s := range typ.States {
 		declaredStates[s.Name] = true
@@ -133,10 +133,11 @@ func checkType(typeName string, typ *providersupport.Type, runner bool, r *Repor
 	for name, f := range typ.Facts {
 		declaredFacts[name] = f.TypeName
 	}
+	refs := exprRefs{facts: declaredFacts, vars: vars}
 	checkDefaultActiveState(typeName, typ, declaredStates, r)
 	checkFailureModeStates(typeName, typ, declaredStates, r)
-	checkHealthyFactRefs(typeName, typ, declaredFacts, r)
-	checkStateWhenFactRefs(typeName, typ, declaredFacts, r)
+	checkHealthyFactRefs(typeName, typ, refs, r)
+	checkStateWhenFactRefs(typeName, typ, refs, r)
 	checkFactProbes(typeName, typ, runner, r)
 }
 
@@ -158,27 +159,35 @@ func checkFailureModeStates(typeName string, typ *providersupport.Type, declared
 	}
 }
 
-// healthy and state.when may reference only declared facts on this type.
-func checkHealthyFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]string, r *Report) {
+// exprRefs is what a type's expressions may name: its declared facts, and,
+// as the right-hand side of a comparison, its provider's declared variables.
+type exprRefs struct {
+	facts map[string]string // fact name → type name
+	vars  map[string]providersupport.Variable
+}
+
+// healthy and state.when may reference only declared facts on this type,
+// or a declared variable as the value compared against.
+func checkHealthyFactRefs(typeName string, typ *providersupport.Type, refs exprRefs, r *Report) {
 	for i, h := range typ.Healthy {
-		for _, ref := range referencedFacts(h, declaredFacts) {
-			if _, ok := declaredFacts[ref]; !ok {
+		for _, ref := range referencedFacts(h, refs) {
+			if _, ok := refs.facts[ref]; !ok {
 				r.Failures = append(r.Failures, fmt.Sprintf(
-					"%s: healthy[%d] references undeclared fact %q", typeName, i, ref))
+					"%s: healthy[%d] references %q, which is neither a declared fact nor a declared variable", typeName, i, ref))
 			}
 		}
 	}
 }
 
-func checkStateWhenFactRefs(typeName string, typ *providersupport.Type, declaredFacts map[string]string, r *Report) {
+func checkStateWhenFactRefs(typeName string, typ *providersupport.Type, refs exprRefs, r *Report) {
 	for _, s := range typ.States {
 		if s.When == nil {
 			continue
 		}
-		for _, ref := range referencedFacts(s.When, declaredFacts) {
-			if _, ok := declaredFacts[ref]; !ok {
+		for _, ref := range referencedFacts(s.When, refs) {
+			if _, ok := refs.facts[ref]; !ok {
 				r.Failures = append(r.Failures, fmt.Sprintf(
-					"%s: state %q references undeclared fact %q", typeName, s.Name, ref))
+					"%s: state %q references %q, which is neither a declared fact nor a declared variable", typeName, s.Name, ref))
 			}
 		}
 	}
@@ -210,32 +219,40 @@ func checkFactProbes(typeName string, typ *providersupport.Type, runner bool, r 
 // are also ignored because cross-component validation is a model concern,
 // not a provider concern.
 //
-// factTypes maps each declared fact to its type name. It decides what a bare
-// word on the right-hand side is, the same way the evaluator does: against a
-// string fact it is a literal ("phase == Bound"), against any other fact it is
-// a second fact ("ready_replicas < desired_replicas").
-func referencedFacts(n expr.Node, factTypes map[string]string) []string {
+// A bare word on the right-hand side is read the way the evaluator reads
+// it: against a string fact, a literal ("phase == Bound"); against any other
+// fact, a second fact ("ready_replicas < desired_replicas") or, when the
+// provider declares it under variables:, a per-component variable
+// ("restart_count <= max_restart_count"). Only facts are returned.
+func referencedFacts(n expr.Node, refs exprRefs) []string {
 	var out []string
-	walk(n, factTypes, &out)
+	walk(n, refs, &out)
 	return out
 }
 
-func walk(n expr.Node, factTypes map[string]string, out *[]string) {
+func walk(n expr.Node, refs exprRefs, out *[]string) {
 	switch v := n.(type) {
 	case *expr.AndNode:
-		walk(v.L, factTypes, out)
-		walk(v.R, factTypes, out)
+		walk(v.L, refs, out)
+		walk(v.R, refs, out)
 	case *expr.OrNode:
-		walk(v.L, factTypes, out)
-		walk(v.R, factTypes, out)
+		walk(v.L, refs, out)
+		walk(v.R, refs, out)
 	case *expr.CmpNode:
 		if v.Component != "" || v.Fact == "" || v.Fact == "state" {
 			return
 		}
 		*out = append(*out, v.Fact)
-		if s, ok := v.Value.(string); ok && isIdentifier(s) && factTypes[v.Fact] != stringFactType {
-			*out = append(*out, s)
+		s, ok := v.Value.(string)
+		if !ok || !isIdentifier(s) || refs.facts[v.Fact] == stringFactType {
+			return
 		}
+		if _, isFact := refs.facts[s]; !isFact {
+			if _, isVar := refs.vars[s]; isVar {
+				return
+			}
+		}
+		*out = append(*out, s)
 	}
 }
 

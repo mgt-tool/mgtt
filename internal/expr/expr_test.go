@@ -558,3 +558,50 @@ func TestEvalCurrentComponentImplicit(t *testing.T) {
 		t.Error("expected true using implicit current component")
 	}
 }
+
+type varMap map[string]map[string]string
+
+func (v varMap) LookupVar(component, key string) (string, bool) {
+	val, ok := v[component][key]
+	return val, ok
+}
+
+// A bare word that names no fact resolves as one of the component's vars:
+// the per-component threshold in `restart_count <= max_restart_count`.
+func TestEvalBareWordResolvesAsVar(t *testing.T) {
+	node, err := expr.Parse("restart_count <= max_restart_count")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vars := varMap{"web": {"max_restart_count": "5", "label": "high"}}
+	cases := []struct {
+		name     string
+		facts    map[string]any
+		vars     expr.VarLookup
+		want     bool
+		resolved bool
+	}{
+		{"under the threshold", map[string]any{"restart_count": 3}, vars, true, true},
+		{"over the threshold", map[string]any{"restart_count": 9}, vars, false, true},
+		{"a fact wins a name clash", map[string]any{"restart_count": 3, "max_restart_count": 1}, vars, false, true},
+		{"var unset", map[string]any{"restart_count": 3}, varMap{}, false, false},
+		{"no var lookup", map[string]any{"restart_count": 3}, nil, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := makeCtx("web", map[string]map[string]any{"web": tc.facts}, nil)
+			ctx.Vars = tc.vars
+			got, err := node.Eval(ctx)
+			if resolved := err == nil; resolved != tc.resolved || (resolved && got != tc.want) {
+				t.Fatalf("got (%v, %v), want %v resolved=%v", got, err, tc.want, tc.resolved)
+			}
+		})
+	}
+	// A var that is set but not a number cannot decide a numeric rule.
+	bad, _ := expr.Parse("restart_count <= label")
+	ctx := makeCtx("web", map[string]map[string]any{"web": {"restart_count": 3}}, nil)
+	ctx.Vars = vars
+	if _, err := bad.Eval(ctx); err == nil {
+		t.Fatal("non-numeric var should leave the comparison unresolved")
+	}
+}

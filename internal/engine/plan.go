@@ -39,7 +39,7 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 	// guard expressions on dependency edges can reference derived states.
 	derivation := state.Derive(m, reg, store)
 	// Stage 2 — walk the dep graph.
-	paths := enumeratePaths(m, entry, store, derivation)
+	paths := enumeratePaths(m, entry, store, m.VarLookup(reg), derivation)
 	// Stage 3 — split alive vs eliminated, annotate reason strings.
 	alive, eliminated := splitPaths(paths, m, reg, store, derivation)
 
@@ -195,8 +195,8 @@ func loadScenariosIfPresent(m *model.Model) []scenarios.Scenario {
 //   - while evals (true,nil) → active (walk the edge)
 //   - while evals (false,nil)→ inactive (skip the edge)
 //   - while evals (false, *UnresolvedError) → conservative, walk the edge
-func enumeratePaths(m *model.Model, entry string, store *facts.Store, derivation *state.Derivation) []Path {
-	paths := bfsEnumerate(m, entry, store, derivation)
+func enumeratePaths(m *model.Model, entry string, store *facts.Store, vars expr.VarLookup, derivation *state.Derivation) []Path {
+	paths := bfsEnumerate(m, entry, store, vars, derivation)
 	sortPathsByDeclarationOrder(paths, m.Order)
 	return paths
 }
@@ -210,7 +210,7 @@ type bfsItem struct {
 // while-guard filtering on each edge. Returns every reachable
 // non-trivial path (each path is the shortest walk from entry to its
 // terminal component).
-func bfsEnumerate(m *model.Model, entry string, store *facts.Store, derivation *state.Derivation) []Path {
+func bfsEnumerate(m *model.Model, entry string, store *facts.Store, vars expr.VarLookup, derivation *state.Derivation) []Path {
 	visited := map[string]bool{entry: true}
 	queue := []bfsItem{{name: entry, path: []string{entry}}}
 	var paths []Path
@@ -222,7 +222,7 @@ func bfsEnumerate(m *model.Model, entry string, store *facts.Store, derivation *
 			continue
 		}
 		for _, dep := range comp.Depends {
-			if !whileGuardActive(dep, curr.name, store, derivation) {
+			if !whileGuardActive(dep, curr.name, store, vars, derivation) {
 				continue
 			}
 			for _, target := range dep.On {
@@ -242,13 +242,14 @@ func bfsEnumerate(m *model.Model, entry string, store *facts.Store, derivation *
 // whileGuardActive reports whether dep's while-guard (if any) permits
 // walking the edge. Conservative: unresolved or unexpected eval errors
 // log and still walk rather than silently dropping paths.
-func whileGuardActive(dep model.Dependency, componentName string, store *facts.Store, derivation *state.Derivation) bool {
+func whileGuardActive(dep model.Dependency, componentName string, store *facts.Store, vars expr.VarLookup, derivation *state.Derivation) bool {
 	if dep.While == nil {
 		return true
 	}
 	ctx := expr.Ctx{
 		CurrentComponent: componentName,
 		Facts:            store,
+		Vars:             vars,
 		States:           derivation.ComponentStates,
 	}
 	result, evalErr := dep.While.Eval(ctx)

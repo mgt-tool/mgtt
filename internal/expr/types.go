@@ -46,4 +46,14 @@ type Ctx struct {
 	CurrentComponent string
 	Facts            FactLookup
 	States           map[string]string
+	// Vars resolves a bare word that names no fact, such as the
+	// per-component threshold in `restart_count <= max_restart_count`.
+	// Nil means no vars: such a comparison stays unresolved.
+	Vars VarLookup
+}
+
+// VarLookup resolves a variable for a component: its own vars, then the
+// model's, then its provider's declared default.
+type VarLookup interface {
+	LookupVar(component, key string) (string, bool)
 }

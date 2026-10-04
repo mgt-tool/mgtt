@@ -67,7 +67,7 @@ func bfsWalk(in Input, entry string) []string {
 			continue
 		}
 		for _, dep := range comp.Depends {
-			if !whileGuardActive(dep, c, in.Store, states) {
+			if !whileGuardActive(dep, c, in.Store, in.Model.VarLookup(in.Registry), states) {
 				continue
 			}
 			for _, target := range dep.On {
@@ -95,13 +95,14 @@ func deriveComponentStates(in Input) map[string]string {
 // edge. Mirrors engine.whileGuardActive: only a definitively-false guard
 // skips the edge; an unresolved or errored guard is walked conservatively
 // so a missing fact never silently drops a component from the search.
-func whileGuardActive(dep model.Dependency, componentName string, store *facts.Store, states map[string]string) bool {
+func whileGuardActive(dep model.Dependency, componentName string, store *facts.Store, vars expr.VarLookup, states map[string]string) bool {
 	if dep.While == nil {
 		return true
 	}
 	ctx := expr.Ctx{
 		CurrentComponent: componentName,
 		Facts:            store,
+		Vars:             vars,
 		States:           states,
 	}
 	result, err := dep.While.Eval(ctx)

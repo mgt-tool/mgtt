@@ -1,6 +1,3 @@
 # Known breakages, one per line: SUITE  REASON (plan step that fixes it).
 # A listed suite passes while it fails and fails once it passes: the change
 # that fixes it removes its line here.
-provider-docker      expressions read component vars (max_restart_count) the evaluator never resolves (A8)
-provider-quickwit    expressions read component vars (target_success_rate) the evaluator never resolves (A8)
-provider-tempo       expressions read component vars (target_max_error_rate) the evaluator never resolves (A8)

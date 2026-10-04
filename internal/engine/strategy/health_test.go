@@ -62,3 +62,28 @@ func TestComponentVerdict(t *testing.T) {
 		})
 	}
 }
+
+// A healthy rule that compares against a per-component var is decided by
+// that var: the shape of mgtt-provider-docker's container type.
+func TestComponentVerdict_RuleReadsComponentVar(t *testing.T) {
+	m, reg := tinyModel(t)
+	rule, err := expr.Parse("a <= max_a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Components["web"].Healthy = []expr.Node{rule}
+	m.Components["web"].Vars = map[string]string{"max_a": "5"}
+	for a, want := range map[int]Verdict{3: Healthy, 9: Unhealthy} {
+		store := facts.NewInMemory()
+		store.Append("web", facts.Fact{Key: "a", Value: a, At: time.Now()})
+		if got := ComponentVerdict(m, reg, store, "web"); got != want {
+			t.Errorf("a=%d: verdict %d, want %d", a, got, want)
+		}
+	}
+	m.Components["web"].Vars = nil
+	store := facts.NewInMemory()
+	store.Append("web", facts.Fact{Key: "a", Value: 3, At: time.Now()})
+	if got := ComponentVerdict(m, reg, store, "web"); got != Unknown {
+		t.Errorf("with max_a unset: verdict %d, want Unknown", got)
+	}
+}

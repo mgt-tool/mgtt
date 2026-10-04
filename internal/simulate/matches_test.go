@@ -130,3 +130,15 @@ func TestIsSubset(t *testing.T) {
 		}
 	}
 }
+
+// not_eliminated says what eliminated, a subset check, cannot: that a
+// component stays in play.
+func TestMatches_NotEliminated(t *testing.T) {
+	exp := Expectation{RootCause: "api", NotEliminated: []string{"rds"}}
+	if !matches(exp, Expectation{RootCause: "api", Eliminated: []string{"redis"}}) {
+		t.Error("rds kept: should match")
+	}
+	if matches(exp, Expectation{RootCause: "api", Eliminated: []string{"redis", "rds"}}) {
+		t.Error("rds eliminated: should not match")
+	}
+}

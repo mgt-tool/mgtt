@@ -11,6 +11,7 @@ Complete reference for the hand-authored scenario files consumed by `mgtt simula
     - [`name`](#name) — scenario name shown in output
     - [`description`](#description) — operator-facing notes
     - [`inject`](#inject) — synthetic facts fed to the engine
+    - [`unresolved`](#unresolved) — probes that ran and produced no value
     - [`expect`](#expect) — what the engine should conclude
 - [File location](#file-location)
 - [Running scenarios](#running-scenarios)
@@ -87,6 +88,28 @@ inject:
 !!! tip "Inject enough facts for state resolution"
     Each provider type has state definitions with conditions (e.g., `degraded: ready_replicas < desired_replicas & restart_count > 5`). If you inject `ready_replicas: 0` without `restart_count`, the engine may resolve the state as `starting` instead of `degraded`. See [Type Catalog](type-catalog.md) for each type's state conditions.
 
+### `unresolved`
+
+**Optional.** Probes that ran but produced no value, written as component → fact → outcome:
+
+| Outcome | Meaning |
+|---------|---------|
+| `forbidden` | The backend refused the credentials (an IAM or RBAC denial). |
+| `transient` | A retryable failure, such as a timeout. |
+| `not_found` | The resource does not exist. |
+
+```yaml
+unresolved:
+  rds: { available: forbidden, connection_count: forbidden }
+```
+
+This is how a scenario covers the cases a value in `inject` cannot express.
+
+- **`forbidden` and `transient`** facts are *unknown*: they keep their component in play and never clear it.
+- **`not_found` on every probed fact** means the component the model expects is missing. That is itself a failure, and the component can be the root cause.
+
+A fact cannot be both injected and unresolved, and an unknown outcome fails the load.
+
 ### `expect`
 
 **Required.** Assertions about what the engine should conclude.
@@ -96,6 +119,7 @@ inject:
 | `root_cause` | yes | The component the engine identifies as root cause. Use `none` when all components are healthy. Asserted with strict equality. |
 | `path` | no | The failure path from outermost component to root cause. Order: `[outermost, ..., root_cause]`. Asserted as an **ordered subsequence** (see below). |
 | `eliminated` | no | Components confirmed healthy and removed from investigation. Asserted as a **subset** (see below). |
+| `not_eliminated` | no | Components that must stay in play. Fails if any of them is eliminated. `eliminated`, being a subset check, cannot say this; use it when a scenario's point is that something was *not* cleared, such as a component whose probes were refused. |
 
 ```yaml
 expect:
@@ -145,7 +169,17 @@ actual.eliminated: [frontend, redis, payment-gateway, observability-collector]
 actual.eliminated: [frontend]
 ```
 
-Order is ignored (set semantics). Adding a new topology-only component to the model doesn't invalidate every scenario's `eliminated:` list — it just means more things get eliminated, which is exactly what you'd expect.
+Order is ignored (set semantics). Because extras pass, `eliminated` can never catch a component cleared that should not have been; that is what `not_eliminated` is for:
+
+```yaml
+unresolved:
+  rds: { available: forbidden, connection_count: forbidden }
+expect:
+  root_cause: php-fpm
+  not_eliminated: [rds]      # never read, so never cleared
+```
+
+Adding a new topology-only component to the model doesn't invalidate every scenario's `eliminated:` list — it just means more things get eliminated, which is exactly what you'd expect.
 
 ### Why the relaxed semantics
 

@@ -287,7 +287,7 @@ At this point the model is syntactically correct and every type/fact resolves ag
 
 ## Scenarios
 
-Five scenarios live in `scenarios/`, each testing a different lesson the engine has to get right.
+Seven scenarios live in `scenarios/`, each testing a different lesson the engine has to get right.
 
 ### 1. All healthy — no false positives
 
@@ -438,7 +438,29 @@ expect:
 
 Note `restart_count: 0` on the php-fpm and cron pods — a mount failure stalls the rollout before the container starts, so the pod never crashes. "Not ready, never started" is a different signature from "crash-loop", and the model's facts have to carry that distinction for the engine to cut the chain correctly.
 
+### 6. RDS probes refused — unknown is not healthy
+
+`scenarios/rds-forbidden.yaml` has the same symptoms as scenario 3, but the CI role's IAM policy refuses every RDS call:
+
+```yaml
+unresolved:
+  rds:                      { available: forbidden, connection_count: forbidden }
+
+expect:
+  root_cause: acme-shop-php-fpm-blue
+  path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue]
+  eliminated: [external-secrets, mq, opensearch, redis, media-bucket, ssm-app-config]
+  not_eliminated: [rds]
+```
+
+The engine cannot see rds, so it names the deepest component it did see broken, and it must not clear rds. `not_eliminated` is what catches that: when mgtt once treated an unread fact as healthy, this scenario produced the same root cause and path, with rds silently added to the eliminated list.
+
+### 7. RDS deleted — a missing component is the finding
+
+`scenarios/rds-deleted.yaml` has every RDS probe answering `not_found`. The model says the instance exists, so its absence is the root cause: `root_cause: rds`, with the same path as scenario 3. Without that rule, a deleted database would be an all-clear, and the php-fpm pods crashing on top of it would take the blame.
+
 ---
+
 
 ## Simulate in CI
 
@@ -450,8 +472,10 @@ $ mgtt simulate --all
   rds unavailable                               ✓ passed
   redis unavailable                             ✓ passed
   external-secrets operator down                ✓ passed
+  rds probes refused                            ✓ passed
+  rds deleted                                   ✓ passed
 
-  5/5 scenarios passed
+  7/7 scenarios passed
 ```
 
 No cluster, no credentials. This runs on every PR in ~400ms:

@@ -458,7 +458,7 @@ network: host
 - `needs:` — built-in labels: `kubectl`, `aws`, `docker`, `terraform`, `gcloud`, `azure`. Operators can override or add labels via `$MGTT_HOME/capabilities.yaml`.
 - `network:` — `bridge` (default), `host`, or `none`. Use `host` when the probe needs in-cluster DNS or host-local services.
 
-Shell-fallback providers (no `meta.command`) must omit both fields. See [Provider Capabilities](../docs/reference/image-capabilities.md) for the full vocabulary.
+Shell-fallback providers (no `meta.command`) must omit both fields. See [Providers](../docs/guides/providers.md#credentials) for the full vocabulary.
 
 ### Registry Entry with Image
 
@@ -542,7 +542,7 @@ Each install writes a `.mgtt-install.json` into `~/.mgtt/providers/<name>/`:
 }
 ```
 
-mgtt uses this metadata to drive `provider list`, fully-qualified name (FQN) references, and SemVer constraint resolution. See [Provider FQN & Versions](../docs/concepts/provider-fqn-and-versions.md) and [Install Methods](../docs/concepts/provider-install-methods.md).
+mgtt uses this metadata to drive `provider list`, fully-qualified name (FQN) references, and SemVer constraint resolution. See [Providers](../docs/guides/providers.md).
 
 ## Testing Your Provider
 

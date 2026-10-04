@@ -5,7 +5,7 @@ package model
 
 // Integration tests for the provider resolution flow, exercising ParseProviderRef →
 // Resolve end-to-end with realistic inputs matching the four forms documented in
-// docs/concepts/provider-fqn-and-versions.md.
+// docs/guides/providers.md.
 //
 // These do not require a running daemon, a real provider install, or building the
 // mgtt binary.  They import the model package directly and call Resolve.

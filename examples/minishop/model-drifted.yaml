@@ -20,7 +20,7 @@ components:
     # healthy while placing it outside its default active state — and
     # `simulate` and `diagnose` will read different facts and disagree.
     #
-    # Verification is what notices. See ../../docs/concepts/verification.md.
+    # Verification is what notices. See https://github.com/mgt-tool/mgtt2writ.
     healthy:
       - available == true
 

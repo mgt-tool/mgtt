@@ -32,6 +32,9 @@ func TestPlan_UnresolvedFactsNeverEliminate(t *testing.T) {
 					t.Fatalf("store (every fact %s) was eliminated", status)
 				}
 			}
+			if len(tree.CannotRuleOut) != 1 || tree.CannotRuleOut[0].Component != "store" {
+				t.Fatalf("conclusion must name store as not ruled out; got %+v", tree.CannotRuleOut)
+			}
 		})
 	}
 }

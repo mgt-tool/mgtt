@@ -17,6 +17,9 @@ type PathTree struct {
 	Suggested  *Probe
 	RootCause  string
 	States     *state.Derivation
+	// CannotRuleOut names the components the facts left Unknown because
+	// some could not be read. RootCause is only as good as what was seen.
+	CannotRuleOut []strategy.Unseen
 }
 
 // Path represents a single failure path through the dependency graph.

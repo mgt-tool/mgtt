@@ -54,6 +54,7 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 			return strategy.ComponentVerdict(m, reg, store, c) == strategy.Unhealthy
 		}),
 	}
+	tree.CannotRuleOut = strategy.CannotRuleOut(m, reg, store)
 	// Stage 5 — strategy dispatch.
 	tree.Suggested = suggestNextProbe(m, reg, store, suspects)
 	return tree

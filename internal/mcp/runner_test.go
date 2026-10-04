@@ -121,4 +121,11 @@ func TestProbe_ForbiddenIsRecordedAsUnknown(t *testing.T) {
 	if len(list.Facts) != 1 || list.Facts[0].Status != "forbidden" || list.Facts[0].Value != nil {
 		t.Fatalf("want one value-less forbidden fact, got %+v", list.Facts)
 	}
+	plan, err := h.Plan(PlanParams{IncidentID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.CannotRuleOut) != 1 || plan.CannotRuleOut[0].Component != "mq" || plan.CannotRuleOut[0].Facts["available"] != "forbidden" {
+		t.Fatalf("plan must report mq as not ruled out; got %+v", plan.CannotRuleOut)
+	}
 }

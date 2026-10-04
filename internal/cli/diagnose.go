@@ -139,7 +139,7 @@ func runDiagnose(cmd *cobra.Command, f diagnoseFlags) error {
 	}
 	for probesRun < f.maxProbes {
 		if ctx.Err() != nil {
-			reportPartial(cmd, loop.store, loop.trail, "deadline exceeded", probesRun, f.maxProbes, start, f.deadline)
+			reportPartial(cmd, loop.store, loop.unseen(), loop.trail, "deadline exceeded", probesRun, f.maxProbes, start, f.deadline)
 			return nil
 		}
 		done, err := loop.step(ctx, &probesRun)
@@ -147,7 +147,7 @@ func runDiagnose(cmd *cobra.Command, f diagnoseFlags) error {
 			return err
 		}
 	}
-	reportPartial(cmd, loop.store, loop.trail, "budget exhausted", probesRun, f.maxProbes, start, f.deadline)
+	reportPartial(cmd, loop.store, loop.unseen(), loop.trail, "budget exhausted", probesRun, f.maxProbes, start, f.deadline)
 	return nil
 }
 
@@ -168,6 +168,12 @@ type diagnoseLoop struct {
 	start    time.Time
 }
 
+// unseen lists the components the facts so far cannot rule out because
+// some of them could not be read.
+func (l *diagnoseLoop) unseen() []strategy.Unseen {
+	return strategy.CannotRuleOut(l.m, l.reg, l.store)
+}
+
 // step runs one iteration: suggest, check terminal, gate, execute,
 // record. Returns done=true when the caller should stop the loop
 // (success, stuck, or an early-exit report); err for hard failures.
@@ -177,13 +183,13 @@ func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err
 	decision := strategy.AutoSelect(input).SuggestProbe(input)
 	switch {
 	case decision.Done:
-		reportDone(l.cmd, l.m, decision.RootCause, l.store, l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline, l.suspects)
+		reportDone(l.cmd, l.m, decision.RootCause, l.store, l.unseen(), l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline, l.suspects)
 		return true, nil
 	case decision.Stuck:
-		reportStuck(l.cmd, l.store, l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline)
+		reportStuck(l.cmd, l.store, l.unseen(), l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline)
 		return true, nil
 	case decision.Probe == nil:
-		reportPartial(l.cmd, l.store, l.trail, "strategy returned no probe", *probesRun, l.f.maxProbes, l.start, l.f.deadline)
+		reportPartial(l.cmd, l.store, l.unseen(), l.trail, "strategy returned no probe", *probesRun, l.f.maxProbes, l.start, l.f.deadline)
 		return true, nil
 	}
 
@@ -197,7 +203,7 @@ func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err
 	outcome, err := l.runner.Run(ctx, p, l.store)
 	if err != nil {
 		if ctx.Err() != nil {
-			reportPartial(l.cmd, l.store, l.trail, "deadline exceeded", *probesRun, l.f.maxProbes, l.start, l.f.deadline)
+			reportPartial(l.cmd, l.store, l.unseen(), l.trail, "deadline exceeded", *probesRun, l.f.maxProbes, l.start, l.f.deadline)
 			return true, nil
 		}
 		return false, fmt.Errorf("probe %s.%s: %w", p.Component, p.Fact, err)
@@ -216,7 +222,7 @@ func (l *diagnoseLoop) handleGenericPrompt(p *strategy.Probe, probesRun *int) (b
 		if err == errNoMoreAnswers {
 			applyOperatorAnswer(l.store, p.Component, "skip")
 			l.trail = append(l.trail, probeRecord{probe: p, outcome: "operator-answered: skip (stdin closed)"})
-			reportPartial(l.cmd, l.store, l.trail, "no more operator input (stdin closed)", *probesRun+1, l.f.maxProbes, l.start, l.f.deadline)
+			reportPartial(l.cmd, l.store, l.unseen(), l.trail, "no more operator input (stdin closed)", *probesRun+1, l.f.maxProbes, l.start, l.f.deadline)
 			return true, nil
 		}
 		return false, err
@@ -235,7 +241,7 @@ func (l *diagnoseLoop) checkReadonlyGate(p *strategy.Probe, probesRun *int) (boo
 	}
 	switch l.f.onWrite {
 	case "pause":
-		reportPartial(l.cmd, l.store, l.trail, fmt.Sprintf("next probe requires writes (component=%s fact=%s); --on-write=pause", p.Component, p.Fact), *probesRun, l.f.maxProbes, l.start, l.f.deadline)
+		reportPartial(l.cmd, l.store, l.unseen(), l.trail, fmt.Sprintf("next probe requires writes (component=%s fact=%s); --on-write=pause", p.Component, p.Fact), *probesRun, l.f.maxProbes, l.start, l.f.deadline)
 		return true, nil
 	case "fail":
 		return false, fmt.Errorf("write probe encountered: %s.%s (--on-write=fail)", p.Component, p.Fact)
@@ -497,12 +503,16 @@ func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *fa
 
 // reportDone prints the terminal success report: single scenario remains,
 // show the chain, trail, and suspect commentary.
-func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, store *facts.Store, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration, suspects []strategy.SuspectHint) {
+func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, store *facts.Store, unseen []strategy.Unseen, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration, suspects []strategy.SuspectHint) {
 	w := cmd.OutOrStdout()
 	if root == nil {
-		fmt.Fprintln(w, "Root cause: (none — all components healthy)")
+		if len(unseen) > 0 {
+			fmt.Fprintln(w, "Root cause: (none among the components that could be seen)")
+		} else {
+			fmt.Fprintln(w, "Root cause: (none — all components healthy)")
+		}
 		writeBudget(w, probesRun, maxProbes, start, deadline)
-		writePartialVisibility(w, store)
+		writePartialVisibility(w, store, unseen)
 		writeTrail(w, trail)
 		return
 	}
@@ -515,7 +525,7 @@ func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, st
 	fmt.Fprintf(w, "Root cause: %s\n", label)
 	fmt.Fprintf(w, "Scenario:   %s\n", renderChain(*root))
 	writeBudget(w, probesRun, maxProbes, start, deadline)
-	writePartialVisibility(w, store)
+	writePartialVisibility(w, store, unseen)
 	if hint := suspectReport(suspects, root); hint != "" {
 		fmt.Fprintf(w, "Hint:       %s\n", hint)
 	}
@@ -524,7 +534,7 @@ func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, st
 
 // reportStuck prints the "observed facts contradict every enumerated
 // chain" report — model-gap territory.
-func reportStuck(cmd *cobra.Command, store *facts.Store, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration) {
+func reportStuck(cmd *cobra.Command, store *facts.Store, unseen []strategy.Unseen, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration) {
 	w := cmd.OutOrStdout()
 	fmt.Fprintln(w, "No matching scenario — observed facts contradict every enumerated chain.")
 	fmt.Fprintln(w, "This likely indicates a model gap (novel failure, missing triggered_by,")
@@ -543,7 +553,7 @@ func reportStuck(cmd *cobra.Command, store *facts.Store, trail []probeRecord, pr
 	}
 	fmt.Fprintln(w)
 	writeBudget(w, probesRun, maxProbes, start, deadline)
-	writePartialVisibility(w, store)
+	writePartialVisibility(w, store, unseen)
 	writeTrail(w, trail)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Hint: if this incident resolves, run `mgtt incident end --suggest-scenarios`")
@@ -552,11 +562,11 @@ func reportStuck(cmd *cobra.Command, store *facts.Store, trail []probeRecord, pr
 
 // reportPartial prints the "we stopped early" report. Used for budget
 // exhaustion, deadline expiry, and write-probe pause.
-func reportPartial(cmd *cobra.Command, store *facts.Store, trail []probeRecord, reason string, probesRun, maxProbes int, start time.Time, deadline time.Duration) {
+func reportPartial(cmd *cobra.Command, store *facts.Store, unseen []strategy.Unseen, trail []probeRecord, reason string, probesRun, maxProbes int, start time.Time, deadline time.Duration) {
 	w := cmd.OutOrStdout()
 	fmt.Fprintf(w, "Stopped: %s\n", reason)
 	writeBudget(w, probesRun, maxProbes, start, deadline)
-	writePartialVisibility(w, store)
+	writePartialVisibility(w, store, unseen)
 	writeTrail(w, trail)
 }
 
@@ -573,7 +583,7 @@ func writeBudget(w io.Writer, probesRun, maxProbes int, start time.Time, deadlin
 // forbidden probes. The count reads the authoritative Fact.Status from
 // the store (not the rendered outcome strings) so it stays correct
 // regardless of how an outcome was phrased or which path recorded it.
-func writePartialVisibility(w io.Writer, store *facts.Store) {
+func writePartialVisibility(w io.Writer, store *facts.Store, unseen []strategy.Unseen) {
 	forbidden, transient := store.PartialVisibility()
 	if forbidden == 0 && transient == 0 {
 		return
@@ -586,6 +596,9 @@ func writePartialVisibility(w io.Writer, store *facts.Store) {
 		parts = append(parts, fmt.Sprintf("%d transient (throttled / timed out)", transient))
 	}
 	fmt.Fprintf(w, "Partial visibility: %s — result may be incomplete.\n", strings.Join(parts, ", "))
+	for _, u := range unseen {
+		fmt.Fprintf(w, "Cannot rule out: %s\n", u)
+	}
 }
 
 func writeTrail(w io.Writer, trail []probeRecord) {

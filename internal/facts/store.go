@@ -74,6 +74,23 @@ func (s *Store) LookupValue(component, key string) (any, bool) {
 	return f.Value, true
 }
 
+// Unreadable returns component's facts whose latest record is forbidden or
+// transient -- probes that ran and could not read a value, and were never
+// later read. Last write wins per key, as everywhere in the store.
+func (s *Store) Unreadable(component string) map[string]FactStatus {
+	latest := map[string]FactStatus{}
+	for _, f := range s.facts[component] {
+		latest[f.Key] = f.Status
+	}
+	out := map[string]FactStatus{}
+	for k, st := range latest {
+		if st == FactStatusForbidden || st == FactStatusTransient {
+			out[k] = st
+		}
+	}
+	return out
+}
+
 // PartialVisibility counts, across all components, the distinct facts the
 // probe layer could not resolve because the provider was forbidden or the
 // probe failed transiently (and which were never later resolved to a

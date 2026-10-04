@@ -171,6 +171,9 @@ func renderSimulateResult(w io.Writer, result *simulate.Result) {
 		if ne := result.Scenario.Expect.NotEliminated; len(ne) > 0 {
 			fmt.Fprintf(w, "    expected not eliminated: [%s]\n", strings.Join(ne, ", "))
 		}
+		if cr := result.Scenario.Expect.CannotRuleOut; len(cr) > 0 {
+			fmt.Fprintf(w, "    expected cannot rule out: [%s]  actual: [%s]\n", strings.Join(cr, ", "), strings.Join(result.Actual.CannotRuleOut, ", "))
+		}
 		fmt.Fprintf(w, "    actual:   root_cause=%s path=[%s] eliminated=[%s]\n",
 			result.Actual.RootCause,
 			strings.Join(result.Actual.Path, ", "),

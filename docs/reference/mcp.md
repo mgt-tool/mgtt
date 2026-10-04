@@ -75,7 +75,7 @@ tag so the agent can hand off or queue for human approval.
 | `incident_start` | Create an incident from a model path. Returns `incident_id`. |
 | `incident_end` | Close an incident with optional verdict. |
 | `incident_snapshot` | Full diagnostic-memory bundle — scenarios (alive + eliminated), facts, suggested next probe, status. |
-| `plan` | Compute the current path tree and suggested next probe. Does not execute. |
+| `plan` | Compute the current path tree and suggested next probe. Does not execute. `cannot_rule_out` lists components left undecided because some of their facts could not be read; `root_cause` is only as good as what was seen. `incident_snapshot` carries the same field. |
 | `probe` | Render or execute the engine's next suggested probe. `execute=false` renders only. A refused or timed-out probe returns `forbidden` / `transient` and is recorded as an unknown fact; `operator_prompt_required` means the fact has no command and its provider no runner. |
 | `fact_add` | Append an observation (agent-collected). |
 | `facts_list` | List facts, optionally filtered to one component. |

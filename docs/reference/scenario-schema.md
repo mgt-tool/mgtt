@@ -119,6 +119,7 @@ A fact cannot be both injected and unresolved, and an unknown outcome fails the 
 | `root_cause` | yes | The component the engine identifies as root cause. Use `none` when all components are healthy. Asserted with strict equality. |
 | `path` | no | The failure path from outermost component to root cause. Order: `[outermost, ..., root_cause]`. Asserted as an **ordered subsequence** (see below). |
 | `eliminated` | no | Components confirmed healthy and removed from investigation. Asserted as a **subset** (see below). |
+| `cannot_rule_out` | no | Components the conclusion must report as undecided because some of their facts could not be read (`forbidden` / `transient` in `unresolved`). Asserted as a **subset**. |
 | `not_eliminated` | no | Components that must stay in play. Fails if any of them is eliminated. `eliminated`, being a subset check, cannot say this; use it when a scenario's point is that something was *not* cleared, such as a component whose probes were refused. |
 
 ```yaml

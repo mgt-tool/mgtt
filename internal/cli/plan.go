@@ -339,9 +339,18 @@ func renderProbeResult(w io.Writer, component, fact string, value any, healthy b
 
 // renderRootCauseSummary renders the final root cause determination.
 func renderRootCauseSummary(w io.Writer, tree *engine.PathTree) {
+	defer func() {
+		for _, u := range tree.CannotRuleOut {
+			fmt.Fprintf(w, "  Cannot rule out: %s\n", u)
+		}
+	}()
 	if tree.RootCause == "" {
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "  All components healthy -- no root cause found.")
+		if len(tree.CannotRuleOut) > 0 {
+			fmt.Fprintln(w, "  No root cause among the components that could be seen.")
+		} else {
+			fmt.Fprintln(w, "  All components healthy -- no root cause found.")
+		}
 		return
 	}
 

@@ -29,6 +29,9 @@ type Expectation struct {
 	// a scenario about a refused or failed probe exists to make.
 	// Eliminated is a subset check and cannot say it.
 	NotEliminated []string `yaml:"not_eliminated"`
+	// CannotRuleOut lists components the conclusion must report as
+	// undecided because some of their facts could not be read. Subset.
+	CannotRuleOut []string `yaml:"cannot_rule_out"`
 }
 
 type Result struct {

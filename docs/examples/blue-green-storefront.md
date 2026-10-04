@@ -451,9 +451,10 @@ expect:
   path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue]
   eliminated: [external-secrets, mq, opensearch, redis, media-bucket, ssm-app-config]
   not_eliminated: [rds]
+  cannot_rule_out: [rds]
 ```
 
-The engine cannot see rds, so it names the deepest component it did see broken, and it must not clear rds. `not_eliminated` is what catches that: when mgtt once treated an unread fact as healthy, this scenario produced the same root cause and path, with rds silently added to the eliminated list.
+The engine cannot see rds, so it names the deepest component it did see broken, and it must not clear rds. `cannot_rule_out` asserts the conclusion says so, as `mgtt diagnose` prints it: `Cannot rule out: rds (available: forbidden, connection_count: forbidden)`. `not_eliminated` is what catches the worse failure: when mgtt once treated an unread fact as healthy, this scenario produced the same root cause and path, with rds silently added to the eliminated list.
 
 ### 7. RDS deleted — a missing component is the finding
 

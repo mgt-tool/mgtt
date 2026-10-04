@@ -24,3 +24,4 @@ expect:
   path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue]
   eliminated: [external-secrets, mq, opensearch, redis, media-bucket, ssm-app-config]
   not_eliminated: [rds]           # its facts were never read: unknown, not healthy
+  cannot_rule_out: [rds]          # and the conclusion says so

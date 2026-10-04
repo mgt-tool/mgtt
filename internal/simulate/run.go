@@ -74,6 +74,9 @@ func extractConclusion(tree *engine.PathTree) Expectation {
 	elim := engine.EliminatedOnly(tree)
 	sort.Strings(elim)
 	ex.Eliminated = elim
+	for _, u := range tree.CannotRuleOut {
+		ex.CannotRuleOut = append(ex.CannotRuleOut, u.Component)
+	}
 	return ex
 }
 
@@ -108,6 +111,9 @@ func matches(expected, actual Expectation) bool {
 		return false
 	}
 	if !isSubset(expected.Eliminated, actual.Eliminated) {
+		return false
+	}
+	if !isSubset(expected.CannotRuleOut, actual.CannotRuleOut) {
 		return false
 	}
 	for _, c := range expected.NotEliminated {

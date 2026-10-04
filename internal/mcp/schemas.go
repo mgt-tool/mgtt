@@ -89,7 +89,8 @@ const PlanOutputSchema = `{
     "paths":{"type":"array","items":{"$ref":"#/$defs/path"}},
     "eliminated":{"type":"array","items":{"$ref":"#/$defs/path"}},
     "suggested":{"$ref":"#/$defs/suggested"},
-    "root_cause":{"type":"string"}
+    "root_cause":{"type":"string"},
+    "cannot_rule_out":{"type":"array","items":{"type":"object","properties":{"component":{"type":"string"},"facts":{"type":"object","additionalProperties":{"type":"string","enum":["forbidden","transient"]}}},"required":["component","facts"]}}
   },
   "required":["entry","paths"],
   "$defs":{
@@ -189,7 +190,8 @@ const IncidentSnapshotOutputSchema = `{
     "eliminated_scenarios":{"type":"array"},
     "facts":{"type":"array"},
     "suggested_next":{"type":"object"},
-    "verdict":{"type":"string"}
+    "verdict":{"type":"string"},
+    "cannot_rule_out":{"type":"array","items":{"type":"object","properties":{"component":{"type":"string"},"facts":{"type":"object","additionalProperties":{"type":"string","enum":["forbidden","transient"]}}},"required":["component","facts"]}}
   },
   "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","facts"]
 }`

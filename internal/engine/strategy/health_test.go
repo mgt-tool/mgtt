@@ -89,3 +89,25 @@ func TestComponentVerdict_RuleReadsComponentVar(t *testing.T) {
 		t.Errorf("with max_a unset: verdict %d, want Unknown", got)
 	}
 }
+
+// A component is reported as not ruled out only while it is Unknown and
+// some of its facts could not be read.
+func TestCannotRuleOut(t *testing.T) {
+	rule, _ := expr.Parse("a > 0")
+	m, reg := tinyModel(t)
+	m.Components["web"].Healthy = []expr.Node{rule}
+	m.Components["db"].Healthy = []expr.Node{rule}
+	at := time.Now()
+	store := facts.NewInMemory()
+	store.Append("web", facts.Fact{Key: "a", Status: facts.FactStatusForbidden, At: at})
+	store.Append("db", facts.Fact{Key: "a", Status: facts.FactStatusTransient, At: at})
+	store.Append("db", facts.Fact{Key: "a", Value: 0, At: at}) // read later: db is Unhealthy, decided
+
+	got := CannotRuleOut(m, reg, store)
+	if len(got) != 1 || got[0].Component != "web" {
+		t.Fatalf("got %+v, want only web", got)
+	}
+	if s := got[0].String(); s != "web (a: forbidden)" {
+		t.Errorf("String() = %q", s)
+	}
+}

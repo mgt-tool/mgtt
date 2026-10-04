@@ -46,6 +46,29 @@ type PlanResult struct {
 	Eliminated []PathInfo      `json:"eliminated,omitempty"`
 	Suggested  *SuggestedProbe `json:"suggested,omitempty"`
 	RootCause  string          `json:"root_cause,omitempty"`
+	// CannotRuleOut names components left undecided because some of
+	// their facts could not be read; root_cause is only as good as what
+	// was seen.
+	CannotRuleOut []UnseenInfo `json:"cannot_rule_out,omitempty"`
+}
+
+// UnseenInfo is one component the facts could not rule out, with the
+// facts that could not be read and why.
+type UnseenInfo struct {
+	Component string            `json:"component"`
+	Facts     map[string]string `json:"facts"` // fact → forbidden | transient
+}
+
+func mapUnseen(in []strategy.Unseen) []UnseenInfo {
+	var out []UnseenInfo
+	for _, u := range in {
+		f := make(map[string]string, len(u.Facts))
+		for k, st := range u.Facts {
+			f[k] = string(st)
+		}
+		out = append(out, UnseenInfo{Component: u.Component, Facts: f})
+	}
+	return out
 }
 
 // Plan returns the engine's current assessment of the incident — path
@@ -58,11 +81,12 @@ func (h *Handler) Plan(p PlanParams) (*PlanResult, error) {
 		}
 		tree := engine.PlanWith(m, reg, inc.Store, entry, strategy.ParseSuspectHints(inc.Store.Meta.Suspects))
 		return &PlanResult{
-			Entry:      tree.Entry,
-			Paths:      mapPaths(tree.Paths),
-			Eliminated: mapPaths(tree.Eliminated),
-			RootCause:  tree.RootCause,
-			Suggested:  toSuggested(tree.Suggested, m),
+			Entry:         tree.Entry,
+			Paths:         mapPaths(tree.Paths),
+			Eliminated:    mapPaths(tree.Eliminated),
+			RootCause:     tree.RootCause,
+			Suggested:     toSuggested(tree.Suggested, m),
+			CannotRuleOut: mapUnseen(tree.CannotRuleOut),
 		}, nil
 	})
 }

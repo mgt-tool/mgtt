@@ -769,3 +769,15 @@ func TestShellProbeRunner_ForwardsResource(t *testing.T) {
 		t.Errorf("Command.Resource = %q, want %q", captured.Resource, "flowers-magento-stage-rds")
 	}
 }
+
+// The visibility block names each component it could not rule out, not
+// only how many probes were refused.
+func TestWritePartialVisibility_NamesUnseen(t *testing.T) {
+	store := facts.NewInMemory()
+	store.Append("rds", facts.Fact{Key: "available", Status: facts.FactStatusForbidden})
+	var b strings.Builder
+	writePartialVisibility(&b, store, []strategy.Unseen{{Component: "rds", Facts: map[string]facts.FactStatus{"available": facts.FactStatusForbidden}}})
+	if !strings.Contains(b.String(), "Cannot rule out: rds (available: forbidden)") {
+		t.Fatalf("got %q", b.String())
+	}
+}

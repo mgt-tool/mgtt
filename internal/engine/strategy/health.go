@@ -4,6 +4,9 @@
 package strategy
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/model"
@@ -66,6 +69,46 @@ func ComponentVerdict(m *model.Model, reg *providersupport.Registry, store *fact
 		}
 	}
 	return verdict
+}
+
+// Unseen is a component the facts could not rule out because some of them
+// were never read: the backend refused them or the probe kept failing.
+type Unseen struct {
+	Component string
+	Facts     map[string]facts.FactStatus // fact → forbidden | transient
+}
+
+// CannotRuleOut lists, in model order, the components whose verdict is
+// Unknown and that have a fact the probes could not read. Every conclusion
+// names them: a root cause found elsewhere is only as good as what could
+// be seen.
+func CannotRuleOut(m *model.Model, reg *providersupport.Registry, store *facts.Store) []Unseen {
+	if m == nil || store == nil {
+		return nil
+	}
+	var out []Unseen
+	for _, name := range m.Order {
+		unread := store.Unreadable(name)
+		if len(unread) == 0 || ComponentVerdict(m, reg, store, name) != Unknown {
+			continue
+		}
+		out = append(out, Unseen{Component: name, Facts: unread})
+	}
+	return out
+}
+
+// String renders u as `rds (available: forbidden, connection_count: forbidden)`.
+func (u Unseen) String() string {
+	keys := make([]string, 0, len(u.Facts))
+	for k := range u.Facts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + ": " + string(u.Facts[k])
+	}
+	return u.Component + " (" + strings.Join(parts, ", ") + ")"
 }
 
 // observed reports whether at least one fact for name resolved to a value.

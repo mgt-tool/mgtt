@@ -53,6 +53,7 @@ type IncidentSnapshotResult struct {
 	Facts               []FactEntry              `json:"facts"`
 	SuggestedNext       *SuggestedProbe          `json:"suggested_next,omitempty"`
 	Verdict             string                   `json:"verdict,omitempty"`
+	CannotRuleOut       []UnseenInfo             `json:"cannot_rule_out,omitempty"`
 }
 
 // IncidentSnapshot assembles the full diagnostic memory for an incident
@@ -98,6 +99,7 @@ func (h *Handler) IncidentSnapshot(p IncidentSnapshotParams) (*IncidentSnapshotR
 		// Suggested-next: same engine call `plan` uses.
 		tree := engine.PlanWith(m, reg, inc.Store, m.EntryPoint(), strategy.ParseSuspectHints(inc.Store.Meta.Suspects))
 		out.SuggestedNext = toSuggested(tree.Suggested, m)
+		out.CannotRuleOut = mapUnseen(tree.CannotRuleOut)
 		return out, nil
 	})
 }

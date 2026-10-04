@@ -9,7 +9,7 @@ curl -sSL https://raw.githubusercontent.com/mgt-tool/mgtt/main/install.sh | sh
 mgtt provider install kubernetes aws
 ```
 
-Other install routes: `go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.3.0`, or the image `ghcr.io/mgt-tool/mgtt:0.3.0`. Pin `X.Y.Z` in CI. The installer verifies checksums and honours `MGTT_VERSION` and `INSTALL_DIR`.
+Other install routes: `go install github.com/mgt-tool/mgtt/cmd/mgtt@v{{ MGTT_VERSION }}`, or the image `ghcr.io/mgt-tool/mgtt:{{ MGTT_VERSION }}`. Pin `X.Y.Z` in CI. The installer verifies checksums and honours `MGTT_VERSION` and `INSTALL_DIR`.
 
 ## 2. Model the system
 
@@ -118,7 +118,7 @@ on: [push, pull_request]
 jobs:
   model:
     runs-on: ubuntu-latest
-    container: ghcr.io/mgt-tool/mgtt:0.3.0
+    container: ghcr.io/mgt-tool/mgtt:{{ MGTT_VERSION }}
     steps:
       - uses: actions/checkout@v5
       - run: mgtt model validate

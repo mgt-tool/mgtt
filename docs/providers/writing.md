@@ -18,7 +18,7 @@ meta:
   version: 1.0.0
   description: Redis clusters via redis-cli
   requires:
-    mgtt: ">=0.3.0"          # only the >= form is accepted
+    mgtt: ">={{ MGTT_VERSION }}"          # only the >= form is accepted
 runtime:
   needs: [kubectl]           # host access for image installs
 install:                     # at least one of source / image

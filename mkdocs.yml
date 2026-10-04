@@ -8,6 +8,9 @@ docs_dir: docs
 # Kept locally (gitignored) for contributor reference, but not shipped.
 exclude_docs: |
   superpowers/
+  decisions/
+  PROBE_PROTOCOL.md
+  _hooks/
 
 # Wire the {{ MGTT_VERSION }} placeholder so docs source the version
 # from the repo's VERSION file at build time — no manual sync.

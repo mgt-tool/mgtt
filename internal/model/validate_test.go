@@ -46,3 +46,46 @@ func TestValidate_DuplicateResourceWarning(t *testing.T) {
 		t.Errorf("expected duplicate-resource warning naming 'flowers-stage'; got %+v", result.Warnings)
 	}
 }
+
+// A component's healthy: list replaces its type's rules, it does not add
+// to them. Dropping a type rule that way is the most common modelling
+// mistake (an RDS override that loses `available == true` calls a stopped
+// database healthy), so every dropped rule is named in a warning.
+func TestValidate_HealthyOverrideDropsTypeRule(t *testing.T) {
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "aws"},
+		Types: map[string]*providersupport.Type{"rds_instance": {
+			Name:       "rds_instance",
+			HealthyRaw: []string{"available == true", "connection_count < 500"},
+		}},
+	})
+	m := &model.Model{
+		Meta: model.Meta{Name: "ov", Version: "1.0", Providers: []string{"aws"}},
+		Components: map[string]*model.Component{
+			"loose":    {Name: "loose", Type: "rds_instance", HealthyRaw: []string{"connection_count < 900"}},
+			"restated": {Name: "restated", Type: "rds_instance", HealthyRaw: []string{"available==true", "connection_count<500", "replica_lag < 30"}},
+			"default":  {Name: "default", Type: "rds_instance"},
+		},
+		Order: []string{"loose", "restated", "default"},
+	}
+
+	result := model.Validate(m, reg)
+
+	var got []string
+	for _, w := range result.Warnings {
+		if w.Field == "healthy" {
+			got = append(got, w.Component+": "+w.Message)
+		}
+	}
+	// restated keeps both type rules (whitespace aside) and adds one: no
+	// warning. default overrides nothing.
+	if len(got) != 2 {
+		t.Fatalf("want two warnings, both on loose; got %q", got)
+	}
+	for _, rule := range []string{"available == true", "connection_count < 500"} {
+		if !strings.Contains(strings.Join(got, "\n"), "loose: healthy override drops type rule \""+rule+"\"") {
+			t.Errorf("no warning naming dropped rule %q; got %q", rule, got)
+		}
+	}
+}

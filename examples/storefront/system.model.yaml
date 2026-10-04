@@ -128,6 +128,7 @@ components:
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-rds
     healthy:
+      - available == true          # restated: healthy: replaces the type's rules
       - connection_count < 500
 
   redis:
@@ -142,6 +143,7 @@ components:
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-mq
     healthy:
+      - available == true          # restated: healthy: replaces the type's rules
       - queue_depth < 10000
 
   media-bucket:

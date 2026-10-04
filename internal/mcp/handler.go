@@ -30,6 +30,15 @@ type AboutResult struct {
 	OnWrite       string   `json:"on_write"`
 	MaxExecute    int      `json:"max_execute_per_incident"`
 	ProbeTimeoutS int      `json:"probe_timeout_seconds"`
+	Toolset       string   `json:"toolset"`
+}
+
+// toolsetName reports the toolset as served: "" is all.
+func toolsetName(set string) string {
+	if set == "" {
+		return "all"
+	}
+	return set
 }
 
 // About returns server metadata — version, active transports, current safety
@@ -54,6 +63,7 @@ func (h *Handler) About() (*AboutResult, error) {
 		OnWrite:       onWrite,
 		MaxExecute:    h.cfg.MaxExecutePerIncident,
 		ProbeTimeoutS: h.cfg.ProbeTimeoutSeconds,
+		Toolset:       toolsetName(h.cfg.Toolset),
 	}, nil
 }
 

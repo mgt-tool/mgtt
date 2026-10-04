@@ -111,15 +111,27 @@ func Load(path string) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("model: read %q: %w", path, err)
 	}
+	return LoadBytes(data, path)
+}
+
+// LoadBytes parses a model from data. path is where it came from, for
+// messages and for finding a sibling scenarios.yaml; "" marks a model
+// given inline -- by an MCP client that cannot place files where the
+// server reads them -- which has no siblings.
+func LoadBytes(data []byte, path string) (*Model, error) {
+	name := path
+	if name == "" {
+		name = "<inline>"
+	}
 	// First pass: parse into a yaml.Node so we can extract declaration order.
 	var docNode yaml.Node
 	if err := yaml.Unmarshal(data, &docNode); err != nil {
-		return nil, fmt.Errorf("model: parse %q: %w", path, err)
+		return nil, fmt.Errorf("model: parse %q: %w", name, err)
 	}
 	// Second pass: decode into the typed raw structs.
 	var raw rawModel
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("model: decode %q: %w", path, err)
+		return nil, fmt.Errorf("model: decode %q: %w", name, err)
 	}
 	if raw.Components == nil {
 		raw.Components = make(map[string]*rawComponent)

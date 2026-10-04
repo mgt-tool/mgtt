@@ -23,14 +23,24 @@ func loadContext(modelRef string) (*model.Model, *providersupport.Registry, erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("load model %q: %w", modelRef, err)
 	}
-	reg, reserved := providersupport.LoadAllForUse()
-	if len(reserved) > 0 {
-		return nil, nil, fmt.Errorf("installed provider(s) %v claim the reserved name %q", reserved, providersupport.GenericProviderName)
-	}
-	if err := genericprovider.Register(reg); err != nil {
-		return nil, nil, fmt.Errorf("register generic fallback: %w", err)
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, nil, err
 	}
 	return m, reg, nil
+}
+
+// loadRegistry loads the installed providers the way the CLI does, plus
+// the generic fallback for types no provider defines.
+func loadRegistry() (*providersupport.Registry, error) {
+	reg, reserved := providersupport.LoadAllForUse()
+	if len(reserved) > 0 {
+		return nil, fmt.Errorf("installed provider(s) %v claim the reserved name %q", reserved, providersupport.GenericProviderName)
+	}
+	if err := genericprovider.Register(reg); err != nil {
+		return nil, fmt.Errorf("register generic fallback: %w", err)
+	}
+	return reg, nil
 }
 
 // withIncident runs fn inside the per-incident lock with the loaded

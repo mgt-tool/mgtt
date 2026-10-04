@@ -32,6 +32,10 @@ type Config struct {
 	OnWrite               string // "pause" | "run" | "fail"
 	MaxExecutePerIncident int
 	ProbeTimeoutSeconds   int
+	// Toolset picks the tools served: "diagnose" (incidents, probes),
+	// "authoring" (types, model validation -- no live system, no writes)
+	// or "all". "" means all.
+	Toolset string
 	// LegacyToolNames also registers the pre-0.4 dotted tool names
 	// (incident.start, ...) as deprecated aliases. Off by default: some
 	// clients and model APIs reject a tool list holding any name outside
@@ -42,6 +46,9 @@ type Config struct {
 // Run boots the MCP server with the given config. Blocks until the
 // transport closes (stdin EOF for stdio, SIGINT/SIGTERM for HTTP).
 func Run(cfg Config) error {
+	if err := checkToolset(cfg.Toolset); err != nil {
+		return err
+	}
 	s := buildServer(cfg)
 	if cfg.HTTP {
 		return runHTTP(s, cfg)
@@ -57,20 +64,91 @@ func buildServer(cfg Config) *server.MCPServer {
 	s := server.NewMCPServer("mgtt", cfg.Version, server.WithInstructions(serverInstructions))
 
 	registerAbout(s, h)
-	registerIncidentStart(s, h)
-	registerIncidentEnd(s, h)
-	registerFactAdd(s, h)
-	registerFactsList(s, h)
-	registerPlan(s, h)
-	registerProbe(s, h)
-	registerScenariosList(s, h)
-	registerScenariosAlive(s, h)
-	registerIncidentSnapshot(s, h)
-	if cfg.LegacyToolNames {
-		registerLegacyAliases(s)
+	if serves(cfg.Toolset, "diagnose") {
+		registerIncidentStart(s, h)
+		registerIncidentEnd(s, h)
+		registerFactAdd(s, h)
+		registerFactsList(s, h)
+		registerPlan(s, h)
+		registerProbe(s, h)
+		registerScenariosList(s, h)
+		registerScenariosAlive(s, h)
+		registerIncidentSnapshot(s, h)
+		if cfg.LegacyToolNames {
+			registerLegacyAliases(s)
+		}
+	}
+	if serves(cfg.Toolset, "authoring") {
+		registerTypesList(s, h)
+		registerTypesDescribe(s, h)
+		registerModelValidate(s, h)
 	}
 
 	return s
+}
+
+// toolsets are the values --toolset takes.
+var toolsets = []string{"all", "diagnose", "authoring"}
+
+func checkToolset(set string) error {
+	if set == "" {
+		return nil
+	}
+	for _, t := range toolsets {
+		if set == t {
+			return nil
+		}
+	}
+	return fmt.Errorf("--toolset %q: want one of %v", set, toolsets)
+}
+
+// serves reports whether toolset set includes the tools of kind.
+func serves(set, kind string) bool {
+	return set == "" || set == "all" || set == kind
+}
+
+func registerTypesList(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("types_list",
+		mcpgo.WithDescription("List the component types the installed providers define, with how many facts each exposes. Use the names here in a model's type: fields; types_describe gives the detail."),
+		mcpgo.WithString("provider", mcpgo.Description("optional: only this provider's types")),
+		rawOutput(TypesListOutputSchema),
+	)
+	s.AddTool(tool, dispatch("types_list",
+		func(req mcpgo.CallToolRequest) TypesListParams {
+			return TypesListParams{Provider: req.GetString("provider", "")}
+		},
+		h.TypesList,
+	))
+}
+
+func registerTypesDescribe(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("types_describe",
+		mcpgo.WithDescription("Describe one type: its facts (use these names, never invented ones), its default healthy rules, its states with when-conditions and can_cause labels, and the variables its provider declares. A component's healthy: replaces these rules unless written as healthy: {add: [...]}; read them before overriding."),
+		mcpgo.WithString("type", mcpgo.Required(), mcpgo.Description("type name, e.g. deployment or rds_instance")),
+		mcpgo.WithString("provider", mcpgo.Description("optional: the provider, when several define the type")),
+		rawOutput(TypesDescribeOutputSchema),
+	)
+	s.AddTool(tool, dispatch("types_describe",
+		func(req mcpgo.CallToolRequest) TypesDescribeParams {
+			return TypesDescribeParams{Type: req.GetString("type", ""), Provider: req.GetString("provider", "")}
+		},
+		h.TypesDescribe,
+	))
+}
+
+func registerModelValidate(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("model_validate",
+		mcpgo.WithDescription("Check a model against the installed types and report every error and warning at once: unknown dependencies, cycles, invalid need:, healthy: overrides that drop a type rule, rules reading a variable nothing sets, types no provider defines. Pass the model inline as model_source, or as a model_path the server can read. Reads nothing live, writes nothing."),
+		mcpgo.WithString("model_path", mcpgo.Description("path to system.model.yaml on the server")),
+		mcpgo.WithString("model_source", mcpgo.Description("the model YAML itself (max 512 KiB); use this when you cannot place a file where the server reads it")),
+		rawOutput(ModelValidateOutputSchema),
+	)
+	s.AddTool(tool, dispatch("model_validate",
+		func(req mcpgo.CallToolRequest) ModelValidateParams {
+			return ModelValidateParams{ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", "")}
+		},
+		h.ModelValidate,
+	))
 }
 
 // serverInstructions is the workflow an agent needs before its first call.
@@ -78,7 +156,8 @@ func buildServer(cfg Config) *server.MCPServer {
 const serverInstructions = `mgtt diagnoses a running system against its committed model.
 Workflow: incident_start with the model path, then loop: plan (what to check next and why), probe with execute=true (or fact_add for a fact you gathered yourself), until plan names a root cause or reports none. incident_snapshot summarises the state; incident_end closes it.
 A probe that returns forbidden or transient recorded an unknown fact: the component stays a suspect, it is not cleared.
-about reports the safety posture: read-only enforcement, the write-probe policy and the per-incident probe budget.`
+about reports the safety posture: read-only enforcement, the write-probe policy and the per-incident probe budget, and which toolset is served.
+To write or change a model: types_list and types_describe for the vocabulary (never invent fact names), then model_validate with the draft as model_source until it reports no errors. These tools read no live system and write nothing; the model reaches the repository as a reviewed change.`
 
 // legacyToolNames maps each tool renamed in 0.4 to its old dotted name.
 var legacyToolNames = map[string]string{

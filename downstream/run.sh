@@ -146,9 +146,31 @@ suite_mcp_probe() {
   esac
 }
 
+# The authoring toolset against the real providers: it serves no incident
+# tool, describes a real type, and validates the storefront model sent
+# inline -- as a client that cannot place files on the server would.
+suite_mcp_authoring() {
+  src=$(awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\\n", $0 }' "$root/examples/storefront/system.model.yaml")
+  : >"$tmp/mcp.out"
+  {
+    printf '%s\n' \
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
+      '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+      '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+      '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"types_describe","arguments":{"type":"deployment"}}}'
+    printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"model_validate","arguments":{"model_source":"%s"}}}\n' "$src"
+    await_reply 4
+  } | timeout 60 mgtt mcp serve --toolset authoring 2>"$tmp/mcp.err" >"$tmp/mcp.out"
+  grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"model_validate"' || { echo "model_validate not listed"; return 1; }
+  if grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"incident_start"'; then echo "authoring toolset serves incident_start"; return 1; fi
+  grep '"id":3' "$tmp/mcp.out" | grep -q 'ready_replicas' || { echo "types_describe deployment lacks ready_replicas"; cat "$tmp/mcp.out" "$tmp/mcp.err"; return 1; }
+  grep '"id":4' "$tmp/mcp.out" | grep -q '\\"ok\\":true' || { echo "storefront model_source did not validate ok"; grep '"id":4' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
+  echo "authoring toolset: listed, described, validated"
+}
+
 suites="providers"
 for p in $providers; do suites="$suites provider-$p"; done
-suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe"
+suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe mcp-authoring"
 
 # Suites are suite_* functions, so none can shadow the tool it runs.
 dispatch() {

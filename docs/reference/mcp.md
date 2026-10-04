@@ -63,6 +63,7 @@ workspace at `/workspace` and your provider/incident store at `/data`.
 | `--on-write pause\|run\|fail` | `run` | Policy when the next probe is write-capable. `fail` blocks with `blocked_write_fail`; `pause` holds for review with `blocked_write_pause`. |
 | `--max-execute-per-incident N` | 50 | Refuse further executions once N probes have run for the incident. Agent-added facts don't count. `0` means unlimited. |
 | `--probe-timeout SECS` | 30 | Per-probe timeout, max 300. |
+| `--toolset all\|diagnose\|authoring` | `all` | Which tools to serve. `diagnose`: the incident and probe tools. `authoring`: the vocabulary and model-validation tools, which read installed providers and the model they are given, never a live system, and write nothing. A server for writing models, in CI or on a laptop, can run `--toolset authoring` with no credentials at all. `about` reports the active toolset. |
 
 Blocked probes still return the rendered command plus a `status: blocked_<reason>`
 tag so the agent can hand off or queue for human approval.
@@ -81,6 +82,16 @@ tag so the agent can hand off or queue for human approval.
 | `facts_list` | List facts, optionally filtered to one component. |
 | `scenarios_list` | All enumerated failure chains for the incident's model. |
 | `scenarios_alive` | Chains still consistent with observed facts. |
+
+### Authoring tools
+
+| Tool | Purpose |
+|------|---------|
+| `types_list` | The component types the installed providers define, with how many facts each exposes. Optional `provider` filter. |
+| `types_describe` | One type: its facts and their value types, its default `healthy` rules, its states with `when`, `triggered_by` and `can_cause`, its default state, and the variables its provider declares. The vocabulary to use instead of inventing fact names, and the rules a `healthy:` override replaces. |
+| `model_validate` | Every error and warning in a model at once, each with `component`, `field`, `message` and, where there is one, `suggestion`. It covers unknown dependencies, cycles, invalid `need:`, `healthy:` overrides that drop a type rule, rules reading a variable nothing sets, and types no provider defines. Takes `model_path` (a file the server can read) **or** `model_source` (the YAML itself, up to 512 KiB), for clients that cannot place files where the server reads them. |
+
+A draft model reaches the repository as a reviewed change; no tool writes it. `incident_start` takes a path only: diagnosis runs against committed models.
 
 Each tool's JSON schema ships in `internal/mcp/schemas.go`. The server also
 sends MCP `instructions` describing the workflow (`incident_start`, then

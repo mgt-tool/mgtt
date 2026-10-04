@@ -282,9 +282,11 @@ func ResolveDefaultActive(comp *model.Component, m *model.Model, reg *providersu
 // eliminated (proven not the root cause). A component is eliminated if:
 //   - It has NO facts at all (unchecked — can't be blamed for observed
 //     symptoms), OR
-//   - It is not DEFINITIVELY unhealthy per its canonical health verdict.
+//   - Its facts prove it healthy: every effective healthy rule resolved
+//     true. Facts that could not be read (forbidden, transient) leave it
+//     Unknown, and an Unknown component is never eliminated.
 //
-// Health is decided by strategy.ComponentDefinitivelyUnhealthy — the same
+// Health is decided by strategy.ComponentVerdict — the same
 // verdict the live diagnose strategies use — so simulate and diagnose can
 // never disagree on whether a component is broken.
 func isEliminated(m *model.Model, reg *providersupport.Registry, store *facts.Store, component string) bool {
@@ -292,6 +294,6 @@ func isEliminated(m *model.Model, reg *providersupport.Registry, store *facts.St
 	if store.FactsFor(component) == nil {
 		return true
 	}
-	// Has facts: keep alive only when definitively unhealthy.
-	return !strategy.ComponentDefinitivelyUnhealthy(m, reg, store, component)
+	// Has facts: eliminate only when they prove it healthy.
+	return strategy.ComponentVerdict(m, reg, store, component) == strategy.Healthy
 }

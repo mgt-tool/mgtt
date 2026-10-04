@@ -13,6 +13,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Facts that could not be read no longer clear a component.** The path engine eliminated any component with a recorded fact unless a rule came out definitively false, so a component whose probes all returned 403 or timed out was reported healthy and its casualty blamed instead. Health is now three-valued (`strategy.ComponentVerdict`): a component is eliminated only when every effective `healthy:` rule resolves true. Forbidden, transient and missing facts leave it Unknown, and Unknown is never eliminated.
 - `mgtt provider validate` no longer requires `probe.cmd` on providers whose probes go to a runner binary, which never reads it. aws failed 39 checks for this.
 - `mgtt provider validate` reads a bare word compared against a string fact (`phase == Bound`) as the literal the evaluator compares it as, not as a reference to an undeclared fact. kubernetes failed 18 checks for this. Against a numeric fact a bare word is still a fact reference, so a typo there is still caught.
 

@@ -54,7 +54,6 @@ meta:
     cluster: acme-shop-stage
     region: eu-central-1
     env: stage          # flip to `prod` on the prod branch
-  scenarios: none       # see note below on enumerated scenarios
 
 components:
 
@@ -230,7 +229,7 @@ components:
 
 **Random suffixes are hardcoded.** The S3 bucket `acme-shop-stage-media-8f3e9c` doesn't follow the `{env}` pattern (random bucket suffix). Same for CloudFront distribution IDs and SSM paths. Readable key + hardcoded resource is fine — the decoupling still holds.
 
-**`scenarios: none`** on the model. The enumerated `scenarios.yaml` for this system is tens of thousands of chains — ~40MB. Too chunky for git history. Regenerate locally with `mgtt model validate --write-scenarios`, gitignore the result, and skip the drift check on this model. Hand-authored scenarios stay in `scenarios/` and run in CI via `mgtt simulate --all`.
+**`scenarios.yaml` is committed.** The model enumerates 12,755 failure chains. As a list of chains that was 8.6 MB, and this model used to opt out with `scenarios: none`. Since the sidecar stores the failure graph instead, it is 11 KB, so it is committed and `mgtt model validate` checks it has not drifted from the model. Hand-authored scenarios stay in `scenarios/` and run in CI via `mgtt simulate --all`.
 
 **nginx → php-fpm is a deployment edge, not a service edge.** The `acme-shop-php-fpm-{blue,green}` Services exist in the cluster but share the Deployment's exact name — mgtt requires unique component keys, so the model walks to the deployment directly. The Deployment's `ready_replicas` / `restart_count` are what actually diagnose php-fpm health; the svc-level probe wouldn't have added signal.
 

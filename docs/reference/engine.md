@@ -183,7 +183,7 @@ Control enumeration via the model's `meta.scenarios` field:
 | `<path>.yaml` | pre-computed sidecar; skip regeneration, load from disk |
 | `none` | don't enumerate; BFS will run instead |
 
-For graphs that enumerate into the tens of thousands of chains, `none` keeps the model fast and trusts BFS + the standalone-unhealthy check for diagnosis. You lose Occam's shortest-first ranking; you gain sub-second load times.
+Size is no longer a reason for `none`. The sidecar stores the failure graph (11 KB for a 12,755-chain model), and Occam prices every candidate in one pass (about 37 ms per decision at that size). Use `none` for placeholder models that do not yet describe failure modes.
 
 ## Complexity
 
@@ -248,7 +248,7 @@ Root cause: (none — all components healthy)
 
 66 probes, well under the 110 ceiling. The gap is because some facts are never reached — BFS visits every component, but generic components with `operator_says_healthy` pre-seeded skip the provider path entirely.
 
-**Scenario count if enumerated.** The model carries `meta.scenarios: none` with this note in its header:
+**Scenario count if enumerated.** The model carried `meta.scenarios: none`, from before the sidecar stored a graph and before Occam priced candidates in one pass. Neither cost applies any more. The note in its header read:
 
 > scenarios.yaml is huge. The model enumerates ~50k chains (≈40MB YAML).
 

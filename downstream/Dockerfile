@@ -63,19 +63,19 @@ ARG AWS_REF=ac81ae462f2ae11ac06219d24d227d964c19aa5f
 RUN provider.sh aws "$AWS_REPO" "$AWS_REF"
 
 ARG DOCKER_REPO=https://github.com/mgt-tool/mgtt-provider-docker.git
-ARG DOCKER_REF=500dad9041b284cb631a3223c0961a639b92e248
+ARG DOCKER_REF=cd95d3d92487fde670dc04e2f47a6383b1e54afe
 RUN provider.sh docker "$DOCKER_REPO" "$DOCKER_REF"
 
 ARG KUBERNETES_REPO=https://github.com/mgt-tool/mgtt-provider-kubernetes.git
-ARG KUBERNETES_REF=b30b2ede1914de9e577893d8bdf7b9bfe132c82c
+ARG KUBERNETES_REF=40a24e6549a72ae2ea6b1a28b71726c2d076f17f
 RUN provider.sh kubernetes "$KUBERNETES_REPO" "$KUBERNETES_REF"
 
 ARG QUICKWIT_REPO=https://github.com/mgt-tool/mgtt-provider-quickwit.git
-ARG QUICKWIT_REF=3158e45de9f76a1701e268e6be0002665350d7db
+ARG QUICKWIT_REF=1c6f437d3a93b449739bf81cbc931af8893daf98
 RUN provider.sh quickwit "$QUICKWIT_REPO" "$QUICKWIT_REF"
 
 ARG TEMPO_REPO=https://github.com/mgt-tool/mgtt-provider-tempo.git
-ARG TEMPO_REF=48bd1c0e76829c3269346b59dc76b9ed4003c2e5
+ARG TEMPO_REF=9199f5d69c260547f7710b9cd697388748bf032d
 RUN provider.sh tempo "$TEMPO_REPO" "$TEMPO_REF"
 
 ARG TERRAFORM_REPO=https://github.com/mgt-tool/mgtt-provider-terraform.git

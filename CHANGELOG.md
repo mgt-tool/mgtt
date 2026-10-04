@@ -25,6 +25,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`scenarios.yaml` stores the failure graph, not every chain.** Every chain is a path through a small graph (components, their failure states, what each emits and what triggers it, which components a failure reaches), so the sidecar now stores that graph as `format: graph/v1` and mgtt expands it when loading. The storefront example's 12,755 chains went from 8.6 MB to 11 KB, so it now commits its sidecar and gets the drift check back instead of `scenarios: none`; a model change reviews as the edge it adds. Enumeration is now one algorithm over the graph, and its output is byte-identical to before (storefront and redundant-web checked); diagnosis on the graph file matches the chain file run for run. mgtt still reads the chain-list format, and rejects a format it does not know.
 - **Scenario-guided diagnosis decides a probe about 800x faster on large models.** Occam recounted each candidate's cross-elimination score inside the sort comparator, O(n² log n) in live scenarios; one decision on the 20-component storefront (12,755 scenarios) took about 30 s. The score is now computed in one pass over the live set, O(n·L): about 37 ms per decision there. Decisions are unchanged, checked against the old implementation on 300 randomised fact stores.
 
 ### Fixed

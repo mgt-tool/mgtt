@@ -20,7 +20,39 @@ const generatedHeader = `# GENERATED — rebuild via ` + "`mgtt validate --write
 
 type diskFile struct {
 	SourceHash string         `yaml:"source_hash"`
-	Scenarios  []diskScenario `yaml:"scenarios"`
+	Scenarios  []diskScenario `yaml:"scenarios,omitempty"`
+}
+
+// graphFormat names the on-disk form that stores the enumeration graph
+// instead of its chains: the same scenarios in a few kilobytes, read back
+// by expanding the graph.
+const graphFormat = "graph/v1"
+
+type diskGraph struct {
+	SourceHash string `yaml:"source_hash"`
+	Format     string `yaml:"format"`
+	// ScenarioCount is for readers of the file and of its diffs; Read
+	// recomputes the scenarios and does not trust it.
+	ScenarioCount int                        `yaml:"scenario_count"`
+	Components    map[string]*GraphComponent `yaml:"components"`
+}
+
+// WriteGraph writes g as scenarios.yaml in graph/v1 form: what the model
+// and its types say failures can reach, rather than every chain that
+// follows from it. A model change shows in review as the edge or state it
+// adds, not as thousands of renumbered chains.
+func WriteGraph(w io.Writer, sourceHash string, g *Graph) error {
+	if _, err := fmt.Fprintln(w, generatedHeader); err != nil {
+		return err
+	}
+	enc := yaml.NewEncoder(w)
+	enc.SetIndent(2)
+	doc := diskGraph{SourceHash: sourceHash, Format: graphFormat, ScenarioCount: len(Expand(g)), Components: g.Components}
+	if err := enc.Encode(&doc); err != nil {
+		_ = enc.Close()
+		return err
+	}
+	return enc.Close()
 }
 
 type diskScenario struct {
@@ -86,10 +118,26 @@ func LoadSiblingOf(modelPath string) ([]Scenario, string, error) {
 	return Read(f)
 }
 
+// Read loads scenarios.yaml in either form: graph/v1, expanded to its
+// scenarios, or the older list of chains.
 func Read(r io.Reader) ([]Scenario, string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, "", fmt.Errorf("scenarios.yaml: %w", err)
+	}
+	var g diskGraph
+	if err := yaml.Unmarshal(data, &g); err != nil {
+		return nil, "", fmt.Errorf("scenarios.yaml: %w", err)
+	}
+	switch g.Format {
+	case graphFormat:
+		return Expand(&Graph{Components: g.Components}), g.SourceHash, nil
+	case "":
+	default:
+		return nil, "", fmt.Errorf("scenarios.yaml: unknown format %q (this mgtt reads %s and the chain list)", g.Format, graphFormat)
+	}
 	var in diskFile
-	dec := yaml.NewDecoder(r)
-	if err := dec.Decode(&in); err != nil {
+	if err := yaml.Unmarshal(data, &in); err != nil {
 		return nil, "", fmt.Errorf("scenarios.yaml: %w", err)
 	}
 	out := make([]Scenario, 0, len(in.Scenarios))
@@ -114,6 +162,21 @@ type IndexEntry struct {
 	ScenariosPath string `yaml:"scenarios"`
 	Hash          string `yaml:"hash"`
 	Count         int    `yaml:"count"`
+}
+
+// GraphHash content-addresses g: a sha256 of its canonical YAML. Two
+// graphs hash alike exactly when they expand to the same scenarios, so a
+// sidecar is fresh when its source_hash equals the hash of the graph the
+// current model and types build -- whatever else is installed, and
+// however the model's comments and whitespace change.
+func GraphHash(g *Graph) string {
+	data, err := yaml.Marshal(g.Components)
+	if err != nil {
+		// A Graph is plain strings, bools and slices; Marshal cannot fail.
+		panic(fmt.Sprintf("scenarios: marshal graph: %v", err))
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // ComputeSourceHash returns a stable sha256: prefix hash over the model

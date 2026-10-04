@@ -1,0 +1,472 @@
+# GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
+source_hash: sha256:3a8bf97341cdb0ee68ea0f84a0fc37fa01e3a432e866b044210f222ee7d16371
+format: graph/v1
+scenario_count: 12755
+components:
+  acme-shop-consumer-blue:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: async_jobs
+  acme-shop-consumer-green:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: async_jobs
+  acme-shop-cron:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: scheduled_jobs
+  acme-shop-ingress:
+    observes:
+      - address_assigned
+      - backend_count
+      - class
+      - tls_configured
+    states:
+      - name: no_backends
+        emits:
+          - upstream_failure
+          - 5xx_errors
+      - name: no_address
+        emits:
+          - upstream_failure
+          - connection_refused
+          - dns_failure
+    dependents:
+      - to: cloudflare
+  acme-shop-nginx-blue:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: acme-shop-svc
+  acme-shop-nginx-green:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: acme-shop-svc
+  acme-shop-php-fpm-blue:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: acme-shop-nginx-blue
+  acme-shop-php-fpm-green:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: acme-shop-nginx-green
+  acme-shop-svc:
+    observes:
+      - endpoint_count
+      - external_ip_assigned
+      - selector_match
+      - selector_value
+      - type
+    states:
+      - name: no_endpoints
+        emits:
+          - upstream_failure
+          - connection_refused
+          - dns_failure
+      - name: pending_lb
+        emits:
+          - upstream_failure
+          - connection_refused
+          - timeout
+    dependents:
+      - to: acme-shop-ingress
+  async_jobs:
+    observes:
+      - operator_says_healthy
+    states:
+      - name: stopped
+        emits:
+          - upstream_failure
+  cloudflare:
+    observes:
+      - operator_says_healthy
+    states:
+      - name: stopped
+        emits:
+          - upstream_failure
+  cloudfront:
+    observes:
+      - deployed
+      - enabled
+      - error_rate_5xx
+    states:
+      - name: disabled
+        emits:
+          - origin_exposed
+          - cache_miss
+          - latency_spike
+      - name: deploying
+        emits:
+          - stale_cache
+          - inconsistent_response
+  external-secrets:
+    observes:
+      - crd_registered
+      - deployment_ready
+      - restart_count
+      - webhook_healthy
+    states:
+      - name: crd_missing
+        emits:
+          - upstream_failure
+          - deployment_blocked
+      - name: not_running
+        emits:
+          - upstream_failure
+          - deployment_blocked
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+    dependents:
+      - to: acme-shop-consumer-blue
+      - to: acme-shop-consumer-green
+      - to: acme-shop-cron
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+  media-bucket:
+    observes:
+      - accessible
+      - object_count
+      - versioning_enabled
+    states:
+      - name: inaccessible
+        emits:
+          - upload_failure
+          - download_failure
+          - access_denied
+    dependents:
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+      - to: cloudfront
+  mq:
+    observes:
+      - available
+      - consumer_count
+      - queue_depth
+    states:
+      - name: stopped
+        emits:
+          - publish_failure
+          - consumer_disconnect
+          - message_backlog
+    dependents:
+      - to: acme-shop-consumer-blue
+      - to: acme-shop-consumer-green
+      - to: acme-shop-cron
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+      - to: async_jobs
+  opensearch:
+    observes:
+      - available_replicas
+      - condition_available
+      - condition_progressing
+      - desired_replicas
+      - ready_replicas
+      - restart_count
+      - unavailable_replicas
+      - updated_replicas
+    states:
+      - name: crashed
+        emits:
+          - upstream_failure
+          - timeout
+          - connection_refused
+          - 5xx_errors
+      - name: rollout_stuck
+        emits:
+          - upstream_failure
+          - timeout
+          - 5xx_errors
+      - name: rolling
+        emits:
+          - upstream_failure
+          - timeout
+      - name: degraded
+        emits:
+          - upstream_failure
+          - timeout
+      - name: scaled_to_zero
+        emits:
+          - upstream_failure
+          - connection_refused
+    dependents:
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+  rds:
+    observes:
+      - available
+      - connection_count
+    states:
+      - name: stopped
+        emits:
+          - upstream_failure
+          - connection_refused
+          - query_timeout
+    dependents:
+      - to: acme-shop-consumer-blue
+      - to: acme-shop-consumer-green
+      - to: acme-shop-cron
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+  redis:
+    observes:
+      - available
+      - cache_hit_ratio
+      - connection_count
+    states:
+      - name: stopped
+        emits:
+          - upstream_failure
+          - connection_refused
+          - cache_miss_storm
+    dependents:
+      - to: acme-shop-consumer-blue
+      - to: acme-shop-consumer-green
+      - to: acme-shop-cron
+      - to: acme-shop-php-fpm-blue
+      - to: acme-shop-php-fpm-green
+  scheduled_jobs:
+    observes:
+      - operator_says_healthy
+    states:
+      - name: stopped
+        emits:
+          - upstream_failure
+  ssm-app-config:
+    observes:
+      - exists
+      - last_modified_age_seconds
+      - version
+    states:
+      - name: absent
+        emits:
+          - config_load_failure
+          - secret_missing
+          - external_secrets_sync_failure
+    dependents:
+      - to: external-secrets

@@ -4,9 +4,6 @@
 package strategy
 
 import (
-	"sort"
-
-	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 )
 
@@ -23,58 +20,17 @@ import (
 // "Root cause: (none — all components healthy)" — which is wrong and
 // has bitten real incident response.
 //
-// Root selection: among all definitively-unhealthy components, pick
-// those whose direct upstream deps are all healthy (or unresolved)
-// — they are the "deepest upstream" unhealth, not downstream
-// casualties. Ties broken alphabetically for deterministic output.
-// Returns nil when nothing is definitively unhealthy.
-func standaloneUnhealthyRoot(in Input, reachable []string) *scenarios.Scenario {
+// Root selection is RootCause, the rule engine.Plan uses too: a broken
+// component no other broken component could have caused, the most
+// upstream first. Returns nil when nothing in play is seen broken.
+func standaloneUnhealthyRoot(in Input, _ []string) *scenarios.Scenario {
 	if in.Model == nil || in.Registry == nil || in.Store == nil {
 		return nil
 	}
-	// Only consider components reachable under the active topology
-	// (while-guards applied). engine.Plan can't blame a component that
-	// isn't on any active path; restricting the scan keeps the BFS-path
-	// verdict consistent with it.
-	reach := make(map[string]bool, len(reachable))
-	for _, n := range reachable {
-		reach[n] = true
-	}
-	unhealthy := map[string]bool{}
-	for _, name := range in.Model.Order {
-		if !reach[name] {
-			continue
-		}
-		comp := in.Model.Components[name]
-		if comp == nil {
-			continue
-		}
-		// A broken member that redundancy covers broke nothing it serves:
-		// degraded, not a root cause.
-		if componentIsUnhealthy(in, name, comp) && !RedundancyCovered(in.Model, in.Registry, in.Store, name) {
-			unhealthy[name] = true
-		}
-	}
-	if len(unhealthy) == 0 {
+	chosen := RootCause(in, in.Model.EntryPoint())
+	if chosen == "" {
 		return nil
 	}
-
-	var roots []string
-	for name := range unhealthy {
-		if !hasUnhealthyUpstream(in.Model, name, unhealthy) {
-			roots = append(roots, name)
-		}
-	}
-	if len(roots) == 0 {
-		// Every unhealthy component has an unhealthy upstream (dep
-		// cycle). Fall back to the full unhealthy set so we surface
-		// something rather than nothing.
-		for name := range unhealthy {
-			roots = append(roots, name)
-		}
-	}
-	sort.Strings(roots)
-	chosen := roots[0]
 
 	state := failedStateFor(in, chosen)
 	return &scenarios.Scenario{
@@ -82,28 +38,6 @@ func standaloneUnhealthyRoot(in Input, reachable []string) *scenarios.Scenario {
 		Root:  scenarios.RootRef{Component: chosen, State: state},
 		Chain: []scenarios.Step{{Component: chosen, State: state}},
 	}
-}
-
-func componentIsUnhealthy(in Input, name string, _ *model.Component) bool {
-	// Delegates to the canonical verdict (see health.go) so the live
-	// strategies and the path engine (engine.Plan) agree on what
-	// "unhealthy" means.
-	return ComponentDefinitivelyUnhealthy(in.Model, in.Registry, in.Store, name)
-}
-
-func hasUnhealthyUpstream(m *model.Model, name string, unhealthy map[string]bool) bool {
-	comp := m.Components[name]
-	if comp == nil {
-		return false
-	}
-	for _, dep := range comp.Depends {
-		for _, target := range dep.On {
-			if unhealthy[target] {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // failedStateFor returns the name of the first non-default state

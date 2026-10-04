@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"fmt"
+	"math/rand/v2"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -222,47 +224,6 @@ func TestPlan_AllHealthy(t *testing.T) {
 	wantElim := []string{"api", "edge", "frontend", "store"}
 	if !sliceEqual(elim, wantElim) {
 		t.Errorf("eliminated = %v, want %v", elim, wantElim)
-	}
-}
-
-// The longest alive path may end in a component nobody has observed; it
-// keeps the engine probing but is not a verdict. The root cause is the
-// deepest tail actually seen unhealthy.
-func TestPickRootCause_SkipsUnobservedTail(t *testing.T) {
-	alive := []Path{
-		{Components: []string{"edge", "frontend"}},
-		{Components: []string{"edge", "api", "store"}},
-	}
-	seen := map[string]bool{"frontend": true}
-	if rc := pickRootCause(alive, func(c string) bool { return seen[c] }); rc != "frontend" {
-		t.Errorf("root cause = %q, want %q", rc, "frontend")
-	}
-	if rc := pickRootCause(alive, func(string) bool { return false }); rc != "" {
-		t.Errorf("root cause = %q, want none", rc)
-	}
-}
-
-// TestPickRootCause_PreservesDeclarationOrder guards against a regression
-// where pickRootCause sorted its argument in place. Because that slice
-// shares its backing array with PathTree.Paths (already sorted into
-// declaration order), an in-place sort silently reordered Paths by
-// descending component count, breaking deterministic output.
-func TestPickRootCause_PreservesDeclarationOrder(t *testing.T) {
-	alive := []Path{
-		{ID: "PATH A", Components: []string{"edge"}},
-		{ID: "PATH B", Components: []string{"edge", "api", "store"}},
-		{ID: "PATH C", Components: []string{"edge", "frontend"}},
-	}
-
-	if rc := pickRootCause(alive, func(string) bool { return true }); rc != "store" {
-		t.Errorf("root cause = %q, want %q", rc, "store")
-	}
-
-	want := []string{"PATH A", "PATH B", "PATH C"}
-	for i, p := range alive {
-		if p.ID != want[i] {
-			t.Errorf("alive[%d].ID = %q, want %q (pickRootCause reordered Paths)", i, p.ID, want[i])
-		}
 	}
 }
 
@@ -583,5 +544,103 @@ func TestPlan_WhileGuard_Unresolved(t *testing.T) {
 
 	if !found["vault"] {
 		t.Errorf("vault should appear in paths when while guard is unresolved (conservative walk), but was not found")
+	}
+}
+
+// The two engines must name the same root cause for any complete fact
+// set, including facts the probes could not read. Each fact of each
+// component is drawn at random: healthy, broken, forbidden or transient.
+func TestEngineParity_FuzzUnknownFacts(t *testing.T) {
+	m, reg := loadStorefront(t)
+	type fact struct {
+		key           string
+		healthy, sick any
+	}
+	facts4 := map[string][]fact{
+		"edge":     {{"upstream_count", 4, 0}},
+		"frontend": {{"ready_replicas", 2, 0}, {"desired_replicas", 2, 2}, {"restart_count", 0, 12}, {"endpoints", 2, 0}},
+		"api":      {{"ready_replicas", 3, 0}, {"desired_replicas", 3, 3}, {"restart_count", 0, 12}, {"endpoints", 3, 0}},
+		"store":    {{"available", true, false}, {"connection_count", 87, 600}},
+	}
+	rng := rand.New(rand.NewPCG(7, 11))
+	diverged := 0
+	for i := 0; i < 5000; i++ {
+		store := facts.NewInMemory()
+		desc := ""
+		for _, comp := range []string{"edge", "frontend", "api", "store"} {
+			for _, f := range facts4[comp] {
+				switch rng.IntN(4) {
+				case 0:
+					store.Append(comp, facts.Fact{Key: f.key, Value: f.healthy, At: time.Now()})
+				case 1:
+					store.Append(comp, facts.Fact{Key: f.key, Value: f.sick, At: time.Now()})
+					desc += fmt.Sprintf(" %s.%s=%v", comp, f.key, f.sick)
+				case 2:
+					store.Append(comp, facts.Fact{Key: f.key, Status: facts.FactStatusForbidden, At: time.Now()})
+					desc += fmt.Sprintf(" %s.%s=<forbidden>", comp, f.key)
+				default:
+					store.Append(comp, facts.Fact{Key: f.key, Status: facts.FactStatusTransient, At: time.Now()})
+					desc += fmt.Sprintf(" %s.%s=<transient>", comp, f.key)
+				}
+			}
+		}
+		plan := Plan(m, reg, store, "").RootCause
+		d := strategy.BFS().SuggestProbe(strategy.Input{Model: m, Registry: reg, Store: store})
+		bfs := ""
+		if d.RootCause != nil {
+			bfs = d.RootCause.Root.Component
+		}
+		if !d.Done {
+			bfs = "<not done: " + d.Reason + ">"
+		}
+		if plan != bfs {
+			diverged++
+			if diverged <= 5 {
+				t.Errorf("store %d diverges: plan=%q bfs=%q;%s", i, plan, bfs, desc)
+			}
+		}
+	}
+	if diverged > 0 {
+		t.Errorf("%d of 5000 stores diverge", diverged)
+	}
+}
+
+// The root cause is a component seen broken that no other broken one
+// could have caused; of several, the most upstream.
+func TestRootCause_CasualtiesAndDepth(t *testing.T) {
+	m, reg := loadStorefront(t)
+	sickWeb := map[string]any{"ready_replicas": 0, "desired_replicas": 2, "restart_count": 12, "endpoints": 0}
+	sickAPI := map[string]any{"ready_replicas": 0, "desired_replicas": 3, "restart_count": 12, "endpoints": 0}
+	upAPI := map[string]any{"ready_replicas": 3, "desired_replicas": 3, "restart_count": 0, "endpoints": 3}
+	downDB := map[string]any{"available": false, "connection_count": 0}
+	unread := func(store *facts.Store, comp string, keys ...string) *facts.Store {
+		for _, k := range keys {
+			store.Append(comp, facts.Fact{Key: k, Status: facts.FactStatusForbidden, At: time.Now()})
+		}
+		return store
+	}
+	for _, tc := range []struct {
+		name  string
+		store *facts.Store
+		want  string
+	}{
+		// frontend depends on api: frontend is api's casualty.
+		{"frontend and api broken", newStore(map[string]map[string]any{"frontend": sickWeb, "api": sickAPI}), "api"},
+		// api unread: store may have broken frontend through it.
+		{"frontend and store broken, api unread", unread(newStore(map[string]map[string]any{"frontend": sickWeb, "store": downDB}), "api", "ready_replicas", "restart_count"), "store"},
+		// api healthy: two independent failures; the most upstream wins.
+		{"frontend and store broken, api healthy", newStore(map[string]map[string]any{"frontend": sickWeb, "api": upAPI, "store": downDB}), "store"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Plan(m, reg, tc.store, "").RootCause; got != tc.want {
+				t.Errorf("plan root = %q, want %q", got, tc.want)
+			}
+			// Diagnose is still probing these partial stores; the rule it
+			// concludes with is the same function (the fuzz test above
+			// checks BFS end to end on complete stores).
+			if got := strategy.RootCause(strategy.Input{Model: m, Registry: reg, Store: tc.store}, m.EntryPoint()); got != tc.want {
+				t.Errorf("strategy.RootCause = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

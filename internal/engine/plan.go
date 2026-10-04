@@ -55,11 +55,10 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 		Paths:      alive,
 		Eliminated: eliminated,
 		States:     derivation,
-		// Stage 4 — the deepest surviving path whose tail is observed
-		// unhealthy names the root cause.
-		RootCause: pickRootCause(alive, func(c string) bool {
-			return strategy.ComponentVerdict(m, reg, store, c) == strategy.Unhealthy
-		}),
+		// Stage 4 — the root cause, by the rule the live strategies use
+		// (strategy.RootCause): a component seen broken that no other
+		// broken component could have caused, the most upstream first.
+		RootCause: strategy.RootCause(strategy.Input{Model: m, Registry: reg, Store: store}, entry),
 	}
 	tree.CannotRuleOut = strategy.CannotRuleOut(m, reg, store)
 	tree.RedundancyDegraded = strategy.RedundancyDegraded(m, reg, store)
@@ -151,34 +150,6 @@ func hasUnhealthyUpstream(p Path, m *model.Model, reg *providersupport.Registry,
 		}
 	}
 	return false
-}
-
-// pickRootCause returns the tail of the longest alive path whose tail is
-// observed unhealthy. An alive path ending in a component nobody has
-// observed keeps the engine probing inward, but names nothing: blaming
-// the deepest unprobed component would turn "not yet looked at" into a
-// verdict. Empty string when no alive path ends in an unhealthy component.
-//
-// It must NOT reorder alive: that slice shares its backing array with
-// PathTree.Paths, which enumeratePaths has already sorted into
-// declaration order for deterministic output. A single max-scan keeping
-// the first (declaration-order-earliest) longest path preserves that
-// ordering and breaks length ties deterministically.
-func pickRootCause(alive []Path, unhealthy func(string) bool) string {
-	best := -1
-	for i, p := range alive {
-		tail := p.Components[len(p.Components)-1]
-		if !unhealthy(tail) {
-			continue
-		}
-		if best < 0 || len(p.Components) > len(alive[best].Components) {
-			best = i
-		}
-	}
-	if best < 0 {
-		return ""
-	}
-	return alive[best].Components[len(alive[best].Components)-1]
 }
 
 // suggestNextProbe runs the strategy dispatcher against the current

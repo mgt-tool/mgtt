@@ -218,6 +218,18 @@ func TestStatic_DeclaredVariableAsComparisonValue(t *testing.T) {
 	}
 }
 
+// A type whose healthy rules disagree with its states is reported: every
+// model using it inherits the disagreement.
+func TestStatic_WarnsWhenHealthDisagreesWithStates(t *testing.T) {
+	src := strings.Replace(minimalOK, `    healthy:
+      - "f > 0"`, `    healthy:
+      - "f > 5"`, 1)
+	r := Static(loadYAML(t, src))
+	if !containsAny(r.Warnings, `healthy rules fail in the default state "live"`) {
+		t.Fatalf("f in 1..5 is live but not healthy: %+v", r.Warnings)
+	}
+}
+
 func containsAny(xs []string, sub string) bool {
 	for _, x := range xs {
 		if strings.Contains(x, sub) {

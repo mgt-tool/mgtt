@@ -59,6 +59,7 @@ type rawComponent struct {
 	Type         string                 `yaml:"type"`
 	Resource     string                 `yaml:"resource"`
 	Source       string                 `yaml:"source"`
+	DivergesFrom []string               `yaml:"healthy_diverges_from"`
 	Providers    []string               `yaml:"providers"`
 	Depends      []rawDependency        `yaml:"depends"`
 	Healthy      rawHealthy             `yaml:"healthy"`
@@ -172,14 +173,15 @@ func LoadBytes(data []byte, path string) (*Model, error) {
 // parse failure still points at the right source line.
 func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 	comp := &Component{
-		Name:        name,
-		Type:        rc.Type,
-		Resource:    rc.Resource,
-		Providers:   rc.Providers,
-		HealthyRaw:  rc.Healthy.Rules,
-		HealthyMode: rc.Healthy.Mode,
-		Source:      rc.Source,
-		Vars:        rc.Vars,
+		Name:                name,
+		Type:                rc.Type,
+		Resource:            rc.Resource,
+		Providers:           rc.Providers,
+		HealthyRaw:          rc.Healthy.Rules,
+		HealthyMode:         rc.Healthy.Mode,
+		Source:              rc.Source,
+		HealthyDivergesFrom: rc.DivergesFrom,
+		Vars:                rc.Vars,
 	}
 	if len(rc.FailureModes) > 0 {
 		comp.FailureModes = make(map[string][]string, len(rc.FailureModes))

@@ -24,6 +24,7 @@ func Validate(m *Model, reg *providersupport.Registry) *ValidationResult {
 		pass6DuplicateResource(m, reg, result)
 		pass7HealthyOverride(m, reg, result)
 		pass8UnsetVars(m, reg, result)
+		pass9HealthMatchesStates(m, reg, result)
 	}
 	pass3DepRefs(m, result)
 	pass4Cycles(m, result)
@@ -414,6 +415,65 @@ func isBareWord(s string) bool {
 		}
 	}
 	return s != "" && s != "true" && s != "false"
+}
+
+// pass9HealthMatchesStates warns, per state, when a component's healthy
+// rules and its type's states disagree for some facts: healthy outside
+// the default state, or unhealthy inside it. simulate reads one and
+// diagnose the other, so they would disagree on those facts. Only
+// disagreements the component's own healthy: introduces are reported --
+// those the type's default rules already have are the provider's to fix,
+// and `mgtt provider validate` reports them. States named in
+// healthy_diverges_from are acknowledged and not reported; naming a state
+// the type does not have is an error.
+func pass9HealthMatchesStates(m *Model, reg *providersupport.Registry, result *ValidationResult) {
+	vars := m.VarLookup(reg)
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		if comp == nil {
+			continue
+		}
+		t, _, err := comp.ResolveType(m, reg)
+		if err != nil || t == nil {
+			continue
+		}
+		ack := map[string]bool{}
+		for _, s := range comp.HealthyDivergesFrom {
+			found := false
+			for _, st := range t.States {
+				found = found || st.Name == s
+			}
+			if !found {
+				result.Errors = append(result.Errors, ValidationError{
+					Component: name,
+					Field:     "healthy_diverges_from",
+					Message:   fmt.Sprintf("type %s has no state %q", comp.Type, s),
+				})
+			}
+			ack[s] = true
+		}
+		if len(comp.HealthyRaw) == 0 {
+			continue // the type's own rules: the provider's concern
+		}
+		inherited := map[string]bool{}
+		for _, d := range HealthStateDisagreements(t.Healthy, t, name, vars) {
+			inherited[fmt.Sprintf("%s/%v", d.State, d.Healthy)] = true
+		}
+		for _, d := range HealthStateDisagreements(comp.HealthyRules(t), t, name, vars) {
+			if ack[d.State] || inherited[fmt.Sprintf("%s/%v", d.State, d.Healthy)] {
+				continue
+			}
+			msg := fmt.Sprintf("healthy rules hold in state %s, which is not the default state %s (e.g. %s)", d.State, t.DefaultActiveState, d.WitnessString())
+			if !d.Healthy {
+				msg = fmt.Sprintf("healthy rules fail in the default state %s (e.g. %s)", d.State, d.WitnessString())
+			}
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Component: name,
+				Field:     "healthy",
+				Message:   msg + "; simulate and diagnose would disagree on these facts. Fix the rules, or list the state under healthy_diverges_from if it is deliberate",
+			})
+		}
+	}
 }
 
 func pass4Cycles(m *Model, result *ValidationResult) {

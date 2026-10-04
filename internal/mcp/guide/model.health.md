@@ -26,6 +26,10 @@ healthy:
 
 Use `replace:` for environments where a default is a false positive, for example `cache_hit_ratio > 80` on an idle staging cache, and keep the rule that detects a real outage (`available == true`). If you would restate a type's rules exactly, write no override.
 
+## When rules and states disagree
+
+A type also says what healthy means in its states: the default state is the healthy one. An override that keeps a component healthy in a failure state, or unhealthy in the default one, makes simulate and diagnose disagree on those facts. `model_validate` warns with an example, for instance `healthy rules hold in state saturated (e.g. available=true, connection_count=500)`. Fix the rules, or, when the divergence is deliberate, acknowledge it with `healthy_diverges_from: [saturated]`.
+
 ## Thresholds in variables
 
 Some types compare a fact with a per-component threshold: `restart_count <= max_restart_count`. Set it under the component's `vars:` (or `meta.vars:`). `types_describe` lists the variables a provider declares. A threshold set nowhere leaves the rule undecided forever, and `model_validate` warns.

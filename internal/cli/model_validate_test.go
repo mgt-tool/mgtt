@@ -137,6 +137,26 @@ func TestValidate_WriteScenarios_SingleModel(t *testing.T) {
 	}
 }
 
+// The sidecar is content-addressed by the failure graph: an edit that
+// changes no scenario -- a version bump, a comment -- is not drift.
+func TestValidate_EditThatChangesNoScenarioIsNotDrift(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MGTT_HOME", home)
+	stageTestProvider(t, home, "testprov", "svc_type")
+	workDir := t.TempDir()
+	modelPath := writeModel(t, workDir, "myapp", "testprov", "svc_type")
+	if out, err := runValidate(t, "model", "validate", modelPath, "--write-scenarios"); err != nil {
+		t.Fatalf("initial write failed: %v\n%s", err, out)
+	}
+	body := "# a comment\nmeta:\n  name: myapp\n  version: \"9.9\"\n  providers:\n    - testprov\ncomponents:\n  svc:\n    type: svc_type\n"
+	if err := os.WriteFile(modelPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runValidate(t, "model", "validate", modelPath); err != nil {
+		t.Fatalf("a version bump is not drift; got %v\n%s", err, out)
+	}
+}
+
 func TestValidate_DetectsScenariosDrift(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("MGTT_HOME", home)
@@ -150,15 +170,21 @@ func TestValidate_DetectsScenariosDrift(t *testing.T) {
 		t.Fatalf("initial write failed: %v\n%s", err, out)
 	}
 
-	// Mutate the model so current content hash differs from stored one.
+	// Change the model's failure graph so the stored one is stale.
 	body := "meta:\n" +
 		"  name: myapp\n" +
-		"  version: \"1.1\"\n" + // bumped
+		"  version: \"1.1\"\n" +
 		"  providers:\n" +
 		"    - testprov\n" +
 		"components:\n" +
 		"  svc:\n" +
-		"    type: svc_type\n"
+		"    type: svc_type\n" +
+		// A new dependent changes the failure graph; a version bump
+		// alone would not, and is not drift.
+		"  web:\n" +
+		"    type: svc_type\n" +
+		"    depends:\n" +
+		"      - on: svc\n"
 	if err := os.WriteFile(modelPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +350,7 @@ func TestValidate_CheckScenariosAliasDetectsDrift(t *testing.T) {
 		t.Fatalf("initial write: %v\n%s", err, out)
 	}
 
-	// Mutate the model; the sidecar hash is now stale.
+	// Change the model's failure graph; the sidecar is now stale.
 	body := "meta:\n" +
 		"  name: myapp\n" +
 		"  version: \"1.2\"\n" +
@@ -332,7 +358,13 @@ func TestValidate_CheckScenariosAliasDetectsDrift(t *testing.T) {
 		"    - testprov\n" +
 		"components:\n" +
 		"  svc:\n" +
-		"    type: svc_type\n"
+		"    type: svc_type\n" +
+		// A new dependent changes the failure graph; a version bump
+		// alone would not, and is not drift.
+		"  web:\n" +
+		"    type: svc_type\n" +
+		"    depends:\n" +
+		"      - on: svc\n"
 	if err := os.WriteFile(modelPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

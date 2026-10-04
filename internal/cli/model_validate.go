@@ -89,8 +89,10 @@ func runSingleModelValidate(cmd *cobra.Command, path string, writeScenarios bool
 		return fmt.Errorf("model has validation errors")
 	}
 
-	if !scenariosOptedOut(m) {
-		if err := checkScenariosDrift(path, reg); err != nil {
+	// Regenerating replaces the sidecar, so a stale one is no reason to
+	// refuse; only a plain validate checks it.
+	if !scenariosOptedOut(m) && !writeScenarios {
+		if err := checkScenariosDrift(m, path, reg); err != nil {
 			return err
 		}
 	}
@@ -144,11 +146,13 @@ func buildDepCounts(m *model.Model) map[string]int {
 	return out
 }
 
-// checkScenariosDrift compares the source_hash stored in scenarios.yaml
-// against the current model + types content. Returns nil when the
-// sidecar is absent (nothing to check) or when hashes match; an error
-// otherwise naming the file and both hashes.
-func checkScenariosDrift(modelPath string, reg *providersupport.Registry) error {
+// checkScenariosDrift reports whether scenarios.yaml still matches the
+// model. A graph sidecar is fresh when its source_hash is the hash of the
+// graph the current model and types build. One written by an older mgtt
+// as a list of chains carries the hash of the model and type files, which
+// is still accepted while it matches. Returns nil when the sidecar is
+// absent; an error naming the file and both hashes otherwise.
+func checkScenariosDrift(m *model.Model, modelPath string, reg *providersupport.Registry) error {
 	scenariosPath := scenarios.SiblingPath(modelPath)
 	if _, err := os.Stat(scenariosPath); err != nil {
 		return nil
@@ -157,14 +161,14 @@ func checkScenariosDrift(modelPath string, reg *providersupport.Registry) error 
 	if err != nil {
 		return fmt.Errorf("read %s: %w", scenariosPath, err)
 	}
-	currentHash, err := scenarios.ComputeSourceHash(modelPath, collectTypePaths(reg))
-	if err != nil {
-		return err
+	currentHash := scenarios.GraphHash(scenarios.BuildGraph(m, reg))
+	if committedHash == currentHash {
+		return nil
 	}
-	if committedHash != currentHash {
-		return fmt.Errorf("%s is stale: source_hash=%s but current content hashes to %s — run `mgtt model validate --write-scenarios` and commit", scenariosPath, committedHash, currentHash)
+	if legacy, err := scenarios.ComputeSourceHash(modelPath, collectTypePaths(reg)); err == nil && committedHash == legacy {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("%s is stale: source_hash=%s but the model now builds %s — run `mgtt model validate --write-scenarios` and commit", scenariosPath, committedHash, currentHash)
 }
 
 // runScenariosDriftOnly runs ONLY the scenarios.yaml drift check against
@@ -191,10 +195,10 @@ func runScenariosDriftOnly(cmd *cobra.Command, path string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "no scenarios.yaml at %s — drift check skipped\n", scenariosPath)
 		return nil
 	}
-	if err := checkScenariosDrift(path, reg); err != nil {
+	if err := checkScenariosDrift(m, path, reg); err != nil {
 		return err
 	}
-	currentHash, _ := scenarios.ComputeSourceHash(path, collectTypePaths(reg))
+	currentHash := scenarios.GraphHash(scenarios.BuildGraph(m, reg))
 	fmt.Fprintf(cmd.OutOrStdout(), "scenarios.yaml up to date (source_hash=%s)\n", currentHash)
 	return nil
 }
@@ -203,18 +207,15 @@ func runScenariosDriftOnly(cmd *cobra.Command, path string) error {
 // scenarios.yaml beside modelPath. Returns the IndexEntry that would go
 // into scenarios.index.yaml when called from a workspace walk.
 func regenerateScenariosFor(cmd *cobra.Command, m *model.Model, reg *providersupport.Registry, modelPath string) (scenarios.IndexEntry, error) {
-	scs := scenarios.Enumerate(m, reg)
-	typePaths := collectTypePaths(reg)
-	hash, err := scenarios.ComputeSourceHash(modelPath, typePaths)
-	if err != nil {
-		return scenarios.IndexEntry{}, fmt.Errorf("compute source hash: %w", err)
-	}
+	g := scenarios.BuildGraph(m, reg)
+	scs := scenarios.Expand(g)
+	hash := scenarios.GraphHash(g)
 	outPath := filepath.Join(filepath.Dir(modelPath), "scenarios.yaml")
 	f, err := os.Create(outPath)
 	if err != nil {
 		return scenarios.IndexEntry{}, fmt.Errorf("create %s: %w", outPath, err)
 	}
-	if err := scenarios.Write(f, hash, scs); err != nil {
+	if err := scenarios.WriteGraph(f, hash, g); err != nil {
 		f.Close()
 		return scenarios.IndexEntry{}, fmt.Errorf("write scenarios.yaml: %w", err)
 	}

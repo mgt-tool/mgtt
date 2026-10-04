@@ -16,7 +16,6 @@ meta:
     cluster: acme-shop-stage
     region: eu-central-1
     env: stage          # flip to `prod` on the prod branch
-  scenarios: none       # see note below on enumerated scenarios
 
 components:
 

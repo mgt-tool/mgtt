@@ -1,6 +1,8 @@
 # `scenarios.yaml`
 
-The sidecar that `mgtt model validate --write-scenarios` drops next to a model. It enumerates every plausible failure chain the model can produce — one `id` per chain — and `mgtt diagnose` uses it as the search space at incident time.
+The sidecar that `mgtt model validate --write-scenarios` drops next to a model. It holds the model's **failure graph**: per component, the facts it is observed through, its failure states with what they emit and what triggers them, and which components its failure reaches. Every plausible failure chain is a path through that graph, and `mgtt diagnose` uses those chains as its search space at incident time.
+
+The graph is small even when the chains are not. The blue/green storefront example has 12,755 chains, which took 8.6 MB as a list and take 11 KB as a graph. A model change shows in review as the state or edge it adds, not as thousands of renumbered chains.
 
 Not to be confused with hand-authored [simulate scenarios](scenario-schema.md) — those stay under `scenarios/` and use `inject:` / `expect:`. This file is generated.
 
@@ -19,30 +21,30 @@ Not to be confused with hand-authored [simulate scenarios](scenario-schema.md) �
 ## Anatomy
 
 ```yaml
-# GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
+# GENERATED — rebuild via `mgtt model validate --write-scenarios`. Do not hand-edit.
 source_hash: sha256:9252fcac729b3abc9bdb16231715d1c1401e8600a3ebe970c21c380bc488ba53
-scenarios:
-  - id: s-0001
-    root:
-      component: edge
-      state: stopped
-    chain:
-      - component: edge
-        state: stopped
-        observes:
-          - operator_says_healthy
-  - id: s-0002
-    root:
-      component: api
-      state: stopped
-    chain:
-      - component: api
-        state: stopped
-        emits_on_edge: upstream_failure
-      - component: edge
-        state: stopped
-        observes:
-          - operator_says_healthy
+format: graph/v1
+scenario_count: 4
+components:
+  api:
+    observes: [ready_replicas, restart_count]
+    states:
+      - name: crashed
+        emits: [upstream_failure]
+    dependents:
+      - to: edge
+  db:
+    observes: [available]
+    states:
+      - name: stopped
+        emits: [upstream_failure]
+    dependents:
+      - to: api
+  edge:
+    observes: [upstream_count]
+    states:
+      - name: draining
+        triggered_by: [upstream_failure]
 ```
 
 ## Fields
@@ -50,12 +52,14 @@ scenarios:
 | Field | Description |
 |-------|-------------|
 | `source_hash` | sha256 of the model + referenced type YAMLs. Used by `mgtt model validate` to detect drift. |
-| `scenarios[].id` | Stable identifier (`s-0001`, `s-0002`, …). Survives regeneration as long as the chain does. |
-| `scenarios[].root` | `{component, state}` — the root-cause node of the chain. |
-| `scenarios[].chain[].component` | Component visited on the way from root to symptom. |
-| `scenarios[].chain[].state` | The failure state at that component. |
-| `scenarios[].chain[].emits_on_edge` | The `can_cause` label the previous step emitted to trigger this one. |
-| `scenarios[].chain[].observes` | The facts this terminal step is observable through — what operators see at 3am. |
+| `format` | `graph/v1`. A file without it is the older list of chains, which mgtt still reads. |
+| `scenario_count` | How many chains the graph expands to: for readers and diffs. mgtt recomputes it. |
+| `components.<name>.observes` | The type's facts: what a chain ending at this component is observed through. |
+| `components.<name>.states[]` | The type's failure states (not its default state), in type order: `emits` is its `can_cause`, `triggered_by` the labels that can put it in that state (none: any). |
+| `components.<name>.dependents[]` | Components that depend on this one. `group: true` with `roots:` marks a [redundancy group](model-schema.md#redundancy-groups) edge, which carries only the listed roots' failures. |
+| `components.<name>.unresolved` | The component's type did not resolve: no chain runs through it. |
+
+A chain starts at a component's failure state and steps to a dependent's failure state whenever one of its `emits` labels is in that state's `triggered_by`. It ends at any component that has `observes`. Its IDs (`s-0001`, ...) number the expanded, sorted chains; they are what `scenarios_list` and `diagnose` report.
 
 ## Regenerate
 
@@ -84,7 +88,7 @@ mgtt model validate --check-scenarios
 
 ## Opt out
 
-Placeholder models that don't yet describe failure modes can opt out:
+Placeholder models that don't yet describe failure modes can opt out. Size is no longer a reason to opt out; the graph stays small.
 
 ```yaml
 meta:

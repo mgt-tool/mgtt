@@ -153,7 +153,7 @@ components:
     # type default outright (it does not merge) — see the override
     # notes below for why we override for opensearch, rds, redis, mq.
     healthy:
-      - ready_replicas >= 1
+      replace: [ready_replicas >= 1]   # single replica on stage
 
   # ─── AWS managed data layer ─────────────────────────────────────
   # AWS types use short readable keys (`rds`, `redis`, `mq`) while
@@ -165,24 +165,20 @@ components:
     type: rds_instance
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-rds
-    healthy:
-      - available == true          # restated: healthy: replaces the type's rules
-      - connection_count < 500
 
   redis:
     type: elasticache_cluster
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-redis
     healthy:
-      - available == true
+      replace: [available == true]     # cache_hit_ratio is 0 on idle stage
 
   mq:
     type: mq_broker
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-mq
     healthy:
-      - available == true          # restated: healthy: replaces the type's rules
-      - queue_depth < 10000
+      replace: [available == true, queue_depth < 10000]   # consumers scaled to 0 on stage
 
   media-bucket:
     type: s3_bucket
@@ -230,12 +226,12 @@ components:
 
 **nginx → php-fpm is a deployment edge, not a service edge.** The `acme-shop-php-fpm-{blue,green}` Services exist in the cluster but share the Deployment's exact name — mgtt requires unique component keys, so the model walks to the deployment directly. The Deployment's `ready_replicas` / `restart_count` are what actually diagnose php-fpm health; the svc-level probe wouldn't have added signal.
 
-**`healthy:` overrides replace the type default, they don't merge.** Three cases where that matters:
+**`healthy:` overrides replace the type default, they don't merge**, so each override here says `replace:` and lists every rule it keeps. Where that matters:
 
 - `opensearch` — the default `deployment` type has many rules; for a single-replica staging deployment, the full set over-constrains. `ready_replicas >= 1` is the whole signal.
-- `rds` and `mq` — both overrides restate `available == true`. Leaving it out, as this page once did, makes a stopped instance with no connections count as healthy, and `rds` gets eliminated in exactly the outage it causes. `mgtt model validate` warns about every type rule an override drops.
-- `redis` — the `elasticache_cluster` default includes `cache_hit_ratio > 80`, which trips on idle stage (ratio is 0 when nothing reads). The component-level `available == true` replaces the whole rule set, which the validator reports as a dropped `cache_hit_ratio > 80`. A real Redis outage still flips `available` to false.
-- `mq` — dropped `consumer_count > 0` from the default. On stage, consumers are scaled to 0 and never attach to the broker, so the rule flagged idle-by-design as an incident. `queue_depth < 10000` is the real safety bound: a backed-up queue is the symptom regardless of how many consumers are attached.
+- `rds` — no override. The `rds_instance` default (`available == true`, `connection_count < 500`) is what this database needs. An earlier version of this page overrode it with `connection_count < 500` alone, which dropped `available == true`: a stopped instance with no connections counted as healthy, and rds was eliminated in exactly the outage it causes. `mgtt model validate` now names every type rule a bare override drops.
+- `redis` — the `elasticache_cluster` default includes `cache_hit_ratio > 80`, which trips on idle stage (ratio is 0 when nothing reads). `replace: [available == true]` drops it on purpose. A real Redis outage still flips `available` to false.
+- `mq` — `replace:` keeps `available == true` and `queue_depth < 10000`, and drops `consumer_count > 0` from the default. On stage, consumers are scaled to 0 and never attach to the broker, so the rule flagged idle-by-design as an incident. `queue_depth < 10000` is the real safety bound: a backed-up queue is the symptom regardless of how many consumers are attached.
 
 **Business-process components** (`scheduled_jobs`, `async_jobs`) give the engine a user-visible symptom layer for chains rooted at cron or mq. Treating them as generic components with operator-observable facts (are jobs processed on time, is the queue draining) gives mgtt a terminal to reason from.
 
@@ -270,16 +266,10 @@ $ mgtt model validate
   ✓ cloudfront                  1 dependency valid
   ✓ ssm-app-config              resolved
   ✓ external-secrets            1 dependency valid
-  ! opensearch  healthy override drops type rule "ready_replicas == desired_replicas" (the override replaces the deployment rules; restate it to keep it)
-  ! opensearch  healthy override drops type rule "condition_available == true" (the override replaces the deployment rules; restate it to keep it)
-  ! opensearch  healthy override drops type rule "restart_count < 5" (the override replaces the deployment rules; restate it to keep it)
-  ! redis  healthy override drops type rule "cache_hit_ratio > 80" (the override replaces the elasticache_cluster rules; restate it to keep it)
-  ! mq  healthy override drops type rule "consumer_count > 0" (the override replaces the mq_broker rules; restate it to keep it)
-
-  20 components · 0 errors · 5 warnings
+  20 components · 0 errors · 0 warnings
 ```
 
-The five warnings are the deliberate relaxations for an idle staging environment, explained under *Lessons* below. Every rule an override drops is named, so an accidental drop stands out: an earlier version of this model dropped `available == true` from `rds` and `mq`, which made a stopped database count as healthy.
+The three overrides that relax a type's rules for idle staging say so with `replace:`, explained under *Lessons* below. A bare `healthy:` list means the same, but `mgtt model validate` names each type rule it drops, because that is how an accidental drop looks: an earlier version of this model gave `rds` and `mq` bare lists without `available == true`, so a stopped database counted as healthy.
 
 At this point the model is syntactically correct and every type/fact resolves against the declared providers. Nothing has been said yet about whether it reasons *well* — that's what scenarios are for.
 

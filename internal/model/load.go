@@ -60,9 +60,36 @@ type rawComponent struct {
 	Resource     string                 `yaml:"resource"`
 	Providers    []string               `yaml:"providers"`
 	Depends      []rawDependency        `yaml:"depends"`
-	Healthy      []string               `yaml:"healthy"`
+	Healthy      rawHealthy             `yaml:"healthy"`
 	FailureModes map[string]rawFailMode `yaml:"failure_modes"`
 	Vars         map[string]string      `yaml:"vars"`
+}
+
+// rawHealthy accepts `healthy:` as a bare list of rules, or as a map with
+// exactly one of `replace:` or `add:`.
+type rawHealthy struct {
+	Mode  string
+	Rules []string
+}
+
+func (h *rawHealthy) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.SequenceNode {
+		return n.Decode(&h.Rules)
+	}
+	var m map[string][]string
+	if n.Kind != yaml.MappingNode || n.Decode(&m) != nil {
+		return fmt.Errorf("line %d: healthy: must be a list of rules, or replace: / add: with a list", n.Line)
+	}
+	if len(m) != 1 {
+		return fmt.Errorf("line %d: healthy: takes exactly one of replace: or add:", n.Line)
+	}
+	for mode, rules := range m {
+		if mode != "replace" && mode != "add" {
+			return fmt.Errorf("line %d: healthy: unknown key %q (want replace: or add:)", n.Line, mode)
+		}
+		h.Mode, h.Rules = mode, rules
+	}
+	return nil
 }
 
 // rawDependency mirrors depends list entries.
@@ -131,12 +158,13 @@ func Load(path string) (*Model, error) {
 // parse failure still points at the right source line.
 func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 	comp := &Component{
-		Name:       name,
-		Type:       rc.Type,
-		Resource:   rc.Resource,
-		Providers:  rc.Providers,
-		HealthyRaw: rc.Healthy,
-		Vars:       rc.Vars,
+		Name:        name,
+		Type:        rc.Type,
+		Resource:    rc.Resource,
+		Providers:   rc.Providers,
+		HealthyRaw:  rc.Healthy.Rules,
+		HealthyMode: rc.Healthy.Mode,
+		Vars:        rc.Vars,
 	}
 	if len(rc.FailureModes) > 0 {
 		comp.FailureModes = make(map[string][]string, len(rc.FailureModes))
@@ -144,7 +172,7 @@ func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 			comp.FailureModes[state] = fm.CanCause
 		}
 	}
-	for _, rawExpr := range rc.Healthy {
+	for _, rawExpr := range rc.Healthy.Rules {
 		node, err := expr.Parse(rawExpr)
 		if err != nil {
 			return nil, fmt.Errorf("component %s: invalid healthy expression %q: %w", name, rawExpr, err)

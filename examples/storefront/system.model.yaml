@@ -115,7 +115,7 @@ components:
     # type default outright (it does not merge) — see the override
     # notes below for why we override for opensearch, rds, redis, mq.
     healthy:
-      - ready_replicas >= 1
+      replace: [ready_replicas >= 1]   # single replica on stage
 
   # ─── AWS managed data layer ─────────────────────────────────────
   # AWS types use short readable keys (`rds`, `redis`, `mq`) while
@@ -127,24 +127,20 @@ components:
     type: rds_instance
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-rds
-    healthy:
-      - available == true          # restated: healthy: replaces the type's rules
-      - connection_count < 500
 
   redis:
     type: elasticache_cluster
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-redis
     healthy:
-      - available == true
+      replace: [available == true]     # cache_hit_ratio is 0 on idle stage
 
   mq:
     type: mq_broker
     providers: [mgt-tool/aws@^1.0.0]
     resource: acme-shop-{env}-mq
     healthy:
-      - available == true          # restated: healthy: replaces the type's rules
-      - queue_depth < 10000
+      replace: [available == true, queue_depth < 10000]   # consumers scaled to 0 on stage
 
   media-bucket:
     type: s3_bucket

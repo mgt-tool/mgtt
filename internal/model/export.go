@@ -150,11 +150,7 @@ func exportComponent(c *Component, typ *providersupport.Type) exportComp {
 		Depends: []exportDep{},
 	}
 
-	healthy := c.HealthyRaw
-	if len(healthy) == 0 {
-		healthy = typ.HealthyRaw
-	}
-	out.Healthy = appendCopy(healthy)
+	out.Healthy = appendCopy(c.HealthyRulesRaw(typ))
 
 	modes := c.FailureModes
 	if len(modes) == 0 {

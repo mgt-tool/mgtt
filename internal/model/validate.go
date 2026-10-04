@@ -300,7 +300,8 @@ func pass7HealthyOverride(m *Model, reg *providersupport.Registry, result *Valid
 	squash := func(r string) string { return strings.Join(strings.Fields(r), "") }
 	for _, name := range m.Order {
 		comp := m.Components[name]
-		if comp == nil || len(comp.HealthyRaw) == 0 {
+		// replace: says the drop is deliberate; add: drops nothing.
+		if comp == nil || len(comp.HealthyRaw) == 0 || comp.HealthyMode != "" {
 			continue
 		}
 		t, _, err := comp.ResolveType(m, reg)
@@ -339,10 +340,7 @@ func pass8UnsetVars(m *Model, reg *providersupport.Registry, result *ValidationR
 		if err != nil || t == nil {
 			continue
 		}
-		rules := comp.Healthy
-		if len(rules) == 0 {
-			rules = t.Healthy
-		}
+		rules := comp.HealthyRules(t)
 		for _, st := range t.States {
 			if st.When != nil {
 				rules = append(rules[:len(rules):len(rules)], st.When)

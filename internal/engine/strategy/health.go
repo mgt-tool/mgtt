@@ -127,16 +127,13 @@ func ComponentDefinitivelyUnhealthy(m *model.Model, reg *providersupport.Registr
 	return ComponentVerdict(m, reg, store, name) == Unhealthy
 }
 
-// effectiveHealthyFor returns the healthy predicate set for a component,
-// honouring the component-level override first and falling back to the
-// type-level rules from the provider.
+// effectiveHealthyFor returns the healthy predicate set for a component:
+// its own rules (replacing the type's, or added to them with add:), else
+// the type-level rules from the provider.
 func effectiveHealthyFor(m *model.Model, reg *providersupport.Registry, comp *model.Component) []expr.Node {
-	if len(comp.Healthy) > 0 {
-		return comp.Healthy
-	}
 	t, _, err := comp.ResolveType(m, reg)
-	if err != nil || t == nil {
-		return nil
+	if err != nil {
+		t = nil
 	}
-	return t.Healthy
+	return comp.HealthyRules(t)
 }

@@ -1,0 +1,19 @@
+name: blue nginx crash-looping, green healthy
+
+inject:
+  acme-shop-nginx-blue:     { ready_replicas: 0, desired_replicas: 2, condition_available: false, restart_count: 18 }
+  acme-shop-nginx-green:    { ready_replicas: 2, desired_replicas: 2, condition_available: true,  restart_count: 0 }
+  acme-shop-svc:            { endpoint_count: 0, selector_match: false }
+  acme-shop-php-fpm-blue:   { ready_replicas: 3, desired_replicas: 3, condition_available: true,  restart_count: 0 }
+  acme-shop-php-fpm-green:  { ready_replicas: 3, desired_replicas: 3, condition_available: true,  restart_count: 0 }
+  rds:                      { available: true, connection_count: 140 }
+  redis:                    { available: true, connection_count: 200, cache_hit_ratio: 0.94 }
+  mq:                       { available: true, consumer_count: 22, queue_depth: 40 }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  media-bucket:             { accessible: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true }
+
+expect:
+  root_cause: acme-shop-nginx-blue
+  path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue]
+  eliminated: [external-secrets, acme-shop-nginx-green, acme-shop-php-fpm-blue, acme-shop-php-fpm-green, mq, opensearch, rds, redis, media-bucket, ssm-app-config]

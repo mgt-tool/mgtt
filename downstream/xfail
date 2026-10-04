@@ -1,0 +1,10 @@
+# Known breakages, one per line: SUITE  REASON (plan step that fixes it).
+# A listed suite passes while it fails and fails once it passes: the change
+# that fixes it removes its line here.
+provider-docker      tests call provider.Registry.Facts, removed in 0.3.0 (provider fix)
+provider-quickwit    tests call provider.Registry.Facts, removed in 0.3.0 (provider fix)
+provider-tempo       tests call provider.Registry.Facts, removed in 0.3.0 (provider fix)
+provider-terraform   tests call provider.Registry.Types/Facts, removed in 0.3.0 (provider fix)
+storefront           rds healthy override drops available == true (G5/D1); unprobed leaf behind a sick casualty wins by path length (WS-A)
+storefront-speed     ~30s per occam probe decision on 12,755 chains (G2/WS-B)
+mcp                  dotted tool names such as incident.start (F0)

@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`make downstream`** builds this checkout and every repository that depends on it -- the six providers, compiled against this engine through a `replace`, and mgtt2writ with writ -- in one pinned Docker image, then runs the suites: provider unit tests and `provider validate`, the minishop verification contract, the storefront scenarios and probe-decision budget, the mgtt2writ pipeline and MCP tool-name portability. Images are pinned by digest and repositories by commit. Known breakages sit in `downstream/xfail`, each naming the step that fixes it; a listed suite that starts passing fails the build until its line goes.
+- `examples/storefront/`: the blue/green storefront model and its five scenarios as files, extracted from the docs page.
+
+### Fixed
+
+- `mgtt provider validate` no longer requires `probe.cmd` on providers whose probes go to a runner binary, which never reads it. aws failed 39 checks for this.
+- `mgtt provider validate` reads a bare word compared against a string fact (`phase == Bound`) as the literal the evaluator compares it as, not as a reference to an undeclared fact. kubernetes failed 18 checks for this. Against a numeric fact a bare word is still a fact reference, so a typo there is still caught.
+
 ## [0.3.0] — 2026-09-12
 
 ### Breaking (SDK)

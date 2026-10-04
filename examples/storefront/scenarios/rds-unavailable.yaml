@@ -1,0 +1,18 @@
+name: rds unavailable
+
+inject:
+  rds:                      { available: false, connection_count: 0 }
+  redis:                    { available: true,  connection_count: 210, cache_hit_ratio: 0.82 }
+  mq:                       { available: true,  consumer_count: 0, queue_depth: 4200 }
+  opensearch:               { ready_replicas: 1, desired_replicas: 1, condition_available: true, restart_count: 0 }
+  media-bucket:             { accessible: true }
+  external-secrets:         { deployment_ready: true, crd_registered: true }
+  acme-shop-php-fpm-blue:   { ready_replicas: 0, desired_replicas: 3, condition_available: false, restart_count: 14 }
+  acme-shop-php-fpm-green:  { ready_replicas: 0, desired_replicas: 3, condition_available: false, restart_count: 12 }
+  acme-shop-consumer-blue:  { ready_replicas: 0, desired_replicas: 1, condition_available: false, restart_count: 8 }
+  acme-shop-consumer-green: { ready_replicas: 0, desired_replicas: 1, condition_available: false, restart_count: 9 }
+
+expect:
+  root_cause: rds
+  path: [cloudflare, acme-shop-ingress, acme-shop-svc, acme-shop-nginx-blue, acme-shop-php-fpm-blue, rds]
+  eliminated: [external-secrets, mq, opensearch, redis, media-bucket, ssm-app-config]

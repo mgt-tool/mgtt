@@ -26,6 +26,7 @@ func newModelCmd() *cobra.Command {
 	modelCmd.AddCommand(newModelBuildCmd())
 	modelCmd.AddCommand(newModelExportCmd())
 	modelCmd.AddCommand(newModelImpactCmd())
+	modelCmd.AddCommand(newModelDiffCmd())
 	return modelCmd
 }
 

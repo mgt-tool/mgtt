@@ -85,6 +85,7 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerScenarioSimulate(s, h)
 		registerGuide(s, h)
 		registerModelImpact(s, h)
+		registerModelDiff(s, h)
 	}
 
 	return s
@@ -171,6 +172,26 @@ func registerModelImpact(s *server.MCPServer, h *Handler) {
 			}
 		},
 		h.ModelImpact,
+	))
+}
+
+func registerModelDiff(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("model_diff",
+		mcpgo.WithDescription("Compare two revisions of a model by what they mean: components added and removed; per component, dependency, effective health rule and var changes; and for each component whose failure now reaches different user-facing symptoms, which it gained or lost. Respelling rules or switching a bare healthy list to replace: with the same rules is no change. Each revision by path or inline. For reviewing a model change."),
+		mcpgo.WithString("old_model_path", mcpgo.Description("the earlier revision, as a path on the server")),
+		mcpgo.WithString("old_model_source", mcpgo.Description("the earlier revision's YAML (max 512 KiB)")),
+		mcpgo.WithString("new_model_path", mcpgo.Description("the later revision, as a path on the server")),
+		mcpgo.WithString("new_model_source", mcpgo.Description("the later revision's YAML (max 512 KiB)")),
+		rawOutput(ModelDiffOutputSchema),
+	)
+	s.AddTool(tool, dispatch("model_diff",
+		func(req mcpgo.CallToolRequest) ModelDiffParams {
+			return ModelDiffParams{
+				OldModelPath: req.GetString("old_model_path", ""), OldModelSource: req.GetString("old_model_source", ""),
+				NewModelPath: req.GetString("new_model_path", ""), NewModelSource: req.GetString("new_model_source", ""),
+			}
+		},
+		h.ModelDiff,
 	))
 }
 

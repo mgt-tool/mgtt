@@ -312,3 +312,24 @@ const ModelImpactOutputSchema = `{
   },
   "required":["component","states","affected","symptoms","blocked"]
 }`
+
+// ModelDiffOutputSchema describes a semantic model diff.
+const ModelDiffOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "same":{"type":"boolean"},
+    "added":{"type":"array","items":{"type":"string"}},
+    "removed":{"type":"array","items":{"type":"string"}},
+    "changed":{"type":"array","items":{"type":"object","properties":{
+      "component":{"type":"string"},"changes":{"type":"array","items":{"type":"string"}}},
+      "required":["component","changes"]}},
+    "reach":{"type":"array","items":{"type":"object","properties":{
+      "component":{"type":"string"},
+      "gained":{"type":"array","items":{"type":"string"}},
+      "lost":{"type":"array","items":{"type":"string"}}},
+      "required":["component"]}},
+    "old_scenarios":{"type":"integer"},
+    "new_scenarios":{"type":"integer"}
+  },
+  "required":["same","added","removed","changed","reach","old_scenarios","new_scenarios"]
+}`

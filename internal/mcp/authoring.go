@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/mgt-tool/mgtt/internal/model"
+	"github.com/mgt-tool/mgtt/internal/modeldiff"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 	"github.com/mgt-tool/mgtt/internal/simulate"
@@ -396,4 +397,68 @@ func (h *Handler) ModelImpact(p ModelImpactParams) (*ModelImpactResult, error) {
 		out.Blocked = append(out.Blocked, BlockedInfo{Dependent: b.Dependent, Member: b.Member})
 	}
 	return out, nil
+}
+
+// ModelDiffParams takes two revisions of a model, each by path or inline.
+type ModelDiffParams struct {
+	OldModelPath   string `json:"old_model_path,omitempty"`
+	OldModelSource string `json:"old_model_source,omitempty"`
+	NewModelPath   string `json:"new_model_path,omitempty"`
+	NewModelSource string `json:"new_model_source,omitempty"`
+}
+
+// ComponentChange is one component's changes, as review lines.
+type ComponentChange struct {
+	Component string   `json:"component"`
+	Changes   []string `json:"changes"`
+}
+
+// ReachInfo is how the symptoms a component's failure reaches changed.
+type ReachInfo struct {
+	Component string   `json:"component"`
+	Gained    []string `json:"gained,omitempty"`
+	Lost      []string `json:"lost,omitempty"`
+}
+
+// ModelDiffResult is the semantic difference between two revisions.
+type ModelDiffResult struct {
+	Same         bool              `json:"same"`
+	Added        []string          `json:"added"`
+	Removed      []string          `json:"removed"`
+	Changed      []ComponentChange `json:"changed"`
+	Reach        []ReachInfo       `json:"reach"`
+	OldScenarios int               `json:"old_scenarios"`
+	NewScenarios int               `json:"new_scenarios"`
+}
+
+// ModelDiff compares two model revisions by meaning.
+func (h *Handler) ModelDiff(p ModelDiffParams) (*ModelDiffResult, error) {
+	oldM, err := loadModelParam(p.OldModelPath, p.OldModelSource)
+	if err != nil {
+		return nil, fmt.Errorf("old model: %w", err)
+	}
+	newM, err := loadModelParam(p.NewModelPath, p.NewModelSource)
+	if err != nil {
+		return nil, fmt.Errorf("new model: %w", err)
+	}
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	d := modeldiff.Compare(oldM, newM, reg)
+	out := &ModelDiffResult{Same: d.Empty(), Added: nonNil(d.Added), Removed: nonNil(d.Removed), Changed: []ComponentChange{}, Reach: []ReachInfo{}, OldScenarios: d.OldScenarios, NewScenarios: d.NewScenarios}
+	for _, c := range d.Changed {
+		out.Changed = append(out.Changed, ComponentChange{Component: c.Name, Changes: c.Changes})
+	}
+	for _, r := range d.Reach {
+		out.Reach = append(out.Reach, ReachInfo{Component: r.Component, Gained: r.Gained, Lost: r.Lost})
+	}
+	return out, nil
+}
+
+func nonNil(xs []string) []string {
+	if xs == nil {
+		return []string{}
+	}
+	return xs
 }

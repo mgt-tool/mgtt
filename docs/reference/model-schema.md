@@ -165,8 +165,10 @@ A group is **satisfied** while at least `need` members are proven healthy. A mem
 
 While its group is satisfied, a broken member does not break the component that depends on it. It is not named as the root cause; conclusions report it as **redundancy degraded** (`mgtt plan`: `Redundancy degraded: web-a (edge: 1 of 2 healthy in [web-a, web-b], needs 1)`; MCP `plan`: `redundancy_degraded`). Once fewer than `need` members are healthy, the group no longer holds and failures pass through it as through any dependency.
 
-!!! note "Limits"
-    Today the path engine and the BFS strategy honour groups. Scenario-guided diagnosis (`scenarios.yaml`) and `model export` still treat each member as a hard dependency, so their view of a group is pessimistic, as before. Soft dependencies (`soft: true`) are not implemented yet.
+Both engines and scenario-guided diagnosis honour groups. Enumerated chains carry one member's failure past its group only when that failure reaches more members than the group can spare, as a database under every member does. Scenarios can assert `expect.redundancy_degraded:`. `model export` carries each edge's `group` and `need`; a consumer that ignores them, mgtt2writ for now, sees one hard edge per member, as before. See `examples/redundant-web/`.
+
+!!! warning "Active/passive is not a group"
+    `need: 1` says *either member can carry the load right now*. A blue/green pair where the Service selector points at one color is not that: if the live color dies, traffic does not move to the idle one. Model it with `while:` on the selected color instead. That needs a fact naming the selected color, which the kubernetes `service` type does not expose yet. Soft dependencies (`soft: true`) are not implemented yet either.
 
 ### Health expressions
 

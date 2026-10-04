@@ -168,6 +168,12 @@ type diagnoseLoop struct {
 	start    time.Time
 }
 
+// rootCovered reports whether root's component is broken but covered by a
+// redundancy group that still holds: degraded, not the root cause.
+func (l *diagnoseLoop) rootCovered(root *scenarios.Scenario) bool {
+	return root != nil && strategy.RedundancyCovered(l.m, l.reg, l.store, root.Root.Component)
+}
+
 // unseen lists the components the facts so far cannot rule out because
 // some of them could not be read.
 func (l *diagnoseLoop) unseen() []strategy.Unseen {
@@ -183,7 +189,7 @@ func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err
 	decision := strategy.AutoSelect(input).SuggestProbe(input)
 	switch {
 	case decision.Done:
-		reportDone(l.cmd, l.m, decision.RootCause, l.store, l.unseen(), l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline, l.suspects)
+		reportDone(l.cmd, l.m, decision.RootCause, l.store, l.unseen(), strategy.RedundancyDegraded(l.m, l.reg, l.store), l.rootCovered(decision.RootCause), l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline, l.suspects)
 		return true, nil
 	case decision.Stuck:
 		reportStuck(l.cmd, l.store, l.unseen(), l.trail, *probesRun, l.f.maxProbes, l.start, l.f.deadline)
@@ -503,13 +509,25 @@ func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *fa
 
 // reportDone prints the terminal success report: single scenario remains,
 // show the chain, trail, and suspect commentary.
-func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, store *facts.Store, unseen []strategy.Unseen, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration, suspects []strategy.SuspectHint) {
+func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, store *facts.Store, unseen []strategy.Unseen, degraded []strategy.Degraded, rootCovered bool, trail []probeRecord, probesRun, maxProbes int, start time.Time, deadline time.Duration, suspects []strategy.SuspectHint) {
 	w := cmd.OutOrStdout()
 	if root == nil {
 		if len(unseen) > 0 {
 			fmt.Fprintln(w, "Root cause: (none among the components that could be seen)")
 		} else {
 			fmt.Fprintln(w, "Root cause: (none — all components healthy)")
+		}
+		writeBudget(w, probesRun, maxProbes, start, deadline)
+		writePartialVisibility(w, store, unseen)
+		writeTrail(w, trail)
+		return
+	}
+	if rootCovered {
+		// The chain's root is broken, but a redundancy group it belongs to
+		// still holds: nothing it serves is broken by it.
+		fmt.Fprintln(w, "Root cause: (none — redundancy is absorbing the failure below)")
+		for _, d := range degraded {
+			fmt.Fprintf(w, "Redundancy degraded: %s\n", d)
 		}
 		writeBudget(w, probesRun, maxProbes, start, deadline)
 		writePartialVisibility(w, store, unseen)

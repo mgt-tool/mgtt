@@ -59,14 +59,25 @@ func RedundancyCovered(m *model.Model, reg *providersupport.Registry, store *fac
 	return dependents > 0
 }
 
+// Degraded is a component seen broken that a satisfied redundancy group
+// covers, with the groups that cover it.
+type Degraded struct {
+	Component string
+	Groups    []string // e.g. "edge: 1 of 2 healthy in [web-a, web-b], needs 1"
+}
+
+func (d Degraded) String() string {
+	return d.Component + " (" + strings.Join(d.Groups, "; ") + ")"
+}
+
 // RedundancyDegraded lists, in model order, the components seen broken
 // that redundancy covers: not a root cause, but not healthy either, and a
 // conclusion that leaves them out would call a degraded system healthy.
-func RedundancyDegraded(m *model.Model, reg *providersupport.Registry, store *facts.Store) []string {
+func RedundancyDegraded(m *model.Model, reg *providersupport.Registry, store *facts.Store) []Degraded {
 	if m == nil || store == nil {
 		return nil
 	}
-	var out []string
+	var out []Degraded
 	for _, name := range m.Order {
 		if ComponentVerdict(m, reg, store, name) != Unhealthy || !RedundancyCovered(m, reg, store, name) {
 			continue
@@ -79,7 +90,7 @@ func RedundancyDegraded(m *model.Model, reg *providersupport.Registry, store *fa
 			}
 		}
 		sort.Strings(why)
-		out = append(out, name+" ("+strings.Join(why, "; ")+")")
+		out = append(out, Degraded{Component: name, Groups: why})
 	}
 	return out
 }

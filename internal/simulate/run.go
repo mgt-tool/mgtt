@@ -77,6 +77,9 @@ func extractConclusion(tree *engine.PathTree) Expectation {
 	for _, u := range tree.CannotRuleOut {
 		ex.CannotRuleOut = append(ex.CannotRuleOut, u.Component)
 	}
+	for _, d := range tree.RedundancyDegraded {
+		ex.RedundancyDegraded = append(ex.RedundancyDegraded, d.Component)
+	}
 	return ex
 }
 
@@ -111,6 +114,9 @@ func matches(expected, actual Expectation) bool {
 		return false
 	}
 	if !isSubset(expected.Eliminated, actual.Eliminated) {
+		return false
+	}
+	if !isSubset(expected.RedundancyDegraded, actual.RedundancyDegraded) {
 		return false
 	}
 	if !isSubset(expected.CannotRuleOut, actual.CannotRuleOut) {

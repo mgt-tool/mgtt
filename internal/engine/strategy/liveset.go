@@ -33,9 +33,17 @@ func FilterLive(scs []scenarios.Scenario, store *facts.Store, m *model.Model, re
 }
 
 func isLive(s scenarios.Scenario, store *facts.Store, m *model.Model, reg *providersupport.Registry) bool {
-	for _, step := range s.Chain {
+	for i, step := range s.Chain {
 		if !stepConsistent(step, store, m, reg) {
 			return false
+		}
+		// A chain's failure passes from each step to the next, its
+		// dependent. Through a redundancy group that still has enough
+		// healthy members it does not pass, so the chain is contradicted.
+		if i+1 < len(s.Chain) && m != nil && store != nil {
+			if held, _ := SatisfiedGroup(m, reg, store, s.Chain[i+1].Component, step.Component); held {
+				return false
+			}
 		}
 	}
 	return true

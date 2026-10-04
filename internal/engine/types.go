@@ -22,7 +22,7 @@ type PathTree struct {
 	CannotRuleOut []strategy.Unseen
 	// RedundancyDegraded names components seen broken that a satisfied
 	// redundancy group covers: not a root cause, not healthy either.
-	RedundancyDegraded []string
+	RedundancyDegraded []strategy.Degraded
 }
 
 // Path represents a single failure path through the dependency graph.

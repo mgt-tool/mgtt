@@ -59,6 +59,11 @@ type exportComp struct {
 type exportDep struct {
 	On    string `json:"on"`
 	While string `json:"while"`
+	// Group and Need are set when the edge belongs to a redundancy group
+	// (need: k): the group's members and how many must be healthy. A
+	// consumer that ignores them sees one hard edge per member, as before.
+	Group []string `json:"group,omitempty"`
+	Need  int      `json:"need,omitempty"`
 }
 
 type exportType struct {
@@ -162,7 +167,11 @@ func exportComponent(c *Component, typ *providersupport.Type) exportComp {
 	// per target, since that is the granularity a consumer reasons at.
 	for _, d := range c.Depends {
 		for _, on := range d.On {
-			out.Depends = append(out.Depends, exportDep{On: on, While: d.WhileRaw})
+			e := exportDep{On: on, While: d.WhileRaw}
+			if d.Need > 0 {
+				e.Group, e.Need = append([]string(nil), d.On...), d.Need
+			}
+			out.Depends = append(out.Depends, e)
 		}
 	}
 	sort.Slice(out.Depends, func(i, j int) bool {

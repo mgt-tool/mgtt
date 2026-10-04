@@ -1,0 +1,30 @@
+# Two web deployments behind one Service, either able to carry the
+# traffic: a redundancy group, not two hard dependencies. Both read the
+# same database, so a database outage still takes the Service down.
+meta:
+  name: redundant-web
+  version: "1.0"
+  providers:
+    - mgt-tool/kubernetes@^3.0.0
+  vars:
+    namespace: shop
+
+components:
+  shop-svc:
+    type: service
+    depends:
+      - on: [web-a, web-b]
+        need: 1            # served while at least one is healthy
+
+  web-a:
+    type: deployment
+    depends:
+      - on: db
+
+  web-b:
+    type: deployment
+    depends:
+      - on: db
+
+  db:
+    type: deployment

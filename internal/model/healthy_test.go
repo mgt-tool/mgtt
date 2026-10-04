@@ -197,3 +197,37 @@ func TestDependsNeed(t *testing.T) {
 		t.Fatalf("need lost in emit:\n%s", b.String())
 	}
 }
+
+// Export carries a redundancy group on each of its edges, so a consumer
+// can honour it; one that ignores the fields sees hard edges, as before.
+func TestExport_CarriesGroup(t *testing.T) {
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta:  providersupport.ProviderMeta{Name: "aws"},
+		Types: map[string]*providersupport.Type{"rds_instance": rdsType},
+	})
+	m, err := loadModelYAML(t, `  svc:
+    type: rds_instance
+    depends:
+      - on: [a, b]
+        need: 1
+  a: { type: rds_instance }
+  b: { type: rds_instance }
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := model.ExportJSON(m, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"on": "a",
+          "while": "",
+          "group": [
+            "a",
+            "b"
+          ],
+          "need": 1`) {
+		t.Fatalf("export lacks group/need on svc's edges:\n%s", out)
+	}
+}

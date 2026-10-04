@@ -8,6 +8,9 @@ docs_dir: docs
 # Kept locally (gitignored) for contributor reference, but not shipped.
 exclude_docs: |
   superpowers/
+  decisions/
+  PROBE_PROTOCOL.md
+  _hooks/
 
 # Wire the {{ MGTT_VERSION }} placeholder so docs source the version
 # from the repo's VERSION file at build time — no manual sync.
@@ -40,41 +43,16 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting Started:
-    - Quick Start: getting-started/quickstart.md
-    - Install: getting-started/install.md
-  - Examples:
-    - Overview: examples/index.md
-    - Blue/green storefront on EKS: examples/blue-green-storefront.md
-  - Concepts:
-    - How It Works: concepts/how-it-works.md
-    - Model Authoring: concepts/model-authoring.md
-    - Simulation: concepts/simulation.md
-    - Verification: concepts/verification.md
-    - Troubleshooting: concepts/troubleshooting.md
-    - Multi-File Models: concepts/multi-file-models.md
-  - Using Providers:
-    - Overview: concepts/using-providers.md
-    - Install Methods: concepts/provider-install-methods.md
-    - Names and Versions: concepts/provider-fqn-and-versions.md
-    - Image Capabilities: reference/image-capabilities.md
-    - Registry (browse): reference/registry.md
-  - Writing Providers:
-    - Overview: providers/overview.md
-    - Vocabulary: providers/vocabulary.md
-    - Binary Protocol: providers/protocol.md
-    - Testing: providers/testing.md
+  - Quick start: getting-started/quickstart.md
+  - How it works: concepts/how-it-works.md
+  - AI agents (MCP): guides/agents.md
+  - Providers:
+    - Using providers: guides/providers.md
+    - Writing a provider: providers/writing.md
+    - Registry: reference/registry.md
   - Reference:
-    - CLI: reference/cli.md
-    - Configuration: reference/configuration.md
-    - Engine: reference/engine.md
-    - MCP Service: reference/mcp.md
-    - Manifest Schema: reference/manifest.md
-    - Model Schema: reference/model-schema.md
-    - Scenario Schema: reference/scenario-schema.md
-    - scenarios.yaml: reference/scenarios-yaml.md
-    - Type Catalog: reference/type-catalog.md
-    - Specification: specs.md
+    - Model and scenarios: reference/model.md
+    - CLI and configuration: reference/cli.md
 
 extra_css:
   - stylesheets/terminal.css

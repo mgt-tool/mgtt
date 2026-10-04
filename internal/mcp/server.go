@@ -295,7 +295,7 @@ func registerIncidentStart(s *server.MCPServer, h *Handler) {
 
 func registerIncidentEnd(s *server.MCPServer, h *Handler) {
 	tool := mcpgo.NewTool("incident_end",
-		mcpgo.WithDescription("Close an incident. Persists the end timestamp and optional verdict; returns saved=true on success."),
+		mcpgo.WithDescription("Close an incident. Persists the end timestamp and optional verdict; returns saved=true on success. With emit_scenario=true, also writes scenarios/<incident_id>.yaml next to the model -- the incident's facts and the engine's conclusion as an `mgtt simulate` regression test -- and returns scenario_path, scenario_yaml and scenario_passes (or scenario_warning when nothing was written: no facts, or the file already exists)."),
 		mcpgo.WithString("incident_id",
 			mcpgo.Required(),
 			mcpgo.Description("id returned by incident_start"),
@@ -303,13 +303,17 @@ func registerIncidentEnd(s *server.MCPServer, h *Handler) {
 		mcpgo.WithString("verdict",
 			mcpgo.Description("optional human or agent note recording the conclusion"),
 		),
+		mcpgo.WithBoolean("emit_scenario",
+			mcpgo.Description("write this incident as a simulate scenario next to the model; never overwrites an existing file"),
+		),
 		rawOutput(IncidentEndOutputSchema),
 	)
 	s.AddTool(tool, dispatch("incident_end",
 		func(req mcpgo.CallToolRequest) IncidentEndParams {
 			return IncidentEndParams{
-				IncidentID: req.GetString("incident_id", ""),
-				Verdict:    req.GetString("verdict", ""),
+				IncidentID:   req.GetString("incident_id", ""),
+				Verdict:      req.GetString("verdict", ""),
+				EmitScenario: req.GetBool("emit_scenario", false),
 			}
 		},
 		h.IncidentEnd,

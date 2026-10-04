@@ -5,6 +5,7 @@ package providersupport
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,3 +79,30 @@ func TestInvokeDiscover_InvalidJSON(t *testing.T) {
 }
 
 var _ = provider.DiscoveryResult{}
+
+// The SDK's refusal ("no RegisterDiscover call", or an SDK without the
+// subcommand) is ErrNoDiscover; a discovery that ran and failed is not.
+func TestInvokeDiscover_ClassifiesNoDiscover(t *testing.T) {
+	cases := []struct {
+		name   string
+		stderr string
+		want   bool
+	}{
+		{"not registered", "discover: this provider does not implement discovery (no RegisterDiscover call)", true},
+		{"old sdk", "unknown command: discover", true},
+		{"backend failure", "discover: backend API timeout", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "stub")
+			script := "#!/bin/sh\necho '" + tc.stderr + "' >&2\nexit 1\n"
+			if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_, err := InvokeDiscover(context.Background(), path)
+			if got := errors.Is(err, ErrNoDiscover); got != tc.want {
+				t.Errorf("errors.Is(ErrNoDiscover) = %v, want %v (err: %v)", got, tc.want, err)
+			}
+		})
+	}
+}

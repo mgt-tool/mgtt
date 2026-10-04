@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
+	"github.com/mgt-tool/mgtt/internal/simulate"
 
 	"github.com/spf13/cobra"
 )
@@ -46,7 +48,7 @@ func newIncidentStartCmd() *cobra.Command {
 }
 
 func newIncidentEndCmd() *cobra.Command {
-	var suggestScenarios bool
+	var suggestScenarios, emitScenario bool
 	cmd := &cobra.Command{
 		Use:   "end",
 		Short: "End the current incident",
@@ -61,10 +63,16 @@ func newIncidentEndCmd() *cobra.Command {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: --suggest-scenarios: %v\n", err)
 				}
 			}
+			if emitScenario {
+				if err := emitIncidentScenario(cmd.OutOrStdout(), inc); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: --emit-scenario: %v\n", err)
+				}
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&suggestScenarios, "suggest-scenarios", false, "emit a scenarios patch file proposing new chains based on this incident")
+	cmd.Flags().BoolVar(&emitScenario, "emit-scenario", false, "write scenarios/<incident-id>.yaml next to the model: this incident's facts and the engine's conclusion, as a simulate regression test")
 	return cmd
 }
 
@@ -177,6 +185,33 @@ func emitScenarioSuggestions(out io.Writer, inc *incident.Incident) error {
 		return fmt.Errorf("close %s: %w", patchPath, err)
 	}
 	fmt.Fprintf(out, "wrote %s — review, merge into %s, and run `mgtt model validate --write-scenarios` to regenerate.\n", patchPath, scenarios.SiblingPath(modelPath))
+	return nil
+}
+
+// emitIncidentScenario is the body of `mgtt incident end --emit-scenario`.
+// It records the incident as a simulate scenario next to its model (found
+// the way --suggest-scenarios finds it) and reports whether the written
+// file passes. An existing file is returned as an error, which the caller
+// prints as a warning.
+func emitIncidentScenario(out io.Writer, inc *incident.Incident) error {
+	rec, err := simulate.RecordIncident(inc, func() (*model.Model, *providersupport.Registry, string, error) {
+		return suggestionLoaderHook(inc.Model)
+	})
+	if errors.Is(err, simulate.ErrNoFacts) {
+		fmt.Fprintln(out, err)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if rec.Result.Pass {
+		fmt.Fprintf(out, "wrote %s — passes; commit it to keep this diagnosis under test\n", rec.Path)
+		return nil
+	}
+	// The expectation came from running these same facts, so a failure
+	// here means the YAML round-trip changed what simulate sees.
+	fmt.Fprintf(out, "wrote %s — but it FAILS on replay; simulate disagrees with the run that wrote it, please report this:\n", rec.Path)
+	renderSimulateResult(out, rec.Result)
 	return nil
 }
 

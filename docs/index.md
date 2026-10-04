@@ -1,117 +1,61 @@
 ![mgtt](images/mgtt_full_lockup.png)
 
-Your architecture diagram is accurate the day it's drawn and lies a little more every day after. So when something breaks at 3am — and the person who built the system is asleep — you open three terminals and start guessing.
+Architecture diagrams go stale, and at 3am the person who drew one is asleep. **mgtt turns that diagram into a YAML model and runs one engine over it at every stage of a system's life.**
 
-**mgtt makes that diagram executable: you describe your system once as a single YAML model, and mgtt runs that one model two ways — as a test in CI (`mgtt simulate`) and as your incident responder at 3am (`mgtt diagnose`).**
-
-Same model both times, so it can't quietly drift out of sync with production. It's TDD for your architecture; every postmortem becomes a regression test.
-
-<div class="approach" markdown>
-
-- **Describe once.** Your system's dependencies in a single YAML model.
-- **Walk the graph.** At 3am, the engine probes components in order of information value and eliminates healthy branches.
-- **Know what's next.** Always — and why.
-
-</div>
-
-Press Y at each step yourself, or hand the loop to an AI agent — same interface either way.
-
-## See it in action
-
-### Troubleshooting at 3am: `mgtt diagnose`
-
-This is mgtt's reason for being. Alert fires. You trigger `mgtt diagnose` — from a GitLab/GitHub Actions job, a Slack slash-command, an LLM agent, or your laptop — and get a structured report back:
-
-```
-$ mgtt diagnose --suspect api --max-probes 10
-
-  ▶ probe nginx upstream_count       ✗ unhealthy
-  ▶ probe api ready_replicas         ✗ unhealthy
-  ▶ probe rds available              ✓ healthy  ← eliminated
-  ▶ probe frontend ready_replicas    ✓ healthy  ← eliminated
-
-  Root cause: api.degraded
-  Chain:      nginx ← api
-  Probes run: 4/10
+```mermaid
+graph LR
+  M[model] --> S[simulate in CI]
+  S --> D[diagnose at 3am<br/>you or an AI agent]
+  D --> R[retrospective:<br/>incident becomes a scenario]
+  R --> S
 ```
 
-> **4 components probed. 2 eliminated. Root cause named.** The engine ranks probes by information value, so every call moves the answer forward. You didn't need to know the system — the model knew it for you. Partial visibility (RBAC refusals, transient throttles) surfaces as a visible flag in the report rather than aborting the session.
+## Model
 
-Failure chains are pre-enumerated into a committed `scenarios.yaml` at design time, so diagnose eliminates whole branches before running a probe.
+You list components, what each depends on, and what healthy means. Types come from providers (Kubernetes, AWS, Docker, Terraform, Tempo, Quickwit), so a `kubernetes.deployment` already knows its facts and how to probe them.
 
-[Full troubleshooting walkthrough](concepts/troubleshooting.md) | [`mgtt diagnose` reference](concepts/troubleshooting.md#autopilot-mode-mgtt-diagnose) | [scenarios.yaml](reference/scenarios-yaml.md)
+```yaml
+components:
+  api:
+    type: kubernetes.deployment
+    depends:
+      - on: rds
+  rds:
+    type: aws.rds_instance
+```
 
-### Simulation in CI: catch model drift before it matters (`mgtt simulate`)
+## Simulate in CI
 
-Before the system is even running, `mgtt simulate` verifies the model's reasoning with hand-authored scenarios — a tiny YAML assertion like *"if rds goes down and api crash-loops, the engine should blame rds, not api"* — and asserts the engine concludes the same thing. No live system, no credentials, no cluster access. Runs anywhere Go runs.
-
-Wire it into every PR for:
-
-- **Model drift detection** — when the real system evolves (new services, renamed components, changed dependencies), a stale model silently drifts away from reality. A failing scenario tells you *before* the model is needed at 3am.
-- **Architecture unit tests** — each scenario is a declarative assertion. Refactor the model, break a conclusion, the suite fails. Safe renames, safe dependency moves.
-- **Design-time validation** — write the model before the system exists; reason about dependency holes before building them. The engine treats your design as executable logic.
-- **Regression harness** — the next time a real incident happens, encode it as a scenario. The engine must now identify that chain forever. Your postmortems become tests.
+A scenario injects facts and states the expected conclusion: *"rds is down and api is crash-looping. Blame rds, not api."* `mgtt simulate` checks the engine agrees. It needs no cluster and no credentials. If someone drops a dependency or a health rule, the PR fails before the model can mislead anyone in an incident.
 
 ```
 $ mgtt simulate --all
-
-  rds unavailable                          ✓ passed
-  api crash-loop independent of rds        ✓ passed
-  frontend crash-looping, api healthy      ✓ passed
-  all components healthy                   ✓ passed
-
-  4/4 scenarios passed
+  api crash-loop, rds healthy              ✗ FAILED
+    expected: root_cause=api path=[nginx, api] eliminated=[rds, frontend]
+    actual:   root_cause=api path=[nginx, api] eliminated=[frontend]
 ```
 
-[Full simulation walkthrough](concepts/simulation.md)
+## Diagnose at 3am
 
----
+`mgtt diagnose` runs read-only probes against the live system and keeps narrowing until one failure chain is left:
 
-## What mgtt gives you
+```
+Root cause: rds
+Scenario:   rds.stopped → api.crashed → nginx.degraded
+Probes run: 7/20   Time: 3.2s/5m0s
+```
 
-One model, two moments:
+It doesn't need the person who built the system, because the model already holds that knowledge. When a probe is refused (RBAC, IAM) or times out, the report says `Cannot rule out: rds`. It never counts what it couldn't see as healthy.
 
-- **Model once** — describe components, dependencies, and what "healthy" means in YAML.
-- **Simulate in CI** — inject synthetic failures; assert the engine reasons correctly; catch model drift before it matters.
-- **Troubleshoot at 3am** — `mgtt diagnose` gives you a structured root-cause report; run it from CI, Slack, an AI agent, or your laptop.
+**AI agents** get the same engine over MCP. They can run the diagnosis within your limits (read-only providers only, a cap on probes per incident, whether write probes pause or are refused). They can also draft the model and its scenarios from your providers' real vocabulary, checking both before you review. See [AI agents](guides/agents.md).
 
-|             | Design time     | At 3am                                               |
-|-------------|-----------------|------------------------------------------------------|
-| Command     | `mgtt simulate` | `mgtt diagnose`                                      |
-| Facts from  | scenario YAML   | real probes                                          |
-| Driven by   | CI pipeline     | on-call engineer, CI job, Slack bot, or AI agent     |
-| Output      | pass/fail       | root cause + chain + eliminated components           |
+## Retrospective
 
-`mgtt plan` exists too — same engine, interactive press-Y mode for debugging models or teaching. Not the daily driver.
+```
+$ mgtt incident end --emit-scenario
+wrote scenarios/inc-20261004-0814-001.yaml — passes; commit it to keep this diagnosis under test
+```
 
-## Get started
+The facts mgtt saw during the incident become a scenario. After you commit it, every future PR must still produce that diagnosis.
 
-- [Quick Start](getting-started/quickstart.md) — complete end-to-end example: model, scenarios, simulate
-- [Install](getting-started/install.md) — one-liner, Go, Docker, from source
-
-## Learn
-
-- [How It Works](concepts/how-it-works.md) — the constraint engine and dependency graph
-- [Simulation walkthrough](concepts/simulation.md) — design-time model validation
-- [Troubleshooting walkthrough](concepts/troubleshooting.md) — runtime incident response
-
-## Using Providers
-
-- [Overview](concepts/using-providers.md) — how mgtt invokes providers at probe time
-- [Install Methods](concepts/provider-install-methods.md) — git build vs. pre-built Docker image
-- [Names and Versions](concepts/provider-fqn-and-versions.md) — FQN + version constraint resolution
-- [Image Capabilities](reference/image-capabilities.md) — `needs:` vocabulary and operator overrides
-- [Registry](reference/registry.md) — browse official + community providers, copy the install line
-
-## Reference
-
-- [Model Schema](reference/model-schema.md) — every field in `system.model.yaml`
-- [Scenario Schema](reference/scenario-schema.md) — hand-authored `scenarios/*.yaml` for `mgtt simulate`
-- [`scenarios.yaml`](reference/scenarios-yaml.md) — the generated sidecar `mgtt diagnose` consumes
-- [Type Catalog](reference/type-catalog.md) — all provider types, facts, states, and failure modes
-- [CLI Reference](reference/cli.md) — every command
-- [Full Specification](specs.md) — the v1.0 spec index + MCP + design principles
-
-## Extend
-
-- [Writing Providers](providers/overview.md) — teach mgtt about your technology
+**Start:** [Quick start](getting-started/quickstart.md) · [How it works](concepts/how-it-works.md)

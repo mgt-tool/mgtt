@@ -1,126 +1,41 @@
-# How It Works
-
-mgtt encodes your system's dependency graph in a YAML model. A constraint engine walks the graph, probing components and eliminating healthy branches until one failure path remains.
-
-The same model and engine serve two phases — the only difference is where facts come from.
-
-## Architecture at a glance
+# How it works
 
 ![mgtt architecture](../images/architecture.svg)
 
-<!-- Source: docs/images/architecture.d2 — render with `d2 docs/images/architecture.d2 docs/images/architecture.svg` -->
+The **engine** only reasons. It has no network access and no credentials. **Providers** do the probing: each one knows a backend (kubectl, the AWS CLI, Docker, …) and turns its output into typed facts. You install them from the [registry](../reference/registry.md). People and CI use the CLI; agents use [MCP](../guides/agents.md). Neither reaches a backend except through a provider.
 
+## The model
 
-Four things, four boundaries:
+- **Components** have a provider **type**. The type supplies **facts** (observable values such as `ready_replicas`), **states** derived from those facts (`crashed: restart_count > 5 & ready_replicas < desired_replicas`), default **healthy** rules, and **failure modes**, meaning which downstream effects each bad state can cause.
+- **Dependencies** carry those effects: `api` depends on `rds`, so `rds.stopped` can cause `api.crashed`. A dependency can be conditional (`while: selector_value == blue`), or a redundancy group (`on: [web-a, web-b]`, `need: 1`) that holds while enough members are healthy.
 
-- **mgtt core** — the engine, the model, the scenarios, the incident store. Pure reasoning. Never opens a socket, never reads a credential. Two entry points: the CLI for humans and CI, the MCP server for LLM agents (same engine underneath).
-- **Adapters** (providers) — plugins that cross the trust boundary. Each adapter knows one backend's command-line or SDK and how to parse its output into typed facts. Credentials, RBAC, IAM — all live here, never in mgtt core.
-- **Registry** — the published index (`registry.yaml`, served off GitHub Pages, SemVer-tagged). `mgtt provider install` resolves a ref, fetches the adapter (git source or docker image), verifies the manifest, and lands it under `$MGTT_HOME/providers/` where the runtime discovers it.
-- **System under test** — the real production thing your model claims to describe. Ingress, app replicas, caches, queues, databases, tracing backends. Adapters touch it; mgtt core is strictly upstream.
+## Failure chains
 
-Two fact sources, same engine:
+Every failure the model allows is a chain, `root state → effect → … → symptom`. `mgtt model validate --write-scenarios` saves them to `scenarios.yaml` in compact form: the graph of failure states, not one entry per chain. Even a 20-component model fits in about 10 KB. Commit the file. Validate rejects a stale copy, so a model change and its consequences land in the same diff. Cost grows with depth, not component count. Diagnosis expands every chain into memory: about 400k chains for six tiers of fan-out 2, and about 2.4M for seven, which takes seconds per decision. Past that depth, set `meta.scenarios: none`, and `diagnose` walks the dependency graph instead.
 
-- **Simulation mode** — `scenarios.yaml` feeds synthetic facts in CI. No adapter runs, the SUT isn't contacted, the test asserts the engine's conclusion.
-- **Diagnosis mode** — adapters run real probes against the SUT and append facts as they land. The engine re-plans after each one, narrowing the path tree until a root cause emerges.
+## Diagnose: narrowing to one chain
 
-Operators — human or LLM — only ever talk to CLI / MCP. Never directly to an adapter, never to the SUT. That boundary is what makes the engine safe to hand to an agent on a CI runner.
+Every chain starts out possible. After each probe the engine discards the chains that contradict what it saw, then picks the next probe:
 
-## On this page
+1. it prefers the shortest chains still possible (fewest moving parts);
+2. among those, chains that touch a `--suspect` come first;
+3. it prefers the probe that rules out the most other chains;
+4. it walks a chain from the symptom inward.
 
-- [Architecture at a glance](#architecture-at-a-glance) — mgtt core, adapters, registry, system under test
-- [The three artifacts](#the-three-artifacts) — model, facts, providers
-- [The constraint engine](#the-constraint-engine) — how reasoning narrows the search
-- [Two modes, same model](#two-modes-same-model) — design-time vs runtime
-- [Probe ranking](#probe-ranking) — what to check next, and why
-- [Providers](#providers) — where backend knowledge lives
+It stops when one chain remains (the root cause), when none remain (the failure isn't in the model; `--suggest-scenarios` will say so), or when the probe budget or deadline runs out. The trail of facts is saved to the incident, so you can pause a session and pick it up later.
 
----
+## Simulate: same engine, injected facts
 
-## The three artifacts
+`mgtt simulate` runs exactly this reasoning over facts from a scenario file instead of probes. That's why a passing scenario counts as evidence about 3am: the code that passes the test is the code that will run the incident. `mgtt simulate --from-scenarios` goes further and checks that the engine identifies every enumerated chain from its own symptoms.
 
-```
-system.model.yaml       you write once, version controlled
-system.state.yaml       mgtt writes during incidents, append-only
-providers/              community plugins, one per technology
-```
+## What the engine won't assume
 
-The model describes the system. The state file records observations. Providers supply the vocabulary (types, facts, states) and the commands to collect facts from live systems.
+- **Unknown is not healthy.** A probe that is refused (`forbidden`) or times out (`transient`) leaves its component in play. The report lists it under `Cannot rule out`, and the result is flagged as partial visibility.
+- **Missing is a failure.** If every probe of a component returns `not_found`, the component is absent, and the report names it as missing.
+- **Redundancy isn't an outage.** A failed member of a group that still holds is reported as `Redundancy degraded`, not as the root cause.
 
-## The constraint engine
+Scenarios can assert each case with `unresolved:`, `cannot_rule_out:`, `not_eliminated:` and `redundancy_degraded:`.
 
-The engine is mgtt's core. It takes four inputs:
+## Beyond scenarios
 
-1. **Components** — from the model
-2. **Failure modes** — from the providers
-3. **Propagation rules** — from the dependency graph
-4. **Current facts** — from scenarios (simulation) or live probes (troubleshooting)
-
-It produces a **ranked failure path tree**: which paths are still possible, which are eliminated, and which single probe would narrow the search the most.
-
-The engine is pure — no I/O, no credentials, no side effects. The same engine powers both `mgtt simulate` and `mgtt diagnose`. Only the source of facts differs.
-
-For the full internals (strategies, probe-selection heuristics, termination conditions, complexity math), see the **[Engine Reference](../reference/engine.md)**. This page stays at concept level.
-
-## Two modes, same model
-
-| | Simulation | Troubleshooting |
-|---|---|---|
-| Command | `mgtt simulate` | `mgtt diagnose` |
-| Facts from | Scenario YAML (authored) | Live probes via installed providers |
-| Needs | Nothing | Environment credentials |
-| Runs in | CI pipeline | On-call laptop, CI job, Slack bot, or AI agent |
-| Output | Pass/fail assertions | Structured root-cause report |
-
-### Simulation (`mgtt simulate`)
-
-You author scenario files that inject synthetic facts. The engine reasons over them and you assert the conclusion. This tests the **model's reasoning**, not the system's behavior.
-
-```
-model.yaml + scenario.yaml → engine → pass/fail
-```
-
-If someone removes a dependency from the model, the scenario fails. The PR is blocked. The blind spot never reaches production.
-
-[Full simulation walkthrough →](simulation.md)
-
-Scenarios cover the failures you wrote down. Checking *every* configuration the
-model can reach is a separate pipeline — still design time, still no cluster and
-no credentials — built from `mgtt model export` and two external tools.
-
-[Verification →](verification.md)
-
-### Troubleshooting (`mgtt diagnose`)
-
-The engine walks the dependency graph from the outermost component inward. At each step it picks the single highest-value, lowest-cost probe, runs it, and continues until one failure path remains or the probe budget is hit.
-
-```
-model.yaml + live probes → engine → root cause
-```
-
-`mgtt plan` is the interactive press-Y variant for debugging models or teaching — same engine, prompts at each step.
-
-[Full troubleshooting walkthrough →](troubleshooting.md)
-
-## Probe ranking
-
-Not all probes are equal. The engine ranks each candidate by:
-
-1. **Information value** — how many failure paths does this probe eliminate?
-2. **Cost** — how expensive/slow is this probe? (low/medium/high, declared by the provider)
-3. **Access** — what credentials or permissions does it need?
-
-The engine always suggests the probe that eliminates the most uncertainty for the least cost. See [Engine Reference — Probe selection heuristics](../reference/engine.md#probe-selection-heuristics) for the exact algorithm.
-
-## Providers
-
-Providers teach mgtt about technologies. Each provider defines:
-
-- **Types** — component types (e.g., `deployment`, `rds_instance`)
-- **Facts** — observable properties per type (e.g., `ready_replicas`, `available`)
-- **States** — derived from facts (e.g., `live`, `degraded`, `stopped`)
-- **Failure modes** — what downstream effects each non-healthy state can cause
-- **Probes** — the actual commands to collect facts from live systems
-
-Providers for each technology are installed separately. See the [Provider Registry](../reference/registry.md) for the current catalog — Kubernetes, AWS, Docker, Terraform, Tempo, Quickwit, and anything else the community has authored. Writing your own is a [standalone guide](../providers/overview.md).
-
-[Provider Type Catalog →](../reference/type-catalog.md) | [Writing Providers →](../providers/overview.md)
+Scenarios check the failures you wrote down. To check every reachable configuration for contradictions, use `mgtt model export`: it emits the fully resolved model as JSON for external checkers, such as [mgtt2writ](https://github.com/mgt-tool/mgtt2writ).

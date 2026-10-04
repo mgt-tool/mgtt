@@ -6,6 +6,7 @@ Wired in mkdocs.yml under `hooks:`. Runs once per build via on_pre_build.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -35,21 +36,16 @@ REGISTRY_MD_PREAMBLE = """# Provider Registry
 
 <!--
 GENERATED FILE — do not edit by hand.
-Source: docs/registry.yaml (minimal name→URL map) + each provider's upstream
-manifest.yaml. Rebuilt by docs/_hooks/registry_generator.py on every
-mkdocs build.
+Rebuilt by docs/_hooks/registry_generator.py on every mkdocs build.
 -->
 
-Community-maintained providers for mgtt.
-
-The single source of truth for the name→URL map is
-[`docs/registry.yaml`](https://github.com/mgt-tool/mgtt/blob/main/docs/registry.yaml).
-Per-provider detail below is pulled from each repo's `manifest.yaml` at
-its latest `v*` tag on every docs build.
-
-Replace `<digest>` shown in Install commands below with the current
-`sha256:…` from your own `docker buildx imagetools inspect` if you need
-to double-check.
+Community-maintained providers for mgtt, each pulled from its repo's
+`manifest.yaml` at the latest `v*` tag.
+The name→URL map in
+[`docs/registry.yaml`](https://github.com/mgt-tool/mgtt/blob/main/docs/registry.yaml)
+is the single source of truth.
+Install a provider by name, by `owner/name@version`, by repo URL, or as a
+digest-pinned image, using any line from its card below.
 
 ---
 
@@ -81,9 +77,23 @@ def _github_api(path: str) -> bytes:
     return _http_get(f"{_github_base()}{path}", headers={"Accept": "application/vnd.github+json"})
 
 
+def _cache_namespace() -> str:
+    """Prefix cache keys with the upstream they came from.
+
+    Without this, a test run against the local stub server (which sets
+    MGTT_REGISTRY_*_BASE) writes stub responses under the same keys a real
+    build reads, and the next real build within CACHE_TTL_SECONDS renders
+    stub data for every provider.
+    """
+    overrides = [os.environ.get(v, "") for v in ("MGTT_REGISTRY_GITHUB_BASE", "MGTT_REGISTRY_GHCR_BASE")]
+    if not any(overrides):
+        return ""
+    return "stub-" + hashlib.sha256("|".join(overrides).encode()).hexdigest()[:12] + "-"
+
+
 def cached_fetch(key: str, loader: Callable[[], str]) -> str:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    path = CACHE_DIR / key
+    path = CACHE_DIR / (_cache_namespace() + key)
     if path.exists() and time.time() - path.stat().st_mtime < CACHE_TTL_SECONDS:
         return path.read_text()
     data = loader()
@@ -360,9 +370,8 @@ def render_card(*, entry_name: str, repo_url: str, image_ref: str,
         f"mgtt provider install {repo_url}",
     ]
     if not skip_image:
-        # Digest unavailable (private GHCR package, etc.) — leave the
-        # `<digest>` placeholder; the preamble tells operators to
-        # substitute their own `docker buildx imagetools inspect` output.
+        # Digest unavailable (private GHCR package, etc.) — emit a
+        # visible `<digest>` placeholder rather than an unpinned ref.
         suffix = f"@{digest}" if digest else "@<digest>"
         parts.append(f"mgtt provider install --image {image_ref}:{info['version']}{suffix}")
     parts += ["```", "", "---"]
@@ -407,8 +416,8 @@ def _render_entry(name: str, entry: dict, offline: bool) -> str:
 
 def _fetch_digest_soft(name: str, image_ref: str, version: str) -> str:
     """Private GHCR packages, token-exchange failures, etc. shouldn't drop
-    the whole card — the preamble already tells operators to fill in their
-    own digest. Swallow and log; return "" so render_card emits <digest>."""
+    the whole card. Swallow and log; return "" so render_card emits a
+    visible <digest> placeholder."""
     try:
         return fetch_image_digest(image_ref, version)
     except Exception as exc:  # noqa: BLE001

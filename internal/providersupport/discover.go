@@ -6,11 +6,26 @@ package providersupport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/mgt-tool/mgtt/sdk/provider"
 )
+
+// ErrNoDiscover marks a provider that has no discovery to run, as opposed
+// to one whose discovery ran and failed. It is recognised from the SDK's
+// own refusal messages: a provider that never called RegisterDiscover,
+// and one built on an SDK that predates the subcommand.
+var ErrNoDiscover = errors.New("provider has no discover")
+
+// noDiscoverMarkers are the stderr lines sdk/provider prints when it has
+// no discovery to run.
+var noDiscoverMarkers = []string{
+	"does not implement discovery",
+	"unknown command: discover",
+}
 
 // InvokeDiscover runs `<binaryPath> discover` and parses the JSON
 // output into a DiscoveryResult. Non-zero exit from the provider is
@@ -24,6 +39,11 @@ func InvokeDiscover(ctx context.Context, binaryPath string) (provider.DiscoveryR
 		stderrMsg := ""
 		if ee, ok := err.(*exec.ExitError); ok {
 			stderrMsg = string(ee.Stderr)
+		}
+		for _, marker := range noDiscoverMarkers {
+			if strings.Contains(stderrMsg, marker) {
+				return provider.DiscoveryResult{}, fmt.Errorf("%w (%s)", ErrNoDiscover, strings.TrimSpace(stderrMsg))
+			}
 		}
 		return provider.DiscoveryResult{}, fmt.Errorf("discover %s: %w (stderr: %s)", binaryPath, err, stderrMsg)
 	}

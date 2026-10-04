@@ -6,10 +6,14 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mgt-tool/mgtt/internal/providersupport"
 )
 
 // End-to-end: empty home, empty model output, exit 0.
@@ -148,5 +152,20 @@ func installStubProviderInline(t *testing.T, home, name, discoverJSON string) {
 		"exit 1\n"
 	if err := os.WriteFile(filepath.Join(dir, "provider"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A provider with no discovery and one whose discovery failed must not
+// read the same: the second is an operator problem worth the error.
+func TestReportDiscoverFailures_DistinguishesNoDiscoverFromFailure(t *testing.T) {
+	var buf bytes.Buffer
+	reportDiscoverFailures(&buf, map[string]error{
+		"docker": fmt.Errorf("%w (unknown command: discover)", providersupport.ErrNoDiscover),
+		"aws":    errors.New("discover: context deadline exceeded"),
+	})
+	want := "  aws provider → discover failed (skipped): discover: context deadline exceeded\n" +
+		"  docker provider → no Discover() support (skipped)\n"
+	if buf.String() != want {
+		t.Errorf("got:\n%s\nwant:\n%s", buf.String(), want)
 	}
 }

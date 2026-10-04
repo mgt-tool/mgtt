@@ -133,4 +133,4 @@ writ's verbs — naming the violating situations rather than counting them,
 diffing two versions of the architecture, and acknowledging which moves are
 allowed to touch which law.
 
-See [Advanced verification](../../docs/concepts/verification.md#advanced-verification-with-writ).
+See [mgtt2writ](https://github.com/mgt-tool/mgtt2writ).

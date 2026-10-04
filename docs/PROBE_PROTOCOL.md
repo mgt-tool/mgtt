@@ -72,10 +72,9 @@ When mgtt sets `MGTT_DEBUG=1` in the runner's environment, the provider MAY emit
 
 Providers should be validated with:
 
-    mgtt provider validate <name>           # static checks (always)
-    mgtt provider validate --live <name>    # exercises the runner against a real backend
+    mgtt provider validate <name>           # static checks, safe in any CI
 
-The static check is safe in any CI. The `--live` check requires a live backend and belongs in **the provider's own CI**, not in mgtt core CI. Core does not assume any backend is reachable.
+Checks against a live backend belong in the provider's own CI; core assumes no backend is reachable.
 
 ## Read-only contract
 

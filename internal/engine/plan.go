@@ -48,8 +48,11 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 		Paths:      alive,
 		Eliminated: eliminated,
 		States:     derivation,
-		// Stage 4 — deepest surviving path's tail is the root cause.
-		RootCause: pickRootCause(alive),
+		// Stage 4 — the deepest surviving path whose tail is observed
+		// unhealthy names the root cause.
+		RootCause: pickRootCause(alive, func(c string) bool {
+			return strategy.ComponentVerdict(m, reg, store, c) == strategy.Unhealthy
+		}),
 	}
 	// Stage 5 — strategy dispatch.
 	tree.Suggested = suggestNextProbe(m, reg, store, suspects)
@@ -64,6 +67,16 @@ func splitPaths(paths []Path, m *model.Model, reg *providersupport.Registry, sto
 		deepest := p.Components[len(p.Components)-1]
 		deepestState := derivation.ComponentStates[deepest]
 
+		// A path explains the symptoms only through its links, so a link
+		// proven healthy refutes it -- unless its tail is itself seen
+		// broken, which stays a finding (a standalone failure) whether or
+		// not anything above it noticed.
+		tailBroken := strategy.ComponentVerdict(m, reg, store, deepest) == strategy.Unhealthy
+		if link := healthyLink(p, m, reg, store); link != "" && !tailBroken {
+			p.Reason = fmt.Sprintf("%s healthy: a failure of %s cannot pass through it", link, deepest)
+			eliminated = append(eliminated, p)
+			continue
+		}
 		if !isEliminated(m, reg, store, deepest) {
 			alive = append(alive, p)
 			continue
@@ -87,6 +100,17 @@ func splitPaths(paths []Path, m *model.Model, reg *providersupport.Registry, sto
 	return alive, eliminated
 }
 
+// healthyLink returns the first component before p's tail whose facts
+// prove it healthy, or "" when no link of the path is proven healthy.
+func healthyLink(p Path, m *model.Model, reg *providersupport.Registry, store *facts.Store) string {
+	for _, c := range p.Components[:len(p.Components)-1] {
+		if strategy.ComponentVerdict(m, reg, store, c) == strategy.Healthy {
+			return c
+		}
+	}
+	return ""
+}
+
 // hasUnhealthyUpstream reports whether any ancestor of the deepest
 // component on p has facts AND is in a non-default state.
 func hasUnhealthyUpstream(p Path, m *model.Model, reg *providersupport.Registry, store *facts.Store, derivation *state.Derivation) bool {
@@ -100,25 +124,32 @@ func hasUnhealthyUpstream(p Path, m *model.Model, reg *providersupport.Registry,
 	return false
 }
 
-// pickRootCause returns the deepest-component name on the longest alive
-// path. Empty string when there are no alive paths.
+// pickRootCause returns the tail of the longest alive path whose tail is
+// observed unhealthy. An alive path ending in a component nobody has
+// observed keeps the engine probing inward, but names nothing: blaming
+// the deepest unprobed component would turn "not yet looked at" into a
+// verdict. Empty string when no alive path ends in an unhealthy component.
 //
 // It must NOT reorder alive: that slice shares its backing array with
 // PathTree.Paths, which enumeratePaths has already sorted into
 // declaration order for deterministic output. A single max-scan keeping
 // the first (declaration-order-earliest) longest path preserves that
 // ordering and breaks length ties deterministically.
-func pickRootCause(alive []Path) string {
-	if len(alive) == 0 {
-		return ""
-	}
-	best := alive[0]
-	for _, p := range alive[1:] {
-		if len(p.Components) > len(best.Components) {
-			best = p
+func pickRootCause(alive []Path, unhealthy func(string) bool) string {
+	best := -1
+	for i, p := range alive {
+		tail := p.Components[len(p.Components)-1]
+		if !unhealthy(tail) {
+			continue
+		}
+		if best < 0 || len(p.Components) > len(alive[best].Components) {
+			best = i
 		}
 	}
-	return best.Components[len(best.Components)-1]
+	if best < 0 {
+		return ""
+	}
+	return alive[best].Components[len(alive[best].Components)-1]
 }
 
 // suggestNextProbe runs the strategy dispatcher against the current

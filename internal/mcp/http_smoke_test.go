@@ -62,24 +62,24 @@ func TestHTTP_SmokeDiagnosisLoopWithBearerAuth(t *testing.T) {
 	}
 
 	var start IncidentStartResult
-	mustCallTool(t, client, "incident.start", map[string]any{
+	mustCallTool(t, client, "incident_start", map[string]any{
 		"model_ref": modelPath,
 		"id":        "smoke-inc",
 	}, &start)
 
 	var add FactAddResult
-	mustCallTool(t, client, "fact.add", map[string]any{
+	mustCallTool(t, client, "fact_add", map[string]any{
 		"incident_id": start.IncidentID,
 		"component":   "api",
 		"key":         "operator_says_healthy",
 		"value":       true,
 	}, &add)
 	if !add.Appended {
-		t.Error("fact.add over HTTP should report appended: true")
+		t.Error("fact_add over HTTP should report appended: true")
 	}
 
 	var snap IncidentSnapshotResult
-	mustCallTool(t, client, "incident.snapshot", map[string]any{
+	mustCallTool(t, client, "incident_snapshot", map[string]any{
 		"incident_id": start.IncidentID,
 	}, &snap)
 	if len(snap.Facts) != 1 {
@@ -87,12 +87,12 @@ func TestHTTP_SmokeDiagnosisLoopWithBearerAuth(t *testing.T) {
 	}
 
 	var end IncidentEndResult
-	mustCallTool(t, client, "incident.end", map[string]any{
+	mustCallTool(t, client, "incident_end", map[string]any{
 		"incident_id": start.IncidentID,
 		"verdict":     "smoke ok",
 	}, &end)
 	if !end.Saved {
-		t.Error("incident.end over HTTP should report saved: true")
+		t.Error("incident_end over HTTP should report saved: true")
 	}
 }
 

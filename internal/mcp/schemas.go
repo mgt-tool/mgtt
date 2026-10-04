@@ -134,7 +134,7 @@ const ProbeOutputSchema = `{
   "required":["status"]
 }`
 
-// ScenariosListOutputSchema is shared by scenarios.list and scenarios.alive.
+// ScenariosListOutputSchema is shared by scenarios_list and scenarios_alive.
 const ScenariosListOutputSchema = `{
   "type":"object",
   "properties":{

@@ -125,7 +125,7 @@ suite_mcp_probe() {
     printf '%s\n' \
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
       '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-      '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"incident.start","arguments":{"model_ref":"system.model.yaml","id":"inc-downstream"}}}'
+      '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"incident_start","arguments":{"model_ref":"system.model.yaml","id":"inc-downstream"}}}'
     await_reply 2
     printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"probe","arguments":{"incident_id":"inc-downstream","execute":true}}}'
     await_reply 3

@@ -8,7 +8,7 @@ import "sync"
 // Per-incident lock registry. Design §8.2 mandates "one writer per
 // incident at a time via sync.Mutex keyed by incident_id" — HTTP
 // transport dispatches each request in its own goroutine, so two
-// concurrent fact.add or probe calls on the same incident would race
+// concurrent fact_add or probe calls on the same incident would race
 // on facts.Store's maps without this serialization.
 //
 // Readers take RLock (Plan, FactsList, Scenarios*, IncidentSnapshot);

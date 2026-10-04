@@ -32,6 +32,11 @@ type Config struct {
 	OnWrite               string // "pause" | "run" | "fail"
 	MaxExecutePerIncident int
 	ProbeTimeoutSeconds   int
+	// LegacyToolNames also registers the pre-0.4 dotted tool names
+	// (incident.start, ...) as deprecated aliases. Off by default: some
+	// clients and model APIs reject a tool list holding any name outside
+	// [A-Za-z0-9_-], so the aliases are opt-in for one release.
+	LegacyToolNames bool
 }
 
 // Run boots the MCP server with the given config. Blocks until the
@@ -49,7 +54,7 @@ func Run(cfg Config) error {
 // exact same server Run would expose on a transport.
 func buildServer(cfg Config) *server.MCPServer {
 	h := NewHandler(cfg)
-	s := server.NewMCPServer("mgtt", cfg.Version)
+	s := server.NewMCPServer("mgtt", cfg.Version, server.WithInstructions(serverInstructions))
 
 	registerAbout(s, h)
 	registerIncidentStart(s, h)
@@ -61,8 +66,44 @@ func buildServer(cfg Config) *server.MCPServer {
 	registerScenariosList(s, h)
 	registerScenariosAlive(s, h)
 	registerIncidentSnapshot(s, h)
+	if cfg.LegacyToolNames {
+		registerLegacyAliases(s)
+	}
 
 	return s
+}
+
+// serverInstructions is the workflow an agent needs before its first call.
+// Clients may drop it, so every step is also in the tool descriptions.
+const serverInstructions = `mgtt diagnoses a running system against its committed model.
+Workflow: incident_start with the model path, then loop: plan (what to check next and why), probe with execute=true (or fact_add for a fact you gathered yourself), until plan names a root cause or reports none. incident_snapshot summarises the state; incident_end closes it.
+A probe that returns forbidden or transient recorded an unknown fact: the component stays a suspect, it is not cleared.
+about reports the safety posture: read-only enforcement, the write-probe policy and the per-incident probe budget.`
+
+// legacyToolNames maps each tool renamed in 0.4 to its old dotted name.
+var legacyToolNames = map[string]string{
+	"incident_start":    "incident.start",
+	"incident_end":      "incident.end",
+	"incident_snapshot": "incident.snapshot",
+	"fact_add":          "fact.add",
+	"facts_list":        "facts.list",
+	"scenarios_list":    "scenarios.list",
+	"scenarios_alive":   "scenarios.alive",
+}
+
+// registerLegacyAliases registers each dotted name as a copy of the tool
+// it was renamed to, marked deprecated in its description.
+func registerLegacyAliases(s *server.MCPServer) {
+	for name, legacy := range legacyToolNames {
+		t := s.GetTool(name)
+		if t == nil {
+			continue
+		}
+		alias := *t
+		alias.Tool.Name = legacy
+		alias.Tool.Description = "Deprecated alias of " + name + ", removed in the next minor release. " + t.Tool.Description
+		s.AddTools(alias)
+	}
 }
 
 // rawOutput wraps a schema constant as a json.RawMessage for
@@ -113,7 +154,7 @@ func registerAbout(s *server.MCPServer, h *Handler) {
 }
 
 func registerIncidentStart(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("incident.start",
+	tool := mcpgo.NewTool("incident_start",
 		mcpgo.WithDescription("Create a new incident bound to a model. Returns incident_id for subsequent tool calls."),
 		mcpgo.WithString("model_ref",
 			mcpgo.Required(),
@@ -127,7 +168,7 @@ func registerIncidentStart(s *server.MCPServer, h *Handler) {
 		),
 		rawOutput(IncidentStartOutputSchema),
 	)
-	s.AddTool(tool, dispatch("incident.start",
+	s.AddTool(tool, dispatch("incident_start",
 		func(req mcpgo.CallToolRequest) IncidentStartParams {
 			return IncidentStartParams{
 				ModelRef: req.GetString("model_ref", ""),
@@ -140,18 +181,18 @@ func registerIncidentStart(s *server.MCPServer, h *Handler) {
 }
 
 func registerIncidentEnd(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("incident.end",
+	tool := mcpgo.NewTool("incident_end",
 		mcpgo.WithDescription("Close an incident. Persists the end timestamp and optional verdict; returns saved=true on success."),
 		mcpgo.WithString("incident_id",
 			mcpgo.Required(),
-			mcpgo.Description("id returned by incident.start"),
+			mcpgo.Description("id returned by incident_start"),
 		),
 		mcpgo.WithString("verdict",
 			mcpgo.Description("optional human or agent note recording the conclusion"),
 		),
 		rawOutput(IncidentEndOutputSchema),
 	)
-	s.AddTool(tool, dispatch("incident.end",
+	s.AddTool(tool, dispatch("incident_end",
 		func(req mcpgo.CallToolRequest) IncidentEndParams {
 			return IncidentEndParams{
 				IncidentID: req.GetString("incident_id", ""),
@@ -163,7 +204,7 @@ func registerIncidentEnd(s *server.MCPServer, h *Handler) {
 }
 
 func registerFactAdd(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("fact.add",
+	tool := mcpgo.NewTool("fact_add",
 		mcpgo.WithDescription("Append an observation to an incident's fact store."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		mcpgo.WithString("component", mcpgo.Required()),
@@ -172,7 +213,7 @@ func registerFactAdd(s *server.MCPServer, h *Handler) {
 		mcpgo.WithString("note", mcpgo.Description("optional note on provenance")),
 		rawOutput(FactAddOutputSchema),
 	)
-	s.AddTool(tool, dispatch("fact.add",
+	s.AddTool(tool, dispatch("fact_add",
 		func(req mcpgo.CallToolRequest) FactAddParams {
 			return FactAddParams{
 				IncidentID: req.GetString("incident_id", ""),
@@ -187,13 +228,13 @@ func registerFactAdd(s *server.MCPServer, h *Handler) {
 }
 
 func registerFactsList(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("facts.list",
+	tool := mcpgo.NewTool("facts_list",
 		mcpgo.WithDescription("List facts recorded for an incident, optionally filtered to one component."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		mcpgo.WithString("component", mcpgo.Description("optional component filter")),
 		rawOutput(FactsListOutputSchema),
 	)
-	s.AddTool(tool, dispatch("facts.list",
+	s.AddTool(tool, dispatch("facts_list",
 		func(req mcpgo.CallToolRequest) FactsListParams {
 			return FactsListParams{
 				IncidentID: req.GetString("incident_id", ""),
@@ -244,36 +285,36 @@ func registerProbe(s *server.MCPServer, h *Handler) {
 }
 
 func registerScenariosList(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("scenarios.list",
+	tool := mcpgo.NewTool("scenarios_list",
 		mcpgo.WithDescription("Enumerate every failure chain the engine considers for this incident's model."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(ScenariosListOutputSchema),
 	)
-	s.AddTool(tool, dispatch("scenarios.list",
+	s.AddTool(tool, dispatch("scenarios_list",
 		incidentIDOnly(func(p *ScenariosListParams, id string) { p.IncidentID = id }),
 		h.ScenariosList,
 	))
 }
 
 func registerScenariosAlive(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("scenarios.alive",
+	tool := mcpgo.NewTool("scenarios_alive",
 		mcpgo.WithDescription("Subset of enumerated scenarios still consistent with the incident's facts."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(ScenariosListOutputSchema),
 	)
-	s.AddTool(tool, dispatch("scenarios.alive",
+	s.AddTool(tool, dispatch("scenarios_alive",
 		incidentIDOnly(func(p *ScenariosAliveParams, id string) { p.IncidentID = id }),
 		h.ScenariosAlive,
 	))
 }
 
 func registerIncidentSnapshot(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("incident.snapshot",
+	tool := mcpgo.NewTool("incident_snapshot",
 		mcpgo.WithDescription("Export an incident's full diagnostic memory — surviving and eliminated scenarios, facts, current suggestion, status."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(IncidentSnapshotOutputSchema),
 	)
-	s.AddTool(tool, dispatch("incident.snapshot",
+	s.AddTool(tool, dispatch("incident_snapshot",
 		incidentIDOnly(func(p *IncidentSnapshotParams, id string) { p.IncidentID = id }),
 		h.IncidentSnapshot,
 	))

@@ -57,7 +57,7 @@ func (h *Handler) About() (*AboutResult, error) {
 	}, nil
 }
 
-// IncidentStartParams is the input for incident.start. ModelRef is a path
+// IncidentStartParams is the input for incident_start. ModelRef is a path
 // to a system.model.yaml on disk the server can read. ID is optional —
 // when empty the server generates one. Suspect is accepted for forward
 // compatibility but not consumed in Phase 1.
@@ -68,7 +68,7 @@ type IncidentStartParams struct {
 }
 
 // IncidentStartResult carries the persistent incident identifier an agent
-// passes to every subsequent tool call (fact.add, plan, probe, snapshot).
+// passes to every subsequent tool call (fact_add, plan, probe, incident_snapshot).
 type IncidentStartResult struct {
 	IncidentID string `json:"incident_id"`
 }
@@ -100,7 +100,7 @@ func (h *Handler) IncidentStart(p IncidentStartParams) (*IncidentStartResult, er
 	return &IncidentStartResult{IncidentID: inc.ID}, nil
 }
 
-// IncidentEndParams is the input for incident.end. Verdict is optional.
+// IncidentEndParams is the input for incident_end. Verdict is optional.
 type IncidentEndParams struct {
 	IncidentID string `json:"incident_id"`
 	Verdict    string `json:"verdict,omitempty"`

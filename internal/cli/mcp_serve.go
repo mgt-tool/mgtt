@@ -25,6 +25,7 @@ func newMCPCmd() *cobra.Command {
 	serve.Flags().StringVar(&cfg.OnWrite, "on-write", "run", "behavior when a write probe is next: pause | run | fail")
 	serve.Flags().IntVar(&cfg.MaxExecutePerIncident, "max-execute-per-incident", 50, "rate limit for executed probes per incident")
 	serve.Flags().IntVar(&cfg.ProbeTimeoutSeconds, "probe-timeout", 30, "per-probe timeout in seconds (max 300)")
+	serve.Flags().BoolVar(&cfg.LegacyToolNames, "legacy-tool-names", false, "also register the pre-0.4 dotted tool names (incident.start, ...) as deprecated aliases")
 
 	mcpCmd := &cobra.Command{
 		Use:   "mcp",

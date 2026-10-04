@@ -35,7 +35,7 @@ type StepInfo struct {
 	Observes    []string `json:"observes,omitempty"`
 }
 
-// ScenariosListParams is the input for scenarios.list. Enumeration uses
+// ScenariosListParams is the input for scenarios_list. Enumeration uses
 // the model bound to the incident — no separate model_ref needed.
 type ScenariosListParams struct {
 	IncidentID string `json:"incident_id"`
@@ -48,7 +48,7 @@ type ScenariosListResult struct {
 
 // ScenariosList returns every failure chain the enumerator produces for
 // the model — the unfiltered universe of scenarios the engine can reason
-// over. Callers combine this with `scenarios.alive` for a live/eliminated
+// over. Callers combine this with `scenarios_alive` for a live/eliminated
 // split.
 func (h *Handler) ScenariosList(p ScenariosListParams) (*ScenariosListResult, error) {
 	return withModelContext(p.IncidentID, false, func(_ *incident.Incident, m *model.Model, reg *providersupport.Registry) (*ScenariosListResult, error) {
@@ -56,7 +56,7 @@ func (h *Handler) ScenariosList(p ScenariosListParams) (*ScenariosListResult, er
 	})
 }
 
-// ScenariosAliveParams is the input for scenarios.alive.
+// ScenariosAliveParams is the input for scenarios_alive.
 type ScenariosAliveParams struct {
 	IncidentID string `json:"incident_id"`
 }

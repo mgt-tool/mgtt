@@ -11,7 +11,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/incident"
 )
 
-// FactAddParams is the input for fact.add. All four identity fields are
+// FactAddParams is the input for fact_add. All four identity fields are
 // required; note is optional.
 type FactAddParams struct {
 	IncidentID string `json:"incident_id"`
@@ -84,7 +84,7 @@ type FactsListParams struct {
 	Component  string `json:"component,omitempty"`
 }
 
-// FactEntry is one row in the facts.list response. Uses plain field types
+// FactEntry is one row in the facts_list response. Uses plain field types
 // for stable JSON shape across SDK versions.
 type FactEntry struct {
 	Component string    `json:"component"`

@@ -4,4 +4,4 @@
 provider-docker      expressions read component vars (max_restart_count) the evaluator never resolves (A8)
 provider-quickwit    expressions read component vars (target_success_rate) the evaluator never resolves (A8)
 provider-tempo       expressions read component vars (target_max_error_rate) the evaluator never resolves (A8)
-storefront           rds healthy override drops available == true (G5/D1); unprobed leaf behind a sick casualty wins by path length (WS-A)
+storefront           an unprobed leaf behind a sick casualty wins by path length: ssm-app-config is blamed (A7)

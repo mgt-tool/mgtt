@@ -12,6 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`mgtt model validate` names every type rule a `healthy:` override drops.** A component's `healthy:` replaces its type's rules rather than adding to them, so a rule not restated is gone -- the most common modelling mistake. Each dropped rule is now a warning (`healthy override drops type rule "available == true" ...`); rules compare with whitespace ignored. The storefront example dropped `available == true` from `rds` and `mq`, so a stopped database counted as healthy; both now restate it.
 - The MCP server sends `instructions`: the diagnosis workflow and what a `forbidden` or `transient` probe result means, for clients that hand them to the model.
 - **`make downstream`** builds this checkout and every repository that depends on it -- the six providers, compiled against this engine through a `replace`, and mgtt2writ with writ -- in one pinned Docker image, then runs the suites: provider unit tests and `provider validate`, the minishop verification contract, the storefront scenarios and probe-decision budget, the mgtt2writ pipeline and MCP tool-name portability. Images are pinned by digest and repositories by commit. Known breakages sit in `downstream/xfail`, each naming the step that fixes it; a listed suite that starts passing fails the build until its line goes.
 - `examples/storefront/`: the blue/green storefront model and its five scenarios as files, extracted from the docs page.

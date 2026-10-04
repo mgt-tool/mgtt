@@ -21,6 +21,7 @@ func Validate(m *Model, reg *providersupport.Registry) *ValidationResult {
 		pass2TypeResolution(m, reg, result)
 		pass5TriggeredBy(m, reg, result)
 		pass6DuplicateResource(m, reg, result)
+		pass7HealthyOverride(m, reg, result)
 	}
 	pass3DepRefs(m, result)
 	pass4Cycles(m, result)
@@ -285,6 +286,39 @@ func pass6DuplicateResource(m *Model, reg *providersupport.Registry, result *Val
 			continue
 		}
 		seen[key] = name
+	}
+}
+
+// pass7HealthyOverride warns, rule by rule, when a component's healthy:
+// list leaves out one of its type's default rules. The list replaces the
+// type's rules rather than adding to them, so a rule not restated is
+// gone: an RDS override without `available == true` calls a stopped
+// database healthy. Rules compare with whitespace ignored.
+func pass7HealthyOverride(m *Model, reg *providersupport.Registry, result *ValidationResult) {
+	squash := func(r string) string { return strings.Join(strings.Fields(r), "") }
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		if comp == nil || len(comp.HealthyRaw) == 0 {
+			continue
+		}
+		t, _, err := comp.ResolveType(m, reg)
+		if err != nil || t == nil {
+			continue
+		}
+		kept := make(map[string]bool, len(comp.HealthyRaw))
+		for _, r := range comp.HealthyRaw {
+			kept[squash(r)] = true
+		}
+		for _, r := range t.HealthyRaw {
+			if kept[squash(r)] {
+				continue
+			}
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Component: name,
+				Field:     "healthy",
+				Message:   fmt.Sprintf("healthy override drops type rule %q (the override replaces the %s rules; restate it to keep it)", r, comp.Type),
+			})
+		}
 	}
 }
 

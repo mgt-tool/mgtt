@@ -163,6 +163,9 @@ RUN /downstream/run.sh mgtt2writ && touch /tmp/passed
 FROM suites AS check-mcp
 RUN /downstream/run.sh mcp && touch /tmp/passed
 
+FROM suites AS check-mcp-probe
+RUN /downstream/run.sh mcp-probe && touch /tmp/passed
+
 # ---- all: the default target -------------------------------------------------
 # BuildKit skips stages nothing depends on, so a check not COPYed here would
 # silently stop running.
@@ -179,6 +182,7 @@ COPY --from=check-storefront           /tmp/passed /tmp/passed-storefront
 COPY --from=check-storefront-speed     /tmp/passed /tmp/passed-storefront-speed
 COPY --from=check-mgtt2writ            /tmp/passed /tmp/passed-mgtt2writ
 COPY --from=check-mcp                  /tmp/passed /tmp/passed-mcp
+COPY --from=check-mcp-probe            /tmp/passed /tmp/passed-mcp-probe
 
 ENTRYPOINT ["/downstream/run.sh"]
 CMD ["all"]

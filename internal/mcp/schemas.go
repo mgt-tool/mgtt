@@ -122,7 +122,7 @@ const PlanOutputSchema = `{
 const ProbeOutputSchema = `{
   "type":"object",
   "properties":{
-    "status":{"type":"string","enum":["rendered","executed","not_found","operator_prompt_required","no_suggestion","error","blocked_readonly","blocked_write_fail","blocked_write_pause","blocked_budget"]},
+    "status":{"type":"string","enum":["rendered","executed","not_found","forbidden","transient","operator_prompt_required","no_suggestion","error","blocked_readonly","blocked_write_fail","blocked_write_pause","blocked_budget"]},
     "component":{"type":"string"},
     "fact":{"type":"string"},
     "provider":{"type":"string"},

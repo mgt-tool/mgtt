@@ -35,6 +35,8 @@ func TestComponentVerdict(t *testing.T) {
 			map[string]facts.Fact{"a": status(facts.FactStatusForbidden)}, Unknown},
 		{"transient is unknown", []string{"a > 0"},
 			map[string]facts.Fact{"a": status(facts.FactStatusTransient)}, Unknown},
+		{"not found is unhealthy", []string{"a > 0"},
+			map[string]facts.Fact{"a": status(facts.FactStatusNotFound)}, Unhealthy},
 		{"no rules, observed", nil,
 			map[string]facts.Fact{"a": value(1)}, Healthy},
 		{"no rules, nothing read", nil,

@@ -506,7 +506,13 @@ func reportDone(cmd *cobra.Command, m *model.Model, root *scenarios.Scenario, st
 		writeTrail(w, trail)
 		return
 	}
-	fmt.Fprintf(w, "Root cause: %s\n", formatComponentLabel(m, root.Root.Component))
+	label := formatComponentLabel(m, root.Root.Component)
+	if store.IsAbsent(root.Root.Component) {
+		// The chain names a failure state, but the probes found nothing
+		// there at all; say so rather than imply it was seen "stopped".
+		label += " — not found: the model expects it, the probes cannot see it"
+	}
+	fmt.Fprintf(w, "Root cause: %s\n", label)
 	fmt.Fprintf(w, "Scenario:   %s\n", renderChain(*root))
 	writeBudget(w, probesRun, maxProbes, start, deadline)
 	writePartialVisibility(w, store)

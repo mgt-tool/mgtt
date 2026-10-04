@@ -19,7 +19,8 @@ const (
 	Unknown Verdict = iota
 	// Healthy: every effective healthy rule resolved, and all are true.
 	Healthy
-	// Unhealthy: at least one effective healthy rule resolved false.
+	// Unhealthy: at least one effective healthy rule resolved false, or
+	// the probes found the component does not exist.
 	Unhealthy
 )
 
@@ -39,6 +40,11 @@ func ComponentVerdict(m *model.Model, reg *providersupport.Registry, store *fact
 	comp := m.Components[name]
 	if comp == nil {
 		return Unknown
+	}
+	// Probed and not there: the model expects it, so its absence is the
+	// failure, not a reason to look elsewhere.
+	if store.IsAbsent(name) {
+		return Unhealthy
 	}
 	rules := effectiveHealthyFor(m, reg, comp)
 	if len(rules) == 0 {

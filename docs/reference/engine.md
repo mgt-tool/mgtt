@@ -211,11 +211,21 @@ For a causation DAG with branching factor `B` and path length `L`:
 
 ```
 total scenarios    ≈ R × B^L
-scenario storage   ≈ total × (L × 80 bytes)       per chain, YAML on disk
+scenario storage   = the failure graph: O(states + edges), not O(total)
 Occam live_set max = |total| initially, shrinks monotonically
 ```
 
-The `B^L` term is why scenario counts explode for deeply-connected graphs. A 6-deep graph with branching 3 is ~730 chains; a 6-deep graph with branching 5 is ~15 600. Real models sit somewhere in between.
+The `B^L` term is why scenario counts explode for deeply-connected graphs. Storage no longer pays for it, since `scenarios.yaml` holds the graph. Diagnosis still does, because it expands every chain into memory when it loads. Measured on layered synthetic models (width 10, fan-out 2, 4 cores; `BenchmarkScale` in `internal/engine/strategy`):
+
+| Tiers | Components | Chains | Expand on load | One Occam decision |
+|---|---|---|---|---|
+| 4 | 41 | 10,921 | 50 ms | 15 ms |
+| 5 | 51 | 66,181 | 0.4 s | 128 ms |
+| 6 | 61 | 397,921 | 2.7 s | 0.7 s |
+| 7 | 71 | 2,388,541 | 20 s | 5.5 s |
+| 8 | 81 | did not finish in 60 s | | |
+
+**Depth, not component count, sets the cost.** A 300-component model six tiers deep expands to about two million chains. The 20-component storefront example, seven tiers deep but narrow, expands to 12,755. Past six or seven tiers of real fan-out, use `meta.scenarios: none` (BFS) until diagnosis counts paths through the graph instead of listing them (planned).
 
 ### Occam complexity
 
@@ -223,11 +233,11 @@ Per iteration:
 
 ```
 filter_live:         O(|live| × L)            evaluate every step
-sort:                O(|live| × log |live| × k_cross_eliminations)
+sort:                O(|live| × log |live|)   (elimination counts priced once per round)
 pick_symptom_inward: O(L)
 ```
 
-Practical cost per round is dominated by `filter_live`. For a 10 000-chain model, one round is a few milliseconds; probe latency (seconds, sometimes) dwarfs strategy time by three orders of magnitude. The constraint is chain storage and initial load time, not per-iteration CPU.
+Practical cost per round is dominated by `filter_live` and the one-pass ranking. For a 10,000-chain model one round is about 15 ms, and probe latency (seconds, sometimes) dwarfs it. The constraint is how many chains there are to hold and filter, which the table above shows growing with depth.
 
 ## Worked example
 

@@ -87,7 +87,7 @@ func legacyCrossEliminationCount(s scenarios.Scenario, live []scenarios.Scenario
 // layeredModel builds edge → 3 web → 3 api → 2 store, each tier fanning
 // out to two of the next, from the testdata provider types. Enough chains
 // that ties on length, suspects and elimination count all occur.
-func layeredModel(t *testing.T) (*model.Model, *providersupport.Registry) {
+func layeredModel(t testing.TB) (*model.Model, *providersupport.Registry) {
 	t.Helper()
 	root := filepath.Join("..", "..", "..")
 	var b strings.Builder

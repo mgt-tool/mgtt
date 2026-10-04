@@ -1,290 +1,172 @@
-# Quick Start
+# Quick start
 
-A complete end-to-end example: write a model, write a scenario, validate, simulate. Everything on this page is copy-pasteable — you can have a working mgtt setup in 5 minutes.
+This page walks the full loop on a four-component storefront: model, simulate, diagnose, retrospective.
 
-## On this page
-
-1. [Install](#1-install)
-2. [Scaffold the model](#2-scaffold-the-model)
-3. [Validate the model](#3-validate-the-model)
-4. [Write failure scenarios](#4-write-failure-scenarios)
-5. [Simulate](#5-simulate)
-6. [Generate the scenario sidecar](#6-generate-the-scenario-sidecar)
-7. [Troubleshoot a live system](#7-troubleshoot-a-live-system)
-- [What you have now](#what-you-have-now)
-- [Next steps](#next-steps)
-
----
-
-## 1. Install
+## 1. Install mgtt and providers
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/mgt-tool/mgtt/main/install.sh | sh
+mgtt provider install kubernetes aws
 ```
 
-Or: `go install github.com/mgt-tool/mgtt/cmd/mgtt@latest`
+Other install routes: `go install github.com/mgt-tool/mgtt/cmd/mgtt@v0.3.0`, or the image `ghcr.io/mgt-tool/mgtt:0.3.0`. Pin `X.Y.Z` in CI. The installer verifies checksums and honours `MGTT_VERSION` and `INSTALL_DIR`.
 
-## 2. Scaffold the model
+## 2. Model the system
 
-```bash
-mgtt init
-```
-
-This creates `system.model.yaml`. Edit it to describe your system. Here's the storefront example — an nginx reverse proxy fronting a React frontend and a Node.js API, backed by an AWS RDS database:
-
-```mermaid
-graph LR
-  internet([internet]) --> nginx
-  nginx[nginx - reverse proxy] --> frontend
-  nginx --> api
-  frontend[frontend - React SPA] --> api
-  api[api - Node.js] --> rds[(rds - AWS RDS)]
-
-```
+`mgtt init` scaffolds `system.model.yaml`. Then edit it:
 
 ```yaml
-# system.model.yaml
 meta:
   name: storefront
   version: "1.0"
   providers:
-    - kubernetes
+    - mgt-tool/kubernetes@>=3.0.0
+    - mgt-tool/aws@>=1.0.0
   vars:
-    namespace: production
+    namespace: production        # substituted into probe commands
 
 components:
   nginx:
-    type: ingress
+    type: kubernetes.deployment
     depends:
       - on: frontend
       - on: api
-
   frontend:
-    type: deployment
+    type: kubernetes.deployment
     depends:
       - on: api
-
   api:
-    type: deployment
+    type: kubernetes.deployment
     depends:
       - on: rds
-
   rds:
-    providers:
-      - aws
-    type: rds_instance
-    healthy:
-      - connection_count < 500
+    type: aws.rds_instance
+    resource: shop-prod-db       # the real resource name, if it differs from the key
 ```
 
-**What each field means:**
+Each type brings its facts (`ready_replicas`, `available`, …), its states (`crashed`, `stopped`, …), and default health rules. To list them, run `mgtt provider inspect kubernetes deployment`.
 
-- `meta.providers` — which providers supply the types used in this model
-- `meta.vars` — variables substituted into probe commands (e.g., `{namespace}`)
-- `components.<name>.type` — a type defined by a provider (see [Type Catalog](../reference/type-catalog.md))
-- `components.<name>.resource` — optional upstream resource id the provider probes. Lets you keep readable component keys (`rds:`) while the probe hits the real backing resource (`my-database-name`). Supports `{key}` placeholders from `meta.vars`.
-- `components.<name>.depends` — list of components this one depends on
-- `components.<name>.healthy` — health rules for this component. When set, replaces the provider type's defaults; doesn't merge. See [model schema](../reference/model-schema.md#override-semantics--replace-dont-merge).
-- `components.<name>.providers` — per-component provider override (rds uses `aws`, not `kubernetes`)
-
-Full schema: [Model Schema Reference](../reference/model-schema.md)
-
-## 3. Validate the model
-
-```bash
+```
 $ mgtt model validate
-
-⚠ model uses bare provider name "kubernetes"; consider "<namespace>/kubernetes@<version>"
   ✓ nginx     2 dependencies valid
   ✓ frontend  1 dependency valid
   ✓ api       1 dependency valid
-  ✓ rds       healthy override valid
+  ✓ rds       no dependencies
 
   4 components · 0 errors · 0 warnings
+
+$ mgtt visualize        # writes model-graph.md, a Mermaid diagram of the model
 ```
 
-The `⚠` is advisory, not a validation warning (note the `0 warnings` summary): bare provider names work, but the fully-qualified `<namespace>/<name>@<version>` form pins the provider version across environments.
+## 3. Write scenarios
 
-## 4. Write failure scenarios
-
-Scenarios inject synthetic facts and assert what the engine should conclude. Create a `scenarios/` directory alongside your model.
-
-### Scenario: RDS goes down
-
-When the database stops accepting connections, the API crash-loops. The engine should trace the fault to rds, not blame api.
+A scenario injects facts and states what the engine must conclude. Put scenarios in `scenarios/`:
 
 ```yaml
-# scenarios/rds-unavailable.yaml
-name: rds unavailable
-description: >
-  rds stops accepting connections. api crash-loops as a result.
-  engine should trace the fault to rds, not api.
-
+# scenarios/rds-down.yaml
+name: rds down
+description: rds stops; api crash-loops because of it. Blame rds, not api.
 inject:
-  rds:
-    available: false
-    connection_count: 0
-  api:
-    ready_replicas: 0
-    restart_count: 12
-    desired_replicas: 3
-
+  rds: { available: false }
+  api: { ready_replicas: 0, desired_replicas: 3, restart_count: 12 }
 expect:
   root_cause: rds
   path: [nginx, api, rds]
   eliminated: [frontend]
 ```
 
-### Scenario: API crash-loops, RDS healthy
-
-A code error crashes the API. RDS is fine. The engine should identify api as the root cause.
-
 ```yaml
-# scenarios/api-crash-loop.yaml
-name: api crash-loop independent of rds
-description: >
-  api crash-loops due to a code error. rds is healthy.
-  engine should find api as root cause and eliminate rds.
-
+# scenarios/api-crash.yaml
+name: api crash-loop, rds healthy
 inject:
-  api:
-    ready_replicas: 0
-    restart_count: 24
-    desired_replicas: 3
-  rds:
-    available: true
-    connection_count: 120
-
+  api: { ready_replicas: 0, desired_replicas: 3, restart_count: 24 }
+  rds: { available: true, connection_count: 120 }
 expect:
   root_cause: api
-  path: [nginx, api]
   eliminated: [rds, frontend]
 ```
 
-### Scenario: Everything healthy (no false positives)
+Add an all-healthy scenario with `root_cause: none`, so you also catch false alarms.
 
-```yaml
-# scenarios/all-healthy.yaml
-name: all components healthy
-description: verifies the engine does not surface false positives.
+## 4. Simulate, and wire it into CI
 
-inject:
-  nginx:
-    upstream_count: 4
-  frontend:
-    ready_replicas: 2
-    desired_replicas: 2
-    endpoints: 2
-  api:
-    ready_replicas: 3
-    desired_replicas: 3
-    endpoints: 3
-  rds:
-    available: true
-    connection_count: 87
-
-expect:
-  root_cause: none
-  eliminated: [nginx, frontend, api, rds]
 ```
-
-**What each field means:**
-
-- `inject.<component>.<fact>` — set a fact value. Fact names come from the provider's type definition (see [Type Catalog](../reference/type-catalog.md))
-- `expect.root_cause` — which component the engine should identify (`none` if all healthy)
-- `expect.path` — the failure path from outermost to root cause
-- `expect.eliminated` — components confirmed healthy and removed from investigation
-
-Full schema: [Scenario Schema Reference](../reference/scenario-schema.md)
-
-## 5. Simulate
-
-```bash
 $ mgtt simulate --all
-
-  rds unavailable                          ✓ passed
-  api crash-loop independent of rds        ✓ passed
-  all components healthy                   ✓ passed
+  all healthy                              ✓ passed
+  api crash-loop, rds healthy              ✓ passed
+  rds down                                 ✓ passed
 
   3/3 scenarios passed
 ```
 
-No running system. No credentials. Runs on every PR.
-
-## 6. Generate the scenario sidecar
-
-```bash
-$ mgtt model validate --write-scenarios
-
-  wrote 317 scenarios to scenarios.yaml
-  wrote workspace index with 1 model(s) to scenarios.index.yaml
-```
-
-The exact count scales with your model's components and each type's declared failure modes — yours will differ. `scenarios.yaml` enumerates every plausible failure chain your model can produce. Commit it. CI drift-checks it on every PR (runs via `mgtt model validate` or the fast `--check-scenarios` lane). [Full reference](../reference/scenarios-yaml.md).
-
-## 7. Troubleshoot a live system
-
-When something actually breaks, use the same model with real probes. Interactive:
-
-```bash
-mgtt provider install kubernetes aws   # one-time setup
-mgtt incident start
-mgtt plan                              # press Y at each probe
-mgtt incident end
-```
-
-Or hand the loop to the autopilot:
-
-```bash
-mgtt diagnose --max-probes 15 --suspect api
-```
-
-`diagnose` reads the `scenarios.yaml` you committed in step 6 and eliminates whole failure branches before running a probe. No Y/n prompts — fits AI-agent drivers and unattended dry-runs.
-
-(See [Provider Install Methods](../concepts/provider-install-methods.md) for alternatives like image install.)
-
-[Full troubleshooting walkthrough](../concepts/troubleshooting.md)
-
----
-
-## What you have now
+Now delete `api`'s dependency on `rds` and run it again:
 
 ```
-your-project/
-├── system.model.yaml          # your system description
-├── scenarios.yaml             # auto-generated sidecar (committed)
-├── scenarios/
-│   ├── rds-unavailable.yaml   # hand-authored failure scenario
-│   ├── api-crash-loop.yaml    # hand-authored failure scenario
-│   └── all-healthy.yaml       # no-false-positive check
-└── .github/workflows/
-    └── mgtt.yaml              # CI validation (optional)
+  api crash-loop, rds healthy              ✗ FAILED
+    expected: root_cause=api path=[nginx, api] eliminated=[rds, frontend]
+    actual:   root_cause=api path=[nginx, api] eliminated=[frontend]
+  rds down                                 ✗ FAILED
+    expected: root_cause=rds path=[nginx, api, rds] eliminated=[frontend]
+    actual:   root_cause=api path=[nginx, api] eliminated=[frontend]
 ```
 
-### Add to CI (optional)
+Without the edge, the engine blames api for a database outage. CI is where that mistake should surface:
 
 ```yaml
 # .github/workflows/mgtt.yaml
-name: model validation
 on: [push, pull_request]
-
 jobs:
-  validate:
+  model:
     runs-on: ubuntu-latest
+    container: ghcr.io/mgt-tool/mgtt:0.3.0
     steps:
       - uses: actions/checkout@v5
-      - name: install mgtt
-        run: curl -sSL https://raw.githubusercontent.com/mgt-tool/mgtt/main/install.sh | sh
-      - name: validate model
-        run: mgtt model validate
-      - name: run scenarios
-        run: mgtt simulate --all
+      - run: mgtt model validate
+      - run: mgtt simulate --all
 ```
 
-## Next steps
+Next, generate the failure-chain index that `diagnose` uses. Commit it; `model validate` fails if it falls out of date:
 
-- [Model Schema Reference](../reference/model-schema.md) — every field in `system.model.yaml`
-- [Scenario Schema Reference](../reference/scenario-schema.md) — every field in scenario files
-- [Type Catalog](../reference/type-catalog.md) — all provider types, facts, and states
-- [Simulation deep dive](../concepts/simulation.md) — what failing scenarios teach you
-- [Troubleshooting walkthrough](../concepts/troubleshooting.md) — the runtime loop
+```
+$ mgtt model validate --write-scenarios
+  wrote 317 scenarios to scenarios.yaml
+```
+
+## 5. Diagnose
+
+When an alert fires:
+
+```
+$ mgtt incident start
+  ✓ inc-20261004-0814-001 started
+
+$ mgtt diagnose --suspect api
+Root cause: rds
+Scenario:   rds.stopped → api.crashed → nginx.degraded
+Probes run: 7/20   Time: 3.2s/5m0s
+Hint:       suspect=api — appeared mid-chain; real root was rds
+Trail:
+  1. api.restart_count — api.restart_count = 47
+  2. rds.available — rds.available = false
+  …
+```
+
+Probes run with your own credentials, read-only by default. `--suspect` is a hint, not a filter. `mgtt plan` runs the same loop and asks before each probe; `mgtt fact add api error_rate 0.94` records something you saw yourself. To have an AI agent run this step, see [AI agents](../guides/agents.md).
+
+## 6. Retrospective
+
+```
+$ mgtt incident end --emit-scenario --suggest-scenarios
+wrote scenarios/inc-20261004-0814-001.yaml — passes; commit it to keep this diagnosis under test
+```
+
+- **`--emit-scenario`** turns every fact observed during the incident into a scenario, with the engine's conclusion as `expect`. Review it, give it a name, and commit it.
+- **`--suggest-scenarios`** checks whether the incident followed a failure chain your model never predicted. If it did, it writes `.mgtt/pending-scenarios/<id>.patch` describing the missing chain. To accept the chain, add the propagation to the model (`failure_modes:`) and regenerate `scenarios.yaml`.
+
+The incident record stays in `<incident-id>.state.yaml` in the working directory.
+
+## Next
+
+- [How it works](../concepts/how-it-works.md): what the engine does with all this
+- [Model and scenario reference](../reference/model.md)
+- [Providers](../guides/providers.md)

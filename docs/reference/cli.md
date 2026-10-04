@@ -1,174 +1,67 @@
-# CLI Reference
+# CLI and configuration
 
-Every `mgtt` subcommand. Flags default to safe, read-only behaviour unless stated otherwise.
+Commands that take a model default to `system.model.yaml` in the current directory. Use `--model <path>` to point elsewhere; `model validate` and `model export` take the path as an argument instead.
 
 ## Model
 
-```
-mgtt init                              Scaffold system.model.yaml in the cwd
-mgtt model validate [path]             Structural + type + dep-ref checks; drift-check scenarios.yaml
-  --write-scenarios                    Regenerate scenarios.yaml next to the model (or a
-                                       scenarios.index.yaml across a workspace when no path)
-  --check-scenarios                    Run only the scenarios.yaml drift check (fast CI lane)
-```
+| Command | |
+|---|---|
+| `mgtt init` | scaffold `system.model.yaml` |
+| `mgtt model validate [path]` | check structure, types, references and health rules, and that `scenarios.yaml` is current. `--write-scenarios` regenerates it; `--check-scenarios` checks only that |
+| `mgtt model build` | generate the model from provider discovery. `--allow-deletes`, `--tombstone a,b`, `--output` |
+| `mgtt model export --json [path]` | the resolved model as JSON, for external checkers |
+| `mgtt visualize` | write a Mermaid graph to `model-graph.md` (`--output` to change) |
 
-### `mgtt model build`
+## Simulate
 
-Generates `system.model.yaml` from installed providers' discovery output. Commit the result alongside your Helm charts / Terraform.
+`mgtt simulate --all` runs `scenarios/*.yaml`. Other flags:
 
-```bash
-mgtt model build
-mgtt model build --allow-deletes
-mgtt model build --tombstone=legacy-api,air-gapped-db
-mgtt model build --output custom-path.yaml
-```
+- `--scenario <file>`: run one scenario.
+- `--scenarios-dir <dir>`: read scenarios from another directory.
+- `--from-scenarios`: check every enumerated chain.
+- `--fuzz N` (with `--fuzz-seed`): check conclusions from random partial evidence.
 
-**Flags**
+## Incident
 
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `--mgtt-home` | `$MGTT_HOME` / `~/.mgtt` | Where to look for installed providers |
-| `--output` | `system.model.yaml` | Destination file |
-| `--allow-deletes` | `false` | Accept removal of components no longer returned by discovery |
-| `--tombstone` | `[]` | Components to preserve across rebuilds (air-gapped, partial discovery) |
+| Command | |
+|---|---|
+| `mgtt incident start` | open an incident (`--id`, `--model`); state goes to `<id>.state.yaml` |
+| `mgtt diagnose` | probe until root cause, budget or deadline |
+| `mgtt plan` | the same loop, asking before each probe (`--component` to start there) |
+| `mgtt fact add <component> <key> <value>` | record your own observation (`--note`) |
+| `mgtt status`, `mgtt ls [components\|facts]` | current health and facts |
+| `mgtt incident end` | close the incident. `--emit-scenario` writes `scenarios/<id>.yaml`; `--suggest-scenarios` reports chains the model lacks |
 
-**Safety**
+`diagnose` flags:
 
-By default, if the build would remove components from the existing committed model, the command refuses and prints the removal set. This protects against partial-discovery failures (kubectl timeout, IAM expiry mid-enumeration) silently nuking half the model.
-
-```
-$ mgtt model build
-  kubernetes provider    → 11 components, 7 dependencies
-
-Model drift detected (vs committed system.model.yaml):
-  -  legacy-api
-  -  old-rds
-
-Refusing to remove components without explicit consent. Options:
-  mgtt model build --allow-deletes
-  mgtt model build --tombstone=legacy-api,old-rds
-```
-
-**Determinism**
-
-`mgtt model build` run twice against the same infrastructure produces byte-identical YAML. Sorted keys, sorted dependency lists, no timestamps. A `git diff` after a no-op run prints zero bytes.
+| Flag | Default | |
+|---|---|---|
+| `--suspect api,rds/stopped` | | a hint, not a filter |
+| `--max-probes` | 20 | |
+| `--deadline` | 5m | |
+| `--readonly-only` | true | run only read-only providers |
+| `--on-write pause\|run\|fail` | pause | when the next probe would write |
 
 ## Providers
 
-```
-mgtt provider install <name|path|url>  Install from registry / git / local / image ref
-  --image <ref>                        Force image install even if source block exists
-mgtt provider ls                       List installed providers
-mgtt provider inspect <name> [type]    Show provider manifest + types + facts + states
-mgtt provider uninstall <name>         Run the provider's cleanup hook + remove the directory
-```
+`mgtt provider install <name…|url|path>` (`--image <ref@sha256:…>`, `--registry <url\|file://…\|off>`, `--no-cache`), plus `ls`, `inspect <name> [type]`, `validate <name>` and `uninstall <name>`. `mgtt stdlib ls|inspect` lists the built-in fact types.
 
-## Simulation
+## MCP
 
-```
-mgtt simulate                          Run failure scenarios against a model (design-time)
-  --all                                Run every YAML under scenarios/
-  --scenario <file>                    Run a single hand-authored scenario
-  --from-scenarios                     Iterate enumerated scenarios.yaml as test cases
-                                       (asserts Occam identifies each root)
-  --fuzz <N>                           Random scenario + random truncation, N iterations
-  --fuzz-seed <int>                    Deterministic seed for --fuzz
-  --scenarios-dir <dir>                Override directory for hand-authored scenarios
-  --model <path>                       Override model path
-```
-
-## Verification
-
-Checking a model over every reachable configuration is a pipeline, not an mgtt
-subcommand — mgtt exports, [mgtt2writ](https://github.com/mgt-tool/mgtt2writ)
-translates, [writ](https://github.com/writ-lang/writ) checks:
-
-```
-mgtt model export --json | mgtt2writ | writ check --stdin
-
-mgtt-contradict-check                  Same pipeline in one command (ships with mgtt2writ)
-  MODEL.yaml                           Check a named model instead of the auto-detected one
-  -- ARGS...                           Pass arguments through to `writ check`
-```
-
-```
-mgtt model export --json [path]        Write the resolved model (provider types merged,
-                                       overrides applied) as JSON
-  --output <path>                      Write to file (default: stdout)
-```
-
-`mgtt model export` is the only part mgtt owns, and it names no other tool —
-the document it writes is equally useful to a visualiser or an editor. Exit
-status of the pipeline is writ's: `0` clean, `1` a finding. See
-[Verification](../concepts/verification.md).
-
-## Visualization
-
-```
-mgtt visualize                         Emit a mermaid-graph markdown file from the model
-  --model <path>                       Override model path
-  --output <path>                      Write to file (default: stdout)
-```
-
-## Troubleshooting
-
-```
-mgtt plan [--component NAME]           Interactive guided troubleshooting (press Y per probe)
-
-mgtt diagnose                          Autopilot — runs probes until root cause or budget
-  --model <path>                       Override model path
-  --suspect api,db.down                Soft prior: components (or component.state) to prefer
-  --readonly-only                      (default true) refuse probes that aren't read_only
-  --max-probes <N>                     Probe budget (default 20)
-  --deadline <duration>                Wall-clock deadline (default 5m)
-  --on-write pause|run|fail            Behaviour when the next probe would write (default pause)
-
-mgtt status                            One-line health summary from collected facts
-mgtt ls                                List components (or `mgtt ls facts [component]`)
-```
-
-## Incident lifecycle
-
-```
-mgtt incident start [--id ID]          Start session; opens a fresh state file
-mgtt incident end                      Close session; render the final report
-  --suggest-scenarios                  Emit a scenarios patch proposing new chains learned
-                                       from this incident (for review + commit)
-mgtt fact add <c> <k> <v>              Record an operator observation
-  --note "..."                         Free-text provenance
-```
-
-## Stdlib introspection
-
-```
-mgtt stdlib ls                         List primitive types mgtt knows about
-mgtt stdlib inspect <type>             Full definition for a stdlib type
-mgtt version                           Print mgtt version
-```
-
-## Agent integration (MCP)
-
-```
-mgtt mcp serve                         Expose the engine as an MCP server for LLM agents
-  --http                               Run streamable HTTP transport instead of stdio (default)
-  --listen <addr>                      Listen address for HTTP mode (default :8080)
-  --token-env <NAME>                   Env var holding the bearer token (required in HTTP mode)
-  --readonly-only                      Reject probes whose provider isn't read_only (default false)
-  --on-write pause|run|fail            Behaviour when the next probe would write (default run)
-  --max-execute-per-incident <N>       Cap executed probes per incident (default 50)
-  --probe-timeout <seconds>            Per-probe timeout, max 300 (default 30)
-```
-
-Note: unlike `mgtt diagnose`, the MCP server's `--readonly-only` defaults to
-`false` and `--on-write` defaults to `run` — set them explicitly when exposing
-write-capable providers to an agent. See [mcp.md](mcp.md) for transports and the
-Docker-sidecar recipe.
+`mgtt mcp serve`, with the flags described in [AI agents](../guides/agents.md).
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success |
-| `1` | Validation / diagnose / simulate failure |
-| `2` | Usage error (bad flags, missing file) |
-| `3` | Panic — recovered at top level; see stderr for bug-report details |
+`0` success · `1` validation, simulate or diagnose failure · `2` usage error · `3` internal panic (please report it)
+
+## Environment
+
+| Variable | |
+|---|---|
+| `MGTT_HOME` | providers and caches (default `~/.mgtt`) |
+| `MGTT_REGISTRY_URL` | registry index; `off`, or `file://…` for an air-gapped mirror |
+| `MGTT_PROBE_TIMEOUT` | per-probe timeout (`45s`, `2m`) |
+| `MGTT_FIXTURES` | replay recorded probe output (`provider → component → fact → {stdout, exit, status}`) instead of probing |
+| `MGTT_DEBUG=1` | trace each probe on stderr |
+| `MGTT_IMAGE_CAP_<NAME>`, `MGTT_IMAGE_CAPS_DENY` | override or refuse image capabilities |
+| `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE` | respected by registry fetches and git clones |

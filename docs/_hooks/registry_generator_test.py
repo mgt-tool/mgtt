@@ -14,12 +14,13 @@ import json
 import os
 import shutil
 import socketserver
+import tempfile
 import threading
 import unittest
+from pathlib import Path
 
+import registry_generator as rg
 from registry_generator import (
-    CACHE_DIR,
-    REGISTRY_MD,
     cached_fetch,
     fetch_image_digest,
     fetch_provider_yaml,
@@ -51,6 +52,63 @@ _TEMPO_YAML = (
     "    repository: ghcr.io/mgt-tool/mgtt-provider-tempo\n"
 )
 
+_DOCKER_YAML = (
+    "meta:\n"
+    "  name: docker\n"
+    "  version: 1.4.0\n"
+    "  description: Container health via the Docker Engine API\n"
+    "  tags: [containers]\n"
+    "  requires:\n"
+    "    mgtt: \">=0.3.0\"\n"
+    "runtime:\n"
+    "  needs: [docker]\n"
+    "install:\n"
+    "  source:\n"
+    "    build: hooks/install.sh\n"
+)
+
+# repo name -> manifest served by the stub. Distinct per repo so a bug that
+# renders one provider's data under another's heading can't hide.
+_MANIFESTS = {
+    "mgtt-provider-tempo": _TEMPO_YAML,
+    "mgtt-provider-docker": _DOCKER_YAML,
+}
+
+_TEST_REGISTRY_YAML = (
+    "providers:\n"
+    "  tempo:  {url: https://github.com/mgt-tool/mgtt-provider-tempo}\n"
+    "  docker: {url: https://github.com/mgt-tool/mgtt-provider-docker, skip_image: true}\n"
+)
+
+
+# ---- Isolation -------------------------------------------------------------
+#
+# on_pre_build() writes REGISTRY_MD and cached_fetch() writes CACHE_DIR. Both
+# default to real repo paths, so without this redirect a test run overwrote
+# the committed docs/reference/registry.md with stub data and seeded the real
+# build cache with it.
+
+_TMP: tempfile.TemporaryDirectory | None = None
+_SAVED_PATHS: dict[str, Path] = {}
+
+
+def setUpModule():
+    global _TMP
+    _TMP = tempfile.TemporaryDirectory(prefix="registry-generator-test-")
+    tmp = Path(_TMP.name)
+    for attr in ("REGISTRY_YAML", "REGISTRY_MD", "CACHE_DIR"):
+        _SAVED_PATHS[attr] = getattr(rg, attr)
+    (tmp / "registry.yaml").write_text(_TEST_REGISTRY_YAML)
+    rg.REGISTRY_YAML = tmp / "registry.yaml"
+    rg.REGISTRY_MD = tmp / "registry.md"
+    rg.CACHE_DIR = tmp / "cache"
+
+
+def tearDownModule():
+    for attr, value in _SAVED_PATHS.items():
+        setattr(rg, attr, value)
+    _TMP.cleanup()
+
 
 def start_stub_server():
     """Boots a local HTTP server returning hardcoded GitHub + GHCR responses."""
@@ -75,8 +133,14 @@ class _StubHandler(http.server.BaseHTTPRequestHandler):
                 body = b"[]"
             self._respond(200, body, "application/json")
         elif "/contents/manifest.yaml" in self.path:
+            # /github/repos/<owner>/<repo>/contents/manifest.yaml
+            repo = path.split("/repos/", 1)[1].split("/")[1]
+            manifest = _MANIFESTS.get(repo)
+            if manifest is None:
+                self._respond(404, b"", "text/plain")
+                return
             body = json.dumps({
-                "content": base64.b64encode(_TEMPO_YAML.encode()).decode(),
+                "content": base64.b64encode(manifest.encode()).decode(),
                 "encoding": "base64",
             }).encode()
             self._respond(200, body, "application/json")
@@ -119,7 +183,7 @@ class _StubServerTestCase(unittest.TestCase):
 
 
 def _clear_cache():
-    shutil.rmtree(CACHE_DIR, ignore_errors=True)
+    shutil.rmtree(rg.CACHE_DIR, ignore_errors=True)
 
 
 # ---- Tests -----------------------------------------------------------------
@@ -133,11 +197,54 @@ class RegistryGeneratorE2E(_StubServerTestCase):
 
     def test_renders_one_provider_card(self):
         on_pre_build(config=None)
-        rendered = REGISTRY_MD.read_text()
+        rendered = rg.REGISTRY_MD.read_text()
         self.assertIn("## tempo", rendered)
         self.assertIn("0.2.1", rendered)
         self.assertIn("sha256:deadbeef", rendered)
         self.assertIn("mgt-tool/tempo@0.2.1", rendered)
+
+    def test_each_provider_renders_its_own_manifest(self):
+        """Regression: every card in registry.md once showed tempo's
+        description and install line, because the test stub served tempo's
+        manifest for every repo and on_pre_build wrote into the committed
+        file. Two providers with different manifests must render different
+        cards, each under its own heading."""
+        on_pre_build(config=None)
+        cards = _split_cards(rg.REGISTRY_MD.read_text())
+        self.assertEqual(set(cards), {"tempo", "docker"})
+
+        self.assertIn("Per-span SLO checks against Grafana Tempo", cards["tempo"])
+        self.assertIn("mgtt provider install mgt-tool/tempo@0.2.1", cards["tempo"])
+        self.assertNotIn("docker", cards["tempo"].replace("## tempo", ""))
+
+        self.assertIn("Container health via the Docker Engine API", cards["docker"])
+        self.assertIn("mgtt provider install mgt-tool/docker@1.4.0", cards["docker"])
+        self.assertIn("`>=0.3.0`", cards["docker"])
+        self.assertNotIn("Tempo", cards["docker"])
+        self.assertNotIn("tempo", cards["docker"])
+        self.assertNotIn("--image", cards["docker"])  # skip_image honoured per entry
+
+        self.assertNotEqual(cards["tempo"].replace("tempo", ""), cards["docker"].replace("docker", ""))
+
+    def test_does_not_touch_committed_files(self):
+        self.assertNotEqual(rg.REGISTRY_MD, _SAVED_PATHS["REGISTRY_MD"])
+        self.assertNotEqual(rg.CACHE_DIR, _SAVED_PATHS["CACHE_DIR"])
+        before = _SAVED_PATHS["REGISTRY_MD"].read_bytes()
+        on_pre_build(config=None)
+        self.assertEqual(_SAVED_PATHS["REGISTRY_MD"].read_bytes(), before)
+
+
+def _split_cards(markdown: str) -> dict[str, str]:
+    """Map `## <name>` heading -> that card's text (up to the next heading)."""
+    cards: dict[str, str] = {}
+    current = None
+    for line in markdown.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            cards[current] = ""
+        if current is not None:
+            cards[current] += line + "\n"
+    return cards
 
 
 class LoadRegistryTest(unittest.TestCase):
@@ -306,9 +413,20 @@ class CacheTest(unittest.TestCase):
         key = "k-expire"
         cached_fetch(key, lambda: "old")
         # Backdate mtime so TTL check fails.
-        os.utime(CACHE_DIR / key, (0, 0))  # epoch — >> 1 hour ago
+        os.utime(rg.CACHE_DIR / key, (0, 0))  # epoch — >> 1 hour ago
         got = cached_fetch(key, lambda: "new")
         self.assertEqual(got, "new")
+
+
+    def test_stub_mode_does_not_share_cache_with_production(self):
+        """Responses fetched from a stub upstream must never be served to a
+        real build (and vice versa), even under the same logical key."""
+        cached_fetch("yaml-o-r-v1", lambda: "real")
+        os.environ["MGTT_REGISTRY_GITHUB_BASE"] = "http://127.0.0.1:9"
+        self.addCleanup(os.environ.pop, "MGTT_REGISTRY_GITHUB_BASE", None)
+        self.assertEqual(cached_fetch("yaml-o-r-v1", lambda: "stub"), "stub")
+        os.environ.pop("MGTT_REGISTRY_GITHUB_BASE")
+        self.assertEqual(cached_fetch("yaml-o-r-v1", lambda: "refetched"), "real")
 
 
 class OfflineModeTest(unittest.TestCase):
@@ -319,7 +437,7 @@ class OfflineModeTest(unittest.TestCase):
 
     def test_offline_renders_placeholder(self):
         on_pre_build(config=None)
-        self.assertIn("[unavailable — registry sync offline]", REGISTRY_MD.read_text())
+        self.assertIn("[unavailable — registry sync offline]", rg.REGISTRY_MD.read_text())
 
 
 class FailSoftTest(unittest.TestCase):
@@ -333,7 +451,7 @@ class FailSoftTest(unittest.TestCase):
 
     def test_unreachable_url_yields_error_card(self):
         on_pre_build(config=None)
-        self.assertIn("registry sync failed", REGISTRY_MD.read_text())
+        self.assertIn("registry sync failed", rg.REGISTRY_MD.read_text())
 
 
 if __name__ == "__main__":

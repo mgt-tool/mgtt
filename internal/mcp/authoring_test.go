@@ -244,3 +244,24 @@ types:
 		t.Error("component is required")
 	}
 }
+
+// model_diff on two inline revisions names the component that changed.
+func TestModelDiff_Inline(t *testing.T) {
+	h := authoringHandler(t)
+	oldSrc := "meta:\n  name: d\n  version: \"1\"\n  providers: [testwriter]\ncomponents:\n  api:\n    type: service\n"
+	newSrc := oldSrc + "  db:\n    type: service\n"
+	res, err := h.ModelDiff(ModelDiffParams{OldModelSource: oldSrc, NewModelSource: newSrc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Same || len(res.Added) != 1 || res.Added[0] != "db" {
+		t.Fatalf("want db added: %+v", res)
+	}
+	same, _ := h.ModelDiff(ModelDiffParams{OldModelSource: oldSrc, NewModelSource: oldSrc})
+	if !same.Same {
+		t.Errorf("a model against itself is the same: %+v", same)
+	}
+	if _, err := h.ModelDiff(ModelDiffParams{OldModelSource: oldSrc}); err == nil || !strings.Contains(err.Error(), "new model") {
+		t.Errorf("a missing revision names which: %v", err)
+	}
+}

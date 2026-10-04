@@ -77,6 +77,10 @@ suite_redundant_web() {
   mgtt model impact web-a --model system.model.yaml | tee "$tmp/impact"
   grep -q "shop-svc holds: redundancy covers web-a" "$tmp/impact" || { echo "web-a: group should hold"; return 1; }
   mgtt model impact db --model system.model.yaml | grep -q "! shop-svc" || { echo "db: should reach shop-svc"; return 1; }
+  # And the diff that removes the group says what that does for users.
+  sed '/need: 1/d' system.model.yaml >"$tmp/hard.yaml"
+  mgtt model diff system.model.yaml "$tmp/hard.yaml" | tee "$tmp/diff"
+  grep -q "web-a fails: now reaches shop-svc" "$tmp/diff" || { echo "diff: removing the group should newly expose shop-svc"; return 1; }
 }
 
 # Scenario-guided diagnosis on the flagship example decides a probe within the

@@ -5,7 +5,7 @@
 Architecture diagrams go stale, and at 3am the person who drew one is asleep. mgtt replaces the diagram with a YAML model of your system: components, what each depends on, and what "healthy" means for each. One engine then reasons over that model at every stage:
 
 1. **In CI**, `mgtt simulate` feeds the engine failure scenarios and asserts it blames the right component. If a change breaks the model's reasoning, the PR fails. No cluster or credentials needed.
-2. **At 3am**, `mgtt diagnose` runs the same engine on live probes. It names the root cause, rules out healthy components, and says what it couldn't see. Run it yourself, or let an AI agent drive it over MCP.
+2. **At 3am**, `mgtt diagnose` runs the same engine on live probes. It names the root cause, rules out healthy components, and says what it couldn't see. Run it yourself, or let an AI agent drive it over MCP. An agent can also draft the model for you.
 3. **After the incident**, `mgtt incident end --emit-scenario` writes what was observed as a new scenario. Commit it, and CI checks that diagnosis on every future PR.
 
 The model is tested like code, and each incident adds a test.

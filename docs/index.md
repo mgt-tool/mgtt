@@ -47,7 +47,7 @@ Probes run: 7/20   Time: 3.2s/5m0s
 
 It doesn't need the person who built the system, because the model already holds that knowledge. When a probe is refused (RBAC, IAM) or times out, the report says `Cannot rule out: rds`. It never counts what it couldn't see as healthy.
 
-**AI agents** get the same engine over MCP. You set the limits: read-only providers only, a cap on probes per incident, and whether write-capable probes pause or are refused. See [AI agents](guides/agents.md).
+**AI agents** get the same engine over MCP. They can run the diagnosis within your limits (read-only providers only, a cap on probes per incident, whether write probes pause or are refused). They can also draft the model and its scenarios from your providers' real vocabulary, checking both before you review. See [AI agents](guides/agents.md).
 
 ## Retrospective
 

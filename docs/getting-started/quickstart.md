@@ -44,7 +44,7 @@ components:
     resource: shop-prod-db       # the real resource name, if it differs from the key
 ```
 
-Each type brings its facts (`ready_replicas`, `available`, …), its states (`crashed`, `stopped`, …), and default health rules. To list them, run `mgtt provider inspect kubernetes deployment`.
+Or let an AI agent draft it: see [writing a model with MCP](../guides/agents.md#writing-a-model). Each type brings its facts (`ready_replicas`, `available`, …), its states (`crashed`, `stopped`, …), and default health rules. To list them, run `mgtt provider inspect kubernetes deployment`.
 
 ```
 $ mgtt model validate

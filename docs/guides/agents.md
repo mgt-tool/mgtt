@@ -1,6 +1,9 @@
 # AI agents (MCP)
 
-`mgtt mcp serve` exposes the engine as MCP tools. The agent never decides which command to run. It asks the engine for the next probe and runs it within the limits you set, so its reasoning is the same reasoning your scenarios test.
+`mgtt mcp serve` exposes mgtt to an AI agent, which can do two jobs with it:
+
+- **Write the model.** The agent looks up the real fact names in your installed providers, drafts the model and scenarios, and runs validate and simulate until both pass. The result reaches the repo only as a change you review.
+- **Diagnose an incident.** The agent never chooses which command to run. It asks the engine for the next probe and runs it within the limits you set, so its reasoning is the reasoning your scenarios already test.
 
 ## Connect
 
@@ -35,6 +38,21 @@ mgtt mcp serve --http --listen :8080 --token-env MGTT_MCP_TOKEN --readonly-only
 
 The image `ghcr.io/mgt-tool/mgtt` runs the same command. Mount the model at `/workspace` and `$MGTT_HOME` at `/data`.
 
+`--toolset authoring` serves only the model-writing tools. They read installed providers and the model they're given, never a live system, and need no credentials. `--toolset diagnose` serves only the incident tools. The default serves both.
+
+## Writing a model
+
+```text
+guide {}                                    → the authoring loop and its pitfalls
+types_list {provider: "kubernetes"}         → every type, with its fact count
+types_describe {type: "deployment"}         → facts, default healthy rules, states, variables
+model_validate {model_source: "<yaml>"}     → every error and warning, each with a suggestion
+scenario_simulate {model_source: "<yaml>", scenarios_source: "<yaml>---<yaml>"}
+                                            → pass/fail, with expected and actual side by side
+```
+
+The model and scenarios can be sent inline or by path (`model_path`, `scenarios_path`), so a chat client with no file access can use the tools too. No tool writes the model.
+
 ## Guardrails
 
 | Flag | Default | Recommended |
@@ -46,7 +64,7 @@ The image `ghcr.io/mgt-tool/mgtt` runs the same command. Mount the model at `/wo
 
 The MCP server's defaults are looser than `diagnose`'s, so set these flags explicitly. In Claude Code, you can also allow `plan` and `incident_snapshot` without asking and keep a prompt on `probe`.
 
-## The loop
+## Diagnosing an incident
 
 ```text
 incident_start {model_ref: "/repo/system.model.yaml", suspect: ["api"]}
@@ -83,4 +101,4 @@ incident_end {incident_id, verdict: "rds stopped by maintenance window", emit_sc
 
 ## All tools
 
-`about` (version and guardrails), `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.
+Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`. Diagnosis: `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.

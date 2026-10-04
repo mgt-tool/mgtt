@@ -82,6 +82,8 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerTypesList(s, h)
 		registerTypesDescribe(s, h)
 		registerModelValidate(s, h)
+		registerScenarioSimulate(s, h)
+		registerGuide(s, h)
 	}
 
 	return s
@@ -151,13 +153,45 @@ func registerModelValidate(s *server.MCPServer, h *Handler) {
 	))
 }
 
+func registerGuide(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("guide",
+		mcpgo.WithDescription("Short notes on writing mgtt models and scenarios: the authoring loop, healthy: overrides (replace vs add), dependencies (redundancy groups vs while: guards), patterns from real models, and the scenario archetypes to write. Call with no topic for the index. Read model.health before overriding a type's rules, and scenarios.authoring before writing scenarios."),
+		mcpgo.WithString("topic", mcpgo.Description("index (default), model.health, model.dependencies, model.patterns or scenarios.authoring")),
+		rawOutput(GuideOutputSchema),
+	)
+	s.AddTool(tool, dispatch("guide",
+		func(req mcpgo.CallToolRequest) GuideParams { return GuideParams{Topic: req.GetString("topic", "")} },
+		h.Guide,
+	))
+}
+
+func registerScenarioSimulate(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("scenario_simulate",
+		mcpgo.WithDescription("Run scenarios against a model, as `mgtt simulate` does: each injects facts (inject:), optionally records probes that failed (unresolved: forbidden | transient | not_found), and states the conclusion expected (expect: root_cause, path, eliminated, not_eliminated, cannot_rule_out, redundancy_degraded). Returns pass/fail per scenario with expected beside actual. Model and scenarios go by path or inline; inline scenarios are YAML documents separated by ---. No probes, no live system, no writes."),
+		mcpgo.WithString("model_path", mcpgo.Description("path to system.model.yaml on the server")),
+		mcpgo.WithString("model_source", mcpgo.Description("the model YAML itself (max 512 KiB)")),
+		mcpgo.WithString("scenarios_path", mcpgo.Description("a scenario file or a directory of them on the server")),
+		mcpgo.WithString("scenarios_source", mcpgo.Description("scenario YAML itself; several separated by --- (max 512 KiB)")),
+		rawOutput(ScenarioSimulateOutputSchema),
+	)
+	s.AddTool(tool, dispatch("scenario_simulate",
+		func(req mcpgo.CallToolRequest) ScenarioSimulateParams {
+			return ScenarioSimulateParams{
+				ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", ""),
+				ScenariosPath: req.GetString("scenarios_path", ""), ScenariosSource: req.GetString("scenarios_source", ""),
+			}
+		},
+		h.ScenarioSimulate,
+	))
+}
+
 // serverInstructions is the workflow an agent needs before its first call.
 // Clients may drop it, so every step is also in the tool descriptions.
 const serverInstructions = `mgtt diagnoses a running system against its committed model.
 Workflow: incident_start with the model path, then loop: plan (what to check next and why), probe with execute=true (or fact_add for a fact you gathered yourself), until plan names a root cause or reports none. incident_snapshot summarises the state; incident_end closes it.
 A probe that returns forbidden or transient recorded an unknown fact: the component stays a suspect, it is not cleared.
 about reports the safety posture: read-only enforcement, the write-probe policy and the per-incident probe budget, and which toolset is served.
-To write or change a model: types_list and types_describe for the vocabulary (never invent fact names), then model_validate with the draft as model_source until it reports no errors. These tools read no live system and write nothing; the model reaches the repository as a reviewed change.`
+To write or change a model, start with guide (no topic): types_list and types_describe for the vocabulary (never invent fact names), then model_validate with the draft as model_source until it reports no errors, then scenario_simulate with scenarios that pin what the model must conclude. These tools read no live system and write nothing; the model reaches the repository as a reviewed change.`
 
 // legacyToolNames maps each tool renamed in 0.4 to its old dotted name.
 var legacyToolNames = map[string]string{

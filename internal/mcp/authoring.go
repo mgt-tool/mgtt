@@ -10,6 +10,7 @@ import (
 
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/simulate"
 )
 
 // The authoring tools help a client write a model: read the installed
@@ -238,4 +239,97 @@ func loadModelParam(path, source string) (*model.Model, error) {
 		return nil, fmt.Errorf("model_path %q: %w (a client that cannot write files where the server reads them passes model_source)", path, err)
 	}
 	return model.Load(path)
+}
+
+// ScenarioSimulateParams takes a model and the scenarios to run against
+// it, each as a path the server can read or inline YAML.
+type ScenarioSimulateParams struct {
+	ModelPath       string `json:"model_path,omitempty"`
+	ModelSource     string `json:"model_source,omitempty"`
+	ScenariosPath   string `json:"scenarios_path,omitempty"`
+	ScenariosSource string `json:"scenarios_source,omitempty"`
+}
+
+// Conclusion is what the engine concluded, or what a scenario expects.
+type Conclusion struct {
+	RootCause          string   `json:"root_cause"`
+	Path               []string `json:"path,omitempty"`
+	Eliminated         []string `json:"eliminated,omitempty"`
+	NotEliminated      []string `json:"not_eliminated,omitempty"`
+	CannotRuleOut      []string `json:"cannot_rule_out,omitempty"`
+	RedundancyDegraded []string `json:"redundancy_degraded,omitempty"`
+}
+
+// ScenarioOutcome is one scenario's verdict, expected beside actual.
+type ScenarioOutcome struct {
+	Name     string     `json:"name"`
+	Pass     bool       `json:"pass"`
+	Expected Conclusion `json:"expected"`
+	Actual   Conclusion `json:"actual"`
+}
+
+// ScenarioSimulateResult reports every scenario.
+type ScenarioSimulateResult struct {
+	Passed  int               `json:"passed"`
+	Failed  int               `json:"failed"`
+	Results []ScenarioOutcome `json:"results"`
+}
+
+// ScenarioSimulate runs scenarios against a model, as `mgtt simulate`
+// does: injected facts, no probes, no live system.
+func (h *Handler) ScenarioSimulate(p ScenarioSimulateParams) (*ScenarioSimulateResult, error) {
+	m, err := loadModelParam(p.ModelPath, p.ModelSource)
+	if err != nil {
+		return nil, err
+	}
+	scs, err := loadScenariosParam(p.ScenariosPath, p.ScenariosSource)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	out := &ScenarioSimulateResult{Results: []ScenarioOutcome{}}
+	for _, sc := range scs {
+		r := simulate.Run(m, reg, sc)
+		if r.Pass {
+			out.Passed++
+		} else {
+			out.Failed++
+		}
+		out.Results = append(out.Results, ScenarioOutcome{Name: sc.Name, Pass: r.Pass, Expected: conclusion(sc.Expect), Actual: conclusion(r.Actual)})
+	}
+	return out, nil
+}
+
+func conclusion(e simulate.Expectation) Conclusion {
+	return Conclusion{RootCause: e.RootCause, Path: e.Path, Eliminated: e.Eliminated, NotEliminated: e.NotEliminated, CannotRuleOut: e.CannotRuleOut, RedundancyDegraded: e.RedundancyDegraded}
+}
+
+// loadScenariosParam loads scenarios from exactly one of a server-side
+// file or directory, or inline YAML (several separated by `---`).
+func loadScenariosParam(path, source string) ([]*simulate.Scenario, error) {
+	switch {
+	case path != "" && source != "":
+		return nil, fmt.Errorf("give scenarios_path or scenarios_source, not both")
+	case path == "" && source == "":
+		return nil, fmt.Errorf("scenarios_path or scenarios_source is required")
+	case len(source) > maxModelSourceBytes:
+		return nil, fmt.Errorf("scenarios_source is %d bytes; the limit is %d", len(source), maxModelSourceBytes)
+	case source != "":
+		return simulate.ParseScenarios([]byte(source))
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("scenarios_path %q: %w (a client that cannot write files where the server reads them passes scenarios_source)", path, err)
+	}
+	if info.IsDir() {
+		return simulate.LoadAllScenarios(path)
+	}
+	sc, err := simulate.LoadScenario(path)
+	if err != nil {
+		return nil, err
+	}
+	return []*simulate.Scenario{sc}, nil
 }

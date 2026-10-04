@@ -147,10 +147,14 @@ suite_mcp_probe() {
 }
 
 # The authoring toolset against the real providers: it serves no incident
-# tool, describes a real type, and validates the storefront model sent
-# inline -- as a client that cannot place files on the server would.
+# tool, describes a real type, validates the storefront model and runs all
+# its scenarios sent inline -- as a client that cannot place files on the
+# server would -- and serves the guide.
 suite_mcp_authoring() {
   src=$(awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\\n", $0 }' "$root/examples/storefront/system.model.yaml")
+  # Every storefront scenario, as one inline source separated by ---.
+  scs=$(for f in "$root"/examples/storefront/scenarios/*.yaml; do cat "$f"; echo '---'; done \
+    | awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\\n", $0 }')
   : >"$tmp/mcp.out"
   {
     printf '%s\n' \
@@ -159,13 +163,19 @@ suite_mcp_authoring() {
       '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
       '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"types_describe","arguments":{"type":"deployment"}}}'
     printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"model_validate","arguments":{"model_source":"%s"}}}\n' "$src"
+    printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"scenario_simulate","arguments":{"model_source":"%s","scenarios_source":"%s"}}}\n' "$src" "$scs"
+    printf '%s\n' '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"guide","arguments":{}}}'
     await_reply 4
+    await_reply 5
+    await_reply 6
   } | timeout 60 mgtt mcp serve --toolset authoring 2>"$tmp/mcp.err" >"$tmp/mcp.out"
   grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"model_validate"' || { echo "model_validate not listed"; return 1; }
   if grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"incident_start"'; then echo "authoring toolset serves incident_start"; return 1; fi
   grep '"id":3' "$tmp/mcp.out" | grep -q 'ready_replicas' || { echo "types_describe deployment lacks ready_replicas"; cat "$tmp/mcp.out" "$tmp/mcp.err"; return 1; }
   grep '"id":4' "$tmp/mcp.out" | grep -q '\\"ok\\":true' || { echo "storefront model_source did not validate ok"; grep '"id":4' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
-  echo "authoring toolset: listed, described, validated"
+  grep '"id":5' "$tmp/mcp.out" | grep -q '\\"failed\\":0' || { echo "storefront scenarios did not all pass inline"; grep '"id":5' "$tmp/mcp.out" | cut -c1-600; return 1; }
+  grep '"id":6' "$tmp/mcp.out" | grep -q 'authoring loop' || { echo "guide index missing"; return 1; }
+  echo "authoring toolset: listed, described, validated, simulated ($(grep '"id":5' "$tmp/mcp.out" | grep -o 'passed[^,]*' | tr -d '\\"')), guided"
 }
 
 suites="providers"

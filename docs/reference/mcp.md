@@ -91,7 +91,10 @@ tag so the agent can hand off or queue for human approval.
 | `types_describe` | One type: its facts and their value types, its default `healthy` rules, its states with `when`, `triggered_by` and `can_cause`, its default state, and the variables its provider declares. The vocabulary to use instead of inventing fact names, and the rules a `healthy:` override replaces. |
 | `model_validate` | Every error and warning in a model at once, each with `component`, `field`, `message` and, where there is one, `suggestion`. It covers unknown dependencies, cycles, invalid `need:`, `healthy:` overrides that drop a type rule, rules reading a variable nothing sets, and types no provider defines. Takes `model_path` (a file the server can read) **or** `model_source` (the YAML itself, up to 512 KiB), for clients that cannot place files where the server reads them. |
 
-A draft model reaches the repository as a reviewed change; no tool writes it. `incident_start` takes a path only: diagnosis runs against committed models.
+| `scenario_simulate` | Runs scenarios against a model, as `mgtt simulate` does, and returns pass/fail per scenario with the expected conclusion beside the actual one. The model goes by `model_path` or `model_source`. The scenarios go by `scenarios_path` (a file or a directory) or `scenarios_source` (YAML documents separated by `---`). |
+| `guide` | Short notes on writing models: the authoring loop, `healthy:` overrides, redundancy groups versus `while:` guards, patterns from real models, and the scenario archetypes to write. No topic returns the index. |
+
+The loop these tools support: read `guide`; look up the vocabulary with `types_list` and `types_describe`; draft the model; `model_validate` until there are no errors; `scenario_simulate` until the scenarios pass. A draft model reaches the repository as a reviewed change; no tool writes it. `incident_start` takes a path only: diagnosis runs against committed models.
 
 Each tool's JSON schema ships in `internal/mcp/schemas.go`. The server also
 sends MCP `instructions` describing the workflow (`incident_start`, then

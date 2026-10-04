@@ -49,3 +49,19 @@ func TestLoadScenario_UnresolvedRejectsMistakes(t *testing.T) {
 		})
 	}
 }
+
+// Several scenarios separated by ---, with the stray separators people
+// write at either end, parse to exactly the scenarios given.
+func TestParseScenarios_MultiDocument(t *testing.T) {
+	src := "---\nname: a\nexpect: { root_cause: none }\n---\nname: b\nexpect: { root_cause: x }\n---\n"
+	scs, err := ParseScenarios([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scs) != 2 || scs[0].Name != "a" || scs[1].Name != "b" {
+		t.Fatalf("got %d scenarios: %+v", len(scs), scs)
+	}
+	if _, err := ParseScenarios([]byte("---\n")); err == nil {
+		t.Error("a source with no scenario is an error")
+	}
+}

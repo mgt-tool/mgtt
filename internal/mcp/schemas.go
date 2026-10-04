@@ -46,7 +46,11 @@ const IncidentStartOutputSchema = `{
 const IncidentEndOutputSchema = `{
   "type":"object",
   "properties":{
-    "saved":{"type":"boolean"}
+    "saved":{"type":"boolean"},
+    "scenario_path":{"type":"string"},
+    "scenario_yaml":{"type":"string"},
+    "scenario_passes":{"type":"boolean"},
+    "scenario_warning":{"type":"string"}
   },
   "required":["saved"]
 }`

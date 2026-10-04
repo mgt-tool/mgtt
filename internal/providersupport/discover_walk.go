@@ -5,6 +5,7 @@ package providersupport
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -14,13 +15,15 @@ import (
 // DiscoverAll walks mgttHome/providers/ and invokes `<name>/bin/provider discover`
 // for each install. Returns:
 //   - results: successful discoveries (name → DiscoveryResult)
-//   - failures: providers whose discover exited non-zero (name → error)
+//   - failures: providers whose discover exited non-zero (name → error);
+//     errors.Is(err, ErrNoDiscover) when the provider has no discovery
 //   - homeErr: error reading the providers directory itself (nil when the
 //     directory simply doesn't exist — that is a legitimate empty state)
 //
-// A non-zero exit typically means "this provider doesn't support
-// discovery" (older SDK version or author opted out). The caller
-// decides whether that's a hard error or a warning.
+// A failure is either "this provider doesn't support discovery" (no
+// binary, older SDK version, or author opted out — ErrNoDiscover) or a
+// discovery that ran and failed (timeout, backend error, bad JSON). The
+// caller decides whether either is a hard error or a warning.
 func DiscoverAll(ctx context.Context, mgttHome string) (results map[string]provider.DiscoveryResult, failures map[string]error, homeErr error) {
 	results = map[string]provider.DiscoveryResult{}
 	failures = map[string]error{}
@@ -40,6 +43,10 @@ func DiscoverAll(ctx context.Context, mgttHome string) (results map[string]provi
 		name := entry.Name()
 		binary := filepath.Join(providersDir, name, "bin", "provider")
 		if _, err := os.Stat(binary); err != nil {
+			if os.IsNotExist(err) {
+				// Types-only provider: no binary, so nothing to discover.
+				err = fmt.Errorf("%w (no %s)", ErrNoDiscover, binary)
+			}
 			failures[name] = err
 			continue
 		}

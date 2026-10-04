@@ -60,8 +60,9 @@ func runModelBuild(ctx context.Context, f modelBuildFlags, stdout, stderr io.Wri
 	return writeBuiltModel(stdout, stderr, f.output, next)
 }
 
-// reportDiscoverFailures prints per-provider "no Discover() support" lines
-// in deterministic (sorted) order.
+// reportDiscoverFailures prints one line per provider that contributed
+// nothing, in deterministic (sorted) order: "no Discover() support" when
+// the provider has no discovery, "discover failed" when it ran and failed.
 func reportDiscoverFailures(w io.Writer, failures map[string]error) {
 	keys := make([]string, 0, len(failures))
 	for name := range failures {
@@ -69,7 +70,11 @@ func reportDiscoverFailures(w io.Writer, failures map[string]error) {
 	}
 	sort.Strings(keys)
 	for _, name := range keys {
-		fmt.Fprintf(w, "  %s provider → no Discover() support (skipped): %v\n", name, failures[name])
+		if errors.Is(failures[name], providersupport.ErrNoDiscover) {
+			fmt.Fprintf(w, "  %s provider → no Discover() support (skipped)\n", name)
+			continue
+		}
+		fmt.Fprintf(w, "  %s provider → discover failed (skipped): %v\n", name, failures[name])
 	}
 }
 

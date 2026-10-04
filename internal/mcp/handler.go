@@ -4,11 +4,14 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/mgt-tool/mgtt/internal/incident"
 	"github.com/mgt-tool/mgtt/internal/model"
+	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/simulate"
 )
 
 // Handler holds the business logic for all MCP tool methods. Each method
@@ -69,8 +72,9 @@ func (h *Handler) About() (*AboutResult, error) {
 
 // IncidentStartParams is the input for incident_start. ModelRef is a path
 // to a system.model.yaml on disk the server can read. ID is optional —
-// when empty the server generates one. Suspect is accepted for forward
-// compatibility but not consumed in Phase 1.
+// when empty the server generates one. Suspect is persisted with the
+// incident and read back by plan and probe as hints that bias which
+// probe the engine suggests next.
 type IncidentStartParams struct {
 	ModelRef string   `json:"model_ref"`
 	ID       string   `json:"id,omitempty"`
@@ -111,14 +115,26 @@ func (h *Handler) IncidentStart(p IncidentStartParams) (*IncidentStartResult, er
 }
 
 // IncidentEndParams is the input for incident_end. Verdict is optional.
+// EmitScenario records the incident as a simulate scenario next to its
+// model, as `mgtt incident end --emit-scenario` does.
 type IncidentEndParams struct {
-	IncidentID string `json:"incident_id"`
-	Verdict    string `json:"verdict,omitempty"`
+	IncidentID   string `json:"incident_id"`
+	Verdict      string `json:"verdict,omitempty"`
+	EmitScenario bool   `json:"emit_scenario,omitempty"`
 }
 
 // IncidentEndResult confirms the incident has been marked ended on disk.
+// The scenario fields are set only when emit_scenario was requested:
+// ScenarioPath and ScenarioYAML for the file written, ScenarioPasses for
+// its replay through simulate. ScenarioWarning says why nothing was
+// written (no facts, file already exists, model not loadable); the
+// incident is ended regardless.
 type IncidentEndResult struct {
-	Saved bool `json:"saved"`
+	Saved           bool   `json:"saved"`
+	ScenarioPath    string `json:"scenario_path,omitempty"`
+	ScenarioYAML    string `json:"scenario_yaml,omitempty"`
+	ScenarioPasses  *bool  `json:"scenario_passes,omitempty"`
+	ScenarioWarning string `json:"scenario_warning,omitempty"`
 }
 
 // IncidentEnd closes an incident — writes the end timestamp + optional
@@ -131,7 +147,8 @@ func (h *Handler) IncidentEnd(p IncidentEndParams) (*IncidentEndResult, error) {
 	mu := lockFor(p.IncidentID)
 	mu.Lock()
 	defer mu.Unlock()
-	if _, err := incident.EndByID(p.IncidentID, p.Verdict); err != nil {
+	inc, err := incident.EndByID(p.IncidentID, p.Verdict)
+	if err != nil {
 		return nil, fmt.Errorf("end incident: %w", err)
 	}
 	// Terminal state: remove the map entry while still holding the
@@ -141,5 +158,32 @@ func (h *Handler) IncidentEnd(p IncidentEndParams) (*IncidentEndResult, error) {
 	// incident. Doing it here guarantees any future lockFor sees a
 	// fresh entry.
 	evictLock(p.IncidentID)
-	return &IncidentEndResult{Saved: true}, nil
+	res := &IncidentEndResult{Saved: true}
+	if p.EmitScenario {
+		emitScenario(inc, res)
+	}
+	return res, nil
+}
+
+// emitScenario fills res's scenario fields from simulate.RecordIncident,
+// loading the model from the incident's model_ref.
+func emitScenario(inc *incident.Incident, res *IncidentEndResult) {
+	rec, err := simulate.RecordIncident(inc, func() (*model.Model, *providersupport.Registry, string, error) {
+		if inc.ModelRef == "" {
+			return nil, nil, "", fmt.Errorf("incident %q has no model_ref — was it started via MCP?", inc.ID)
+		}
+		m, reg, err := loadContext(inc.ModelRef)
+		return m, reg, inc.ModelRef, err
+	})
+	var exists *simulate.ScenarioExistsError
+	if errors.As(err, &exists) {
+		res.ScenarioPath = exists.Path
+	}
+	if err != nil {
+		res.ScenarioWarning = err.Error()
+		return
+	}
+	res.ScenarioPath = rec.Path
+	res.ScenarioYAML = string(rec.YAML)
+	res.ScenarioPasses = &rec.Result.Pass
 }

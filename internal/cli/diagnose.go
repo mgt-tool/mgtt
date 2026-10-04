@@ -207,6 +207,7 @@ func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err
 		return stop, err
 	}
 	outcome, err := l.runner.Run(ctx, p, l.store)
+	l.persist()
 	if err != nil {
 		if ctx.Err() != nil {
 			reportPartial(l.cmd, l.store, l.unseen(), l.trail, "deadline exceeded", *probesRun, l.f.maxProbes, l.start, l.f.deadline)
@@ -219,6 +220,14 @@ func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err
 	return false, nil
 }
 
+// persist saves the store after a probe or operator answer when it
+// belongs to an active incident, so the incident's state file holds what
+// diagnose learned (incident end --emit-scenario and --suggest-scenarios
+// read it back). A no-op for the in-memory store used with no incident.
+func (l *diagnoseLoop) persist() {
+	saveProbeStore(l.store, l.cmd.ErrOrStderr())
+}
+
 // handleGenericPrompt asks the operator about a generic component
 // rather than shelling out. Stdin-closed mid-session records a skip
 // sentinel (so Occam won't re-select the step) and reports partial.
@@ -227,6 +236,7 @@ func (l *diagnoseLoop) handleGenericPrompt(p *strategy.Probe, probesRun *int) (b
 	if err != nil {
 		if err == errNoMoreAnswers {
 			applyOperatorAnswer(l.store, p.Component, "skip")
+			l.persist()
 			l.trail = append(l.trail, probeRecord{probe: p, outcome: "operator-answered: skip (stdin closed)"})
 			reportPartial(l.cmd, l.store, l.unseen(), l.trail, "no more operator input (stdin closed)", *probesRun+1, l.f.maxProbes, l.start, l.f.deadline)
 			return true, nil
@@ -234,6 +244,7 @@ func (l *diagnoseLoop) handleGenericPrompt(p *strategy.Probe, probesRun *int) (b
 		return false, err
 	}
 	applyOperatorAnswer(l.store, p.Component, answer)
+	l.persist()
 	l.trail = append(l.trail, probeRecord{probe: p, outcome: fmt.Sprintf("operator-answered: %s", answer)})
 	*probesRun++
 	return false, nil

@@ -291,3 +291,24 @@ const GuideOutputSchema = `{
   },
   "required":["topic","text","topics"]
 }`
+
+// ModelImpactOutputSchema describes a blast radius.
+const ModelImpactOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "component":{"type":"string"},
+    "states":{"type":"array","items":{"type":"string"}},
+    "affected":{"type":"array","items":{"type":"object","properties":{
+      "component":{"type":"string"},
+      "states":{"type":"array","items":{"type":"string"}},
+      "path":{"type":"array","items":{"type":"string"}},
+      "symptom":{"type":"boolean"},
+      "conditions":{"type":"array","items":{"type":"string"}}},
+      "required":["component","states","path"]}},
+    "symptoms":{"type":"array","items":{"type":"string"}},
+    "blocked":{"type":"array","items":{"type":"object","properties":{
+      "dependent":{"type":"string"},"member":{"type":"string"}},
+      "required":["dependent","member"]}}
+  },
+  "required":["component","states","affected","symptoms","blocked"]
+}`

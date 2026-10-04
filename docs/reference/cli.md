@@ -10,6 +10,7 @@ Commands that take a model default to `system.model.yaml` in the current directo
 | `mgtt model validate [path]` | check structure, types, references and health rules, and that `scenarios.yaml` is current. `--write-scenarios` regenerates it; `--check-scenarios` checks only that |
 | `mgtt model build` | generate the model from provider discovery. `--allow-deletes`, `--tombstone a,b`, `--output` |
 | `mgtt model export --json [path]` | the resolved model as JSON, for external checkers |
+| `mgtt model impact <component>` | what breaks if the component fails, from the model alone: everything reached with a chain to it, user-facing symptoms marked `!`, where a redundancy group stops it, and the `while:` guards it depends on when every chain crosses one. `--state a,b` for some failure states only |
 | `mgtt visualize` | write a Mermaid graph to `model-graph.md` (`--output` to change) |
 
 ## Simulate

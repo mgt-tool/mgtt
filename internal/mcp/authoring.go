@@ -10,6 +10,7 @@ import (
 
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/scenarios"
 	"github.com/mgt-tool/mgtt/internal/simulate"
 )
 
@@ -332,4 +333,67 @@ func loadScenariosParam(path, source string) ([]*simulate.Scenario, error) {
 		return nil, err
 	}
 	return []*simulate.Scenario{sc}, nil
+}
+
+// ModelImpactParams names the component to fail, optionally in which
+// states, in a model given by path or inline.
+type ModelImpactParams struct {
+	ModelPath   string   `json:"model_path,omitempty"`
+	ModelSource string   `json:"model_source,omitempty"`
+	Component   string   `json:"component"`
+	States      []string `json:"states,omitempty"`
+}
+
+// AffectedInfo is one component the failure reaches.
+type AffectedInfo struct {
+	Component  string   `json:"component"`
+	States     []string `json:"states"`
+	Path       []string `json:"path"`
+	Symptom    bool     `json:"symptom,omitempty"`
+	Conditions []string `json:"conditions,omitempty"`
+}
+
+// BlockedInfo is where redundancy stops the failure.
+type BlockedInfo struct {
+	Dependent string `json:"dependent"`
+	Member    string `json:"member"`
+}
+
+// ModelImpactResult is the blast radius of one component's failure.
+type ModelImpactResult struct {
+	Component string         `json:"component"`
+	States    []string       `json:"states"`
+	Affected  []AffectedInfo `json:"affected"`
+	Symptoms  []string       `json:"symptoms"`
+	Blocked   []BlockedInfo  `json:"blocked"`
+}
+
+// ModelImpact answers "what breaks if this fails?" from the model alone.
+func (h *Handler) ModelImpact(p ModelImpactParams) (*ModelImpactResult, error) {
+	if p.Component == "" {
+		return nil, fmt.Errorf("component is required")
+	}
+	m, err := loadModelParam(p.ModelPath, p.ModelSource)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	imp, err := scenarios.ImpactOf(scenarios.BuildGraph(m, reg), m, p.Component, p.States)
+	if err != nil {
+		return nil, err
+	}
+	out := &ModelImpactResult{Component: imp.Component, States: imp.States, Affected: []AffectedInfo{}, Symptoms: []string{}, Blocked: []BlockedInfo{}}
+	for _, a := range imp.Affected {
+		out.Affected = append(out.Affected, AffectedInfo{Component: a.Component, States: a.States, Path: a.Path, Symptom: a.Symptom, Conditions: a.Conditions})
+		if a.Symptom {
+			out.Symptoms = append(out.Symptoms, a.Component)
+		}
+	}
+	for _, b := range imp.Blocked {
+		out.Blocked = append(out.Blocked, BlockedInfo{Dependent: b.Dependent, Member: b.Member})
+	}
+	return out, nil
 }

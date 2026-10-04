@@ -71,7 +71,12 @@ suite_storefront() {
 suite_redundant_web() {
   cd "$root/examples/redundant-web" || return 1
   mgtt model validate system.model.yaml || return 1
-  mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios
+  mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios || return 1
+  # The blast radius agrees: one web down is stopped by the group, the
+  # database under both reaches the Service.
+  mgtt model impact web-a --model system.model.yaml | tee "$tmp/impact"
+  grep -q "shop-svc holds: redundancy covers web-a" "$tmp/impact" || { echo "web-a: group should hold"; return 1; }
+  mgtt model impact db --model system.model.yaml | grep -q "! shop-svc" || { echo "db: should reach shop-svc"; return 1; }
 }
 
 # Scenario-guided diagnosis on the flagship example decides a probe within the

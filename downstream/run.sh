@@ -258,10 +258,12 @@ suite_mcp_authoring() {
     printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"scenario_simulate","arguments":{"model_source":"%s","scenarios_source":"%s"}}}\n' "$src" "$scs"
     printf '%s\n' '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"guide","arguments":{}}}'
     printf '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"scenario_suggest","arguments":{"model_source":"%s","limit":2}}}\n' "$src"
+    printf '%s\n' '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"types_describe","arguments":{"type":"mq_broker"}}}'
     await_reply 4
     await_reply 5
     await_reply 6
     await_reply 7
+    await_reply 8
   } | timeout 60 mgtt mcp serve --toolset authoring 2>"$tmp/mcp.err" >"$tmp/mcp.out"
   grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"model_validate"' || { echo "model_validate not listed"; return 1; }
   if grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"incident_start"'; then echo "authoring toolset serves incident_start"; return 1; fi
@@ -269,6 +271,9 @@ suite_mcp_authoring() {
   grep '"id":4' "$tmp/mcp.out" | grep -q '\\"ok\\":true' || { echo "storefront model_source did not validate ok"; grep '"id":4' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
   grep '"id":5' "$tmp/mcp.out" | grep -q '\\"failed\\":0' || { echo "storefront scenarios did not all pass inline"; grep '"id":5' "$tmp/mcp.out" | cut -c1-600; return 1; }
   grep '"id":6' "$tmp/mcp.out" | grep -q 'authoring loop' || { echo "guide index missing"; return 1; }
+  # A provider's derived fact reaches the vocabulary with its window.
+  grep '"id":8' "$tmp/mcp.out" | grep -q '\\"name\\":\\"queue_depth_delta_5m\\"[^}]*\\"window\\":\\"5m\\",\\"derive\\":\\"delta\\"' ||
+    { echo "types_describe mq_broker: want queue_depth_delta_5m over 5m by delta"; grep '"id":8' "$tmp/mcp.out" | cut -c1-800; return 1; }
   grep '"id":7' "$tmp/mcp.out" | grep -q '\\"next_page_token\\":\\"2\\"' ||
     { echo "scenario_suggest should page its drafts"; grep '"id":7' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
   echo "authoring toolset: listed, described, validated, simulated ($(grep '"id":5' "$tmp/mcp.out" | grep -o 'passed[^,]*' | tr -d '\\"')), guided, drafted ($(grep '"id":7' "$tmp/mcp.out" | grep -o 'total[^,]*' | head -n 1 | tr -d '\\"'))"

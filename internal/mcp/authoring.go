@@ -11,6 +11,7 @@ import (
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/modeldiff"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
+	"github.com/mgt-tool/mgtt/internal/providersupport/probe"
 	"github.com/mgt-tool/mgtt/internal/scenarios"
 	"github.com/mgt-tool/mgtt/internal/simulate"
 )
@@ -160,7 +161,7 @@ func (h *Handler) TypesDescribe(p TypesDescribeParams) (*TypesDescribeResult, er
 	for name, f := range t.Facts {
 		info := FactInfo{Name: name, Type: f.TypeName, Cost: f.Probe.Cost, Access: f.Probe.Access, Derive: f.Derive}
 		if f.Window > 0 {
-			info.Window = f.Window.String()
+			info.Window = probe.ShortDuration(f.Window)
 		}
 		out.Facts = append(out.Facts, info)
 	}

@@ -396,7 +396,7 @@ func TestBuildArgs_DerivedFact(t *testing.T) {
 
 func TestShortDuration(t *testing.T) {
 	for d, want := range map[time.Duration]string{5 * time.Minute: "5m", time.Hour: "1h", 90 * time.Second: "1m30s", 2*time.Hour + 30*time.Minute: "2h30m"} {
-		if got := shortDuration(d); got != want {
+		if got := ShortDuration(d); got != want {
 			t.Errorf("%v: got %q, want %q", d, got, want)
 		}
 	}

@@ -59,7 +59,7 @@ COPY downstream/provider.sh /usr/local/bin/provider.sh
 # One RUN per repository, ARGs just above it, so a new commit in one reclones
 # only that one.
 ARG AWS_REPO=https://github.com/mgt-tool/mgtt-provider-aws.git
-ARG AWS_REF=acdf8e43ba7f9f89144177193bdfccd25a4a1e0e
+ARG AWS_REF=434b4e2fccd405213c85d342a9efcca2256d548f
 RUN provider.sh aws "$AWS_REPO" "$AWS_REF"
 
 ARG DOCKER_REPO=https://github.com/mgt-tool/mgtt-provider-docker.git

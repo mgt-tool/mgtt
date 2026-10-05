@@ -318,7 +318,10 @@ func renderPlanSuggestion(w io.Writer, tree *engine.PathTree) {
 		if s.Access != "" {
 			meta = append(meta, s.Access)
 		}
-		if len(s.Eliminates) > 0 {
+		switch n := len(s.Eliminates); {
+		case n > 3:
+			meta = append(meta, fmt.Sprintf("eliminates %d scenarios if healthy", n))
+		case n > 0:
 			meta = append(meta, "eliminates "+strings.Join(s.Eliminates, ", ")+" if healthy")
 		}
 		if len(meta) > 0 {

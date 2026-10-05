@@ -30,14 +30,21 @@ type PathInfo struct {
 // SuggestedProbe is the next-probe hint. Command is rendered (vars
 // substituted) but not executed — callers invoke `probe` to act on it.
 type SuggestedProbe struct {
-	Component       string   `json:"component"`
-	Fact            string   `json:"fact"`
-	Provider        string   `json:"provider,omitempty"`
+	Component string `json:"component"`
+	Fact      string `json:"fact"`
+	Provider  string `json:"provider,omitempty"`
+	// Eliminates names the first few scenarios a healthy answer would rule
+	// out, and EliminatesCount all of them: on the storefront the first
+	// probe rules out thousands, and their IDs say little one by one.
 	Eliminates      []string `json:"eliminates,omitempty"`
+	EliminatesCount int      `json:"eliminates_count,omitempty"`
 	Cost            string   `json:"cost,omitempty"`
 	Access          string   `json:"access,omitempty"`
 	RenderedCommand string   `json:"rendered_command,omitempty"`
 }
+
+// eliminatesShown caps SuggestedProbe.Eliminates.
+const eliminatesShown = 10
 
 // PlanResult is the shape a `plan` tool call returns.
 type PlanResult struct {
@@ -115,7 +122,8 @@ func toSuggested(p *engine.Probe, _ *model.Model) *SuggestedProbe {
 		Component:       p.Component,
 		Fact:            p.Fact,
 		Provider:        p.Provider,
-		Eliminates:      p.Eliminates,
+		Eliminates:      p.Eliminates[:min(len(p.Eliminates), eliminatesShown)],
+		EliminatesCount: len(p.Eliminates),
 		Cost:            p.Cost,
 		Access:          p.Access,
 		RenderedCommand: probe.Substitute(p.Command, p.Component, p.Vars, nil),

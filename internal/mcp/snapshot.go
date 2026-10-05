@@ -38,18 +38,29 @@ type EliminatedScenarioInfo struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// snapshotClasses caps each scenario list in a snapshot. The lists hold
+// representatives, one per class, with the totals beside them;
+// scenarios_alive and scenarios_list page through every class.
+const snapshotClasses = 25
+
 // IncidentSnapshotResult is the diagnostic-memory bundle the snapshot
-// tool returns. Single object, full disclosure — agents run their own
-// summarisation if they want less.
+// tool returns, in one object.
 type IncidentSnapshotResult struct {
-	IncidentID          string                   `json:"incident_id"`
-	ModelRef            ModelPtr                 `json:"model_ref"`
-	StartedAt           time.Time                `json:"started_at"`
-	EndedAt             *time.Time               `json:"ended_at,omitempty"`
-	Status              string                   `json:"status"`
-	EntryPoint          string                   `json:"entry_point"`
+	IncidentID string     `json:"incident_id"`
+	ModelRef   ModelPtr   `json:"model_ref"`
+	StartedAt  time.Time  `json:"started_at"`
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	Status     string     `json:"status"`
+	EntryPoint string     `json:"entry_point"`
+	// SurvivingScenarios and EliminatedScenarios are the first 25
+	// representatives of each side, each with the count of chains it
+	// stands for. The counts below say how much the lists leave out.
 	SurvivingScenarios  []ScenarioInfo           `json:"surviving_scenarios"`
 	EliminatedScenarios []EliminatedScenarioInfo `json:"eliminated_scenarios"`
+	SurvivingChains     int                      `json:"surviving_chains"`
+	SurvivingClasses    int                      `json:"surviving_classes"`
+	EliminatedChains    int                      `json:"eliminated_chains"`
+	EliminatedClasses   int                      `json:"eliminated_classes"`
 	Facts               []FactEntry              `json:"facts"`
 	SuggestedNext       *SuggestedProbe          `json:"suggested_next,omitempty"`
 	Verdict             string                   `json:"verdict,omitempty"`
@@ -84,14 +95,22 @@ func (h *Handler) IncidentSnapshot(p IncidentSnapshotParams) (*IncidentSnapshotR
 		for _, s := range alive {
 			aliveByID[s.ID] = struct{}{}
 		}
-		out.SurvivingScenarios = mapScenarios(alive)
-		out.EliminatedScenarios = make([]EliminatedScenarioInfo, 0)
+		var eliminated []scenarios.Scenario
 		for _, s := range all {
-			if _, ok := aliveByID[s.ID]; ok {
-				continue
+			if _, ok := aliveByID[s.ID]; !ok {
+				eliminated = append(eliminated, s)
 			}
+		}
+		surviving, gone := scenarios.Representatives(alive), scenarios.Representatives(eliminated)
+		out.SurvivingChains, out.SurvivingClasses = len(alive), len(surviving)
+		out.EliminatedChains, out.EliminatedClasses = len(eliminated), len(gone)
+		out.SurvivingScenarios = mapRepresentatives(surviving[:min(len(surviving), snapshotClasses)])
+		out.EliminatedScenarios = make([]EliminatedScenarioInfo, 0)
+		for _, r := range gone[:min(len(gone), snapshotClasses)] {
+			info := mapScenario(r.Scenario)
+			info.Count = r.Count
 			out.EliminatedScenarios = append(out.EliminatedScenarios, EliminatedScenarioInfo{
-				ScenarioInfo: mapScenario(s),
+				ScenarioInfo: info,
 				Reason:       "contradicted by observed facts",
 			})
 		}

@@ -459,33 +459,55 @@ func registerProbe(s *server.MCPServer, h *Handler) {
 	))
 }
 
+// listingOptions are the paging parameters scenarios_list and
+// scenarios_alive share.
+func listingOptions() []mcpgo.ToolOption {
+	return []mcpgo.ToolOption{
+		mcpgo.WithBoolean("all", mcpgo.Description("list every chain instead of one representative per class (same root, root state and terminal component)")),
+		mcpgo.WithNumber("limit", mcpgo.Description("page size: 50 by default, at most 500")),
+		mcpgo.WithString("page_token", mcpgo.Description("next_page_token from the previous page")),
+	}
+}
+
+func listParams(req mcpgo.CallToolRequest) ListParams {
+	return ListParams{
+		All:       req.GetBool("all", false),
+		Limit:     req.GetInt("limit", 0),
+		PageToken: req.GetString("page_token", ""),
+	}
+}
+
 func registerScenariosList(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("scenarios_list",
-		mcpgo.WithDescription("Enumerate every failure chain the engine considers for this incident's model."),
+	opts := append([]mcpgo.ToolOption{
+		mcpgo.WithDescription("The failure chains the engine considers for this incident's model, one representative per class (same root, root state and terminal component) with the count of chains it stands for, a page at a time. all=true lists the chains themselves."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(ScenariosListOutputSchema),
-	)
-	s.AddTool(tool, dispatch("scenarios_list",
-		incidentIDOnly(func(p *ScenariosListParams, id string) { p.IncidentID = id }),
+	}, listingOptions()...)
+	s.AddTool(mcpgo.NewTool("scenarios_list", opts...), dispatch("scenarios_list",
+		func(req mcpgo.CallToolRequest) ScenariosListParams {
+			return ScenariosListParams{IncidentID: req.GetString("incident_id", ""), ListParams: listParams(req)}
+		},
 		h.ScenariosList,
 	))
 }
 
 func registerScenariosAlive(s *server.MCPServer, h *Handler) {
-	tool := mcpgo.NewTool("scenarios_alive",
-		mcpgo.WithDescription("Subset of enumerated scenarios still consistent with the incident's facts."),
+	opts := append([]mcpgo.ToolOption{
+		mcpgo.WithDescription("The scenarios still consistent with the incident's facts, listed as scenarios_list lists them."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(ScenariosListOutputSchema),
-	)
-	s.AddTool(tool, dispatch("scenarios_alive",
-		incidentIDOnly(func(p *ScenariosAliveParams, id string) { p.IncidentID = id }),
+	}, listingOptions()...)
+	s.AddTool(mcpgo.NewTool("scenarios_alive", opts...), dispatch("scenarios_alive",
+		func(req mcpgo.CallToolRequest) ScenariosAliveParams {
+			return ScenariosAliveParams{IncidentID: req.GetString("incident_id", ""), ListParams: listParams(req)}
+		},
 		h.ScenariosAlive,
 	))
 }
 
 func registerIncidentSnapshot(s *server.MCPServer, h *Handler) {
 	tool := mcpgo.NewTool("incident_snapshot",
-		mcpgo.WithDescription("Export an incident's full diagnostic memory — surviving and eliminated scenarios, facts, current suggestion, status."),
+		mcpgo.WithDescription("Export an incident's diagnostic memory: facts, current suggestion, status, and the surviving and eliminated scenarios — up to 25 representatives of each, with chain and class totals; scenarios_alive pages through the rest."),
 		mcpgo.WithString("incident_id", mcpgo.Required()),
 		rawOutput(IncidentSnapshotOutputSchema),
 	)

@@ -194,6 +194,41 @@ suite_mcp_probe() {
 # tool, describes a real type, validates the storefront model and runs all
 # its scenarios sent inline -- as a client that cannot place files on the
 # server would -- and serves the guide.
+# Scenario listings stay readable on the flagship: one representative per
+# class with its count, a page at a time, the totals beside them, and a
+# snapshot that does not carry every chain.
+suite_mcp_scenarios() {
+  : >"$tmp/mcp.out"
+  {
+    printf '%s\n' \
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
+      '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"incident_start","arguments":{"model_ref":"%s","id":"inc-scenarios"}}}\n' \
+      "$root/examples/storefront/system.model.yaml"
+    await_reply 2
+    printf '%s\n' \
+      '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"scenarios_list","arguments":{"incident_id":"inc-scenarios"}}}' \
+      '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"scenarios_list","arguments":{"incident_id":"inc-scenarios","page_token":"50"}}}' \
+      '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"incident_snapshot","arguments":{"incident_id":"inc-scenarios"}}}'
+    await_reply 3
+    await_reply 4
+    await_reply 5
+  } | timeout 120 mgtt mcp serve 2>"$tmp/mcp.err" >"$tmp/mcp.out"
+  num() { grep "\"id\":$1[,}]" "$tmp/mcp.out" | grep -o "\\\\\"$2\\\\\":[0-9]*" | head -n 1 | grep -o '[0-9]*$'; }
+  chains=$(num 3 chains) total=$(num 3 total)
+  echo "storefront: ${chains:-?} chains in ${total:-?} classes; first page $(grep '"id":3[,}]' "$tmp/mcp.out" | wc -c) bytes, snapshot $(grep '"id":5[,}]' "$tmp/mcp.out" | wc -c) bytes"
+  [ -n "$chains" ] && [ -n "$total" ] && [ "$total" -lt "$chains" ] ||
+    { echo "want fewer classes than chains"; grep '"id":3[,}]' "$tmp/mcp.out" | cut -c1-400; cat "$tmp/mcp.err"; return 1; }
+  if [ "$total" -gt 50 ]; then
+    grep '"id":3[,}]' "$tmp/mcp.out" | grep -q '\\"next_page_token\\":\\"50\\"' || { echo "the first page should continue at 50"; return 1; }
+    [ "$(num 4 total)" = "$total" ] || { echo "the second page should list the same classes"; return 1; }
+  fi
+  [ "$(num 5 surviving_chains)" = "$chains" ] || { echo "the snapshot should count every chain as surviving"; return 1; }
+  [ "$(grep '"id":5[,}]' "$tmp/mcp.out" | wc -c)" -lt 50000 ] || { echo "the snapshot should stay under 50 KB"; return 1; }
+  [ "$(grep '"id":5[,}]' "$tmp/mcp.out" | grep -o '\\"count\\":' | wc -l)" -le 50 ] ||
+    { echo "the snapshot should list at most 25 classes a side"; return 1; }
+}
+
 suite_mcp_authoring() {
   src=$(awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\\n", $0 }' "$root/examples/storefront/system.model.yaml")
   # Every storefront scenario, as one inline source separated by ---.
@@ -224,7 +259,7 @@ suite_mcp_authoring() {
 
 suites="providers"
 for p in $providers; do suites="$suites provider-$p"; done
-suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe mcp-authoring"
+suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe mcp-authoring mcp-scenarios"
 
 # Suites are suite_* functions, so none can shadow the tool it runs.
 dispatch() {

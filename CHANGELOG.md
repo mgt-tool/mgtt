@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Breaking (MCP)
 
+- **Scenario listings return classes, a page at a time.** `scenarios_list` and `scenarios_alive` returned every chain: 15,982 on the storefront, 11.7 MB in one reply, past what any client accepts. They now return one representative per class of chains (same root, root state and terminal component; the shortest member, with `count` for the class), 50 to a page, with `chains`, `total` and `next_page_token` beside them; `limit` sets the page size (at most 500), and `all: true` pages through the chains themselves. `incident_snapshot` lists up to 25 representatives on each side, with `surviving_chains`, `surviving_classes`, `eliminated_chains` and `eliminated_classes`. A suggested probe names the first 10 scenarios it would rule out and counts all of them in `eliminates_count` (the storefront's first probe rules out 8,093); `mgtt plan` prints the count. The storefront's snapshot goes from 11.8 MB to 10 KB.
 - **MCP tool names use underscores:** `incident_start`, `incident_end`, `incident_snapshot`, `fact_add`, `facts_list`, `scenarios_list`, `scenarios_alive` (`about`, `plan`, `probe` are unchanged). Some clients and model APIs accept only `[A-Za-z0-9_-]` in tool names and rejected the whole tool list over the dotted ones. Agents discover names from `tools/list`, so most need no change; for one that calls the old names directly, `mgtt mcp serve --legacy-tool-names` registers them as deprecated aliases for one release.
 
 ### Added

@@ -116,6 +116,7 @@ const PlanOutputSchema = `{
         "fact":{"type":"string"},
         "provider":{"type":"string"},
         "eliminates":{"type":"array","items":{"type":"string"}},
+        "eliminates_count":{"type":"integer"},
         "cost":{"type":"string"},
         "access":{"type":"string"},
         "rendered_command":{"type":"string"}
@@ -169,13 +170,17 @@ const ScenariosListOutputSchema = `{
               "required":["component","state"]
             }
           },
-          "observations":{"type":"array","items":{"type":"string"}}
+          "observations":{"type":"array","items":{"type":"string"}},
+          "count":{"type":"integer"}
         },
         "required":["id","root","chain"]
       }
-    }
+    },
+    "chains":{"type":"integer"},
+    "total":{"type":"integer"},
+    "next_page_token":{"type":"string"}
   },
-  "required":["scenarios"]
+  "required":["scenarios","chains","total"]
 }`
 
 // IncidentSnapshotOutputSchema describes the full diagnostic-memory bundle.
@@ -194,12 +199,16 @@ const IncidentSnapshotOutputSchema = `{
     "entry_point":{"type":"string"},
     "surviving_scenarios":{"type":"array"},
     "eliminated_scenarios":{"type":"array"},
+    "surviving_chains":{"type":"integer"},
+    "surviving_classes":{"type":"integer"},
+    "eliminated_chains":{"type":"integer"},
+    "eliminated_classes":{"type":"integer"},
     "facts":{"type":"array"},
     "suggested_next":{"type":"object"},
     "verdict":{"type":"string"},
     "cannot_rule_out":{"type":"array","items":{"type":"object","properties":{"component":{"type":"string"},"facts":{"type":"object","additionalProperties":{"type":"string","enum":["forbidden","transient"]}}},"required":["component","facts"]}}
   },
-  "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","facts"]
+  "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","surviving_chains","surviving_classes","eliminated_chains","eliminated_classes","facts"]
 }`
 
 // TypesListOutputSchema describes the installed vocabulary listing.

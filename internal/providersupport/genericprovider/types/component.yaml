@@ -10,6 +10,11 @@ facts:
       cost: low
       access: operator prompt
 
+# The operator's word is the only evidence, so it is the health check too:
+# without one, "not healthy" left the component healthy by default.
+healthy:
+  - operator_says_healthy == true
+
 states:
   live:
     when: "operator_says_healthy == true"

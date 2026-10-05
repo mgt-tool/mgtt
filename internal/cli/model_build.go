@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/model/build"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
@@ -28,37 +27,38 @@ type modelBuildFlags struct {
 	output       string
 	allowDeletes bool
 	tombstone    []string
+	dryRun       bool
 }
 
 // runModelBuild is the testable core: no cobra, no globals. Reads
 // the existing model (if present), invokes every installed provider's
 // discover, builds + diffs + gates + writes. Returns an exit code.
 func runModelBuild(ctx context.Context, f modelBuildFlags, stdout, stderr io.Writer) int {
-	snapshots, failures, homeErr := providersupport.DiscoverAll(ctx, f.mgttHome)
-	if homeErr != nil {
-		fmt.Fprintf(stderr, "cannot read providers dir: %v\n", homeErr)
-		return 1
-	}
-	reportDiscoverFailures(stderr, failures)
-
-	next, err := build.BuildModel(snapshots)
-	if err != nil {
-		fmt.Fprintf(stderr, "build model: %v\n", err)
-		return 1
-	}
 	prev, code := loadPrevModel(f.output, stderr)
 	if code != 0 {
 		return code
 	}
-	kept := mergePrev(prev, next, f.tombstone)
-
-	diff := build.ComputeDiff(prev, next)
-	if code := gateDeletions(stderr, diff, f); code != 0 {
+	plan, err := build.Discover(ctx, f.mgttHome, prev, f.tombstone)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	reportDiscoverFailures(stderr, plan.Failures)
+	if f.dryRun {
+		renderBuildSummary(stdout, plan.Snapshots, plan.Next, plan.Diff)
+		renderAuthored(stdout, plan.Next, plan.Kept)
+		if plan.Diff.HasDeletions() {
+			fmt.Fprintf(stdout, "  A real build would refuse these removals without --allow-deletes or --tombstone.\n")
+		}
+		fmt.Fprintln(stdout, "  Dry run: nothing written.")
+		return 0
+	}
+	if code := gateDeletions(stderr, plan.Diff, f); code != 0 {
 		return code
 	}
-	renderBuildSummary(stdout, snapshots, next, diff)
-	renderAuthored(stdout, next, kept)
-	return writeBuiltModel(stdout, stderr, f.output, next)
+	renderBuildSummary(stdout, plan.Snapshots, plan.Next, plan.Diff)
+	renderAuthored(stdout, plan.Next, plan.Kept)
+	return writeBuiltModel(stdout, stderr, f.output, plan.Next)
 }
 
 // reportDiscoverFailures prints one line per provider that contributed
@@ -93,39 +93,6 @@ func loadPrevModel(path string, stderr io.Writer) (*model.Model, int) {
 	return prev, 0
 }
 
-// mergePrev carries over from prev what discovery cannot produce:
-// every authored component (any without source: discovered -- business
-// processes, external services, hand-written wiring), tombstoned
-// components, and hand-authored augmentations (healthy, failure_modes,
-// vars, while-guards) on kept ones. Returns the authored components kept
-// although discovery did not return them, sorted.
-func mergePrev(prev, next *model.Model, tombstone []string) []string {
-	if prev == nil {
-		return nil
-	}
-	var kept []string
-	for name, pc := range prev.Components {
-		if _, discovered := next.Components[name]; discovered || !pc.Authored() {
-			continue
-		}
-		next.Components[name] = pc
-		kept = append(kept, name)
-	}
-	sort.Strings(kept)
-	for _, name := range tombstone {
-		pc, ok := prev.Components[name]
-		if !ok {
-			continue
-		}
-		if _, alreadyInNext := next.Components[name]; alreadyInNext {
-			continue
-		}
-		next.Components[name] = pc
-	}
-	mergeHandAuthored(prev, next)
-	return kept
-}
-
 // renderAuthored names the authored components kept although discovery
 // does not return them, and any of their dependencies on a component the
 // model no longer has.
@@ -134,28 +101,9 @@ func renderAuthored(w io.Writer, next *model.Model, kept []string) {
 		fmt.Fprintf(w, "  Kept (authored, not from discovery): %s\n", strings.Join(kept, ", "))
 		fmt.Fprintln(w, "    a component without `source: discovered` is never removed by build; delete it by hand if it is gone")
 	}
-	for _, name := range sortedComponentNames(next) {
-		c := next.Components[name]
-		if !c.Authored() {
-			continue
-		}
-		for _, dep := range c.Depends {
-			for _, on := range dep.On {
-				if next.Components[on] == nil {
-					fmt.Fprintf(w, "  Dangling: %s depends on %s, which the model no longer has\n", name, on)
-				}
-			}
-		}
+	for _, d := range build.Dangling(next) {
+		fmt.Fprintf(w, "  Dangling: %s, which the model no longer has\n", d)
 	}
-}
-
-func sortedComponentNames(m *model.Model) []string {
-	out := make([]string, 0, len(m.Components))
-	for n := range m.Components {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // gateDeletions enforces the deletion safety contract. Returns a non-zero
@@ -226,69 +174,6 @@ func writeBuiltModel(stdout, stderr io.Writer, path string, m *model.Model) int 
 	return 0
 }
 
-// mergeHandAuthored copies hand-authored fields (HealthyRaw,
-// FailureModes, Vars, plus while-guards on matching deps) from prev
-// onto next's components. Discovery only knows structural facts —
-// type / resource / depends targets — so any semantic augmentation
-// lives on prev and must survive rebuild.
-func mergeHandAuthored(prev, next *model.Model) {
-	for name, nextComp := range next.Components {
-		prevComp, ok := prev.Components[name]
-		if !ok {
-			continue
-		}
-		if len(nextComp.HealthyRaw) == 0 && len(prevComp.HealthyRaw) > 0 {
-			nextComp.HealthyRaw = append([]string(nil), prevComp.HealthyRaw...)
-			nextComp.HealthyMode = prevComp.HealthyMode
-			nextComp.Healthy = append([]expr.Node(nil), prevComp.Healthy...)
-		}
-		if len(nextComp.FailureModes) == 0 && len(prevComp.FailureModes) > 0 {
-			nextComp.FailureModes = make(map[string][]string, len(prevComp.FailureModes))
-			for k, v := range prevComp.FailureModes {
-				nextComp.FailureModes[k] = append([]string(nil), v...)
-			}
-		}
-		if len(nextComp.Vars) == 0 && len(prevComp.Vars) > 0 {
-			nextComp.Vars = make(map[string]string, len(prevComp.Vars))
-			for k, v := range prevComp.Vars {
-				nextComp.Vars[k] = v
-			}
-		}
-		// Port while-guards onto matching next-side deps (matched by
-		// identical On target set). Discovery has no way to express
-		// while-guards; if prev's dep matches next's by target, the
-		// operator's guard applies to the merged edge.
-		for i, nd := range nextComp.Depends {
-			for _, pd := range prevComp.Depends {
-				if pd.WhileRaw == "" || !sameTargets(nd.On, pd.On) {
-					continue
-				}
-				nextComp.Depends[i].WhileRaw = pd.WhileRaw
-				nextComp.Depends[i].While = pd.While
-				break
-			}
-		}
-	}
-}
-
-// sameTargets reports whether two depends-on lists target the same
-// components (order-insensitive, duplicates collapsed).
-func sameTargets(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	seen := make(map[string]struct{}, len(a))
-	for _, s := range a {
-		seen[s] = struct{}{}
-	}
-	for _, s := range b {
-		if _, ok := seen[s]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 // newModelBuildCmd wires runModelBuild into cobra.
 func newModelBuildCmd() *cobra.Command {
 	f := modelBuildFlags{}
@@ -320,6 +205,7 @@ func newModelBuildCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.mgttHome, "mgtt-home", "", "override $MGTT_HOME for discovery (default: $MGTT_HOME or ~/.mgtt)")
 	cmd.Flags().StringVar(&f.output, "output", "", "output path (default: system.model.yaml)")
 	cmd.Flags().BoolVar(&f.allowDeletes, "allow-deletes", false, "accept removal of components no longer returned by discovery")
+	cmd.Flags().BoolVar(&f.dryRun, "dry-run", false, "discover and show what would change, without writing")
 	cmd.Flags().StringSliceVar(&f.tombstone, "tombstone", nil, "components to preserve across rebuilds when discovery no longer returns them (comma-separated)")
 	return cmd
 }

@@ -305,6 +305,88 @@ func (h *Handler) ScenarioSimulate(p ScenarioSimulateParams) (*ScenarioSimulateR
 	return out, nil
 }
 
+// ScenarioSuggestParams is the input for scenario_suggest.
+type ScenarioSuggestParams struct {
+	ModelPath   string `json:"model_path,omitempty"`
+	ModelSource string `json:"model_source,omitempty"`
+	// Component keeps only the drafts for failures rooted at it.
+	Component string `json:"component,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+	PageToken string `json:"page_token,omitempty"`
+}
+
+// DraftInfo is one drafted scenario.
+type DraftInfo struct {
+	Name string `json:"name"`
+	// Chain is the failure chain the facts were drawn from, as
+	// component.state steps, and Count how many chains share its root and
+	// root state; both absent for the all-healthy draft.
+	Chain []string `json:"chain,omitempty"`
+	Count int      `json:"count,omitempty"`
+	// RootCause is the conclusion the draft's expect: records.
+	RootCause string `json:"root_cause"`
+	// Review is set when that conclusion is not the chain's root and no
+	// redundancy group explains it.
+	Review string `json:"review,omitempty"`
+	// YAML is the scenario file, ready to edit and keep.
+	YAML string `json:"yaml"`
+}
+
+// ScenarioSuggestResult is one page of drafts.
+type ScenarioSuggestResult struct {
+	Drafts []DraftInfo `json:"drafts"`
+	// Chains is how many failure chains the model has; Total is how many
+	// drafts there are over all pages.
+	Chains        int    `json:"chains"`
+	Total         int    `json:"total"`
+	NextPageToken string `json:"next_page_token,omitempty"`
+	// Unshowable names failures, as component.state, no facts were found
+	// to show: the component's healthy rules hold in that state.
+	Unshowable []string `json:"unshowable,omitempty"`
+}
+
+// draftsPerPage is scenario_suggest's default page: a storefront draft is
+// a few kilobytes of YAML.
+const draftsPerPage = 10
+
+// ScenarioSuggest drafts scenarios from the model's own failure chains,
+// as `mgtt simulate --suggest` does.
+func (h *Handler) ScenarioSuggest(p ScenarioSuggestParams) (*ScenarioSuggestResult, error) {
+	m, err := loadModelParam(p.ModelPath, p.ModelSource)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	ds, err := simulate.Suggest(m, reg, simulate.SuggestOptions{Component: p.Component})
+	if err != nil {
+		return nil, err
+	}
+	limit := p.Limit
+	if limit <= 0 {
+		limit = draftsPerPage
+	}
+	start, end, next, err := page(len(ds.Drafts), limit, p.PageToken)
+	if err != nil {
+		return nil, err
+	}
+	out := &ScenarioSuggestResult{Drafts: []DraftInfo{}, Chains: ds.Chains, Total: len(ds.Drafts), NextPageToken: next, Unshowable: ds.Unshowable}
+	for _, d := range ds.Drafts[start:end] {
+		data, err := simulate.MarshalDraft(d, m.Order)
+		if err != nil {
+			return nil, err
+		}
+		info := DraftInfo{Name: d.Scenario.Name, Count: d.Count, RootCause: d.Scenario.Expect.RootCause, Review: d.Review, YAML: string(data)}
+		for _, st := range d.Chain.Chain {
+			info.Chain = append(info.Chain, st.Component+"."+st.State)
+		}
+		out.Drafts = append(out.Drafts, info)
+	}
+	return out, nil
+}
+
 func conclusion(e simulate.Expectation) Conclusion {
 	return Conclusion{RootCause: e.RootCause, Path: e.Path, Eliminated: e.Eliminated, NotEliminated: e.NotEliminated, CannotRuleOut: e.CannotRuleOut, RedundancyDegraded: e.RedundancyDegraded}
 }

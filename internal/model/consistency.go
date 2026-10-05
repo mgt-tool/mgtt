@@ -6,6 +6,7 @@ package model
 import (
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,15 +59,99 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 		return nil
 	}
 	cands := candidates(rules, t, component, vars)
+	if len(cands) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []Disagreement
+	eachAssignment(cands, func(assign map[string]any) bool {
+		ctx := expr.Ctx{CurrentComponent: component, Facts: mapLookup{component: assign}, Vars: vars}
+		healthy, decided := allTrue(rules, ctx)
+		if !decided {
+			return true
+		}
+		state := stateOf(t, ctx)
+		switch {
+		case state == "" && healthy:
+			return true // healthy, and no failure state claims it: fine
+		case state != "" && healthy == (state == t.DefaultActiveState):
+			return true // rules and states agree
+		}
+		key := fmt.Sprintf("%s/%v", state, healthy)
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+		out = append(out, Disagreement{State: state, Healthy: healthy, Witness: assign})
+		return true
+	})
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].State != out[j].State {
+			return out[i].State < out[j].State
+		}
+		return out[i].Healthy && !out[j].Healthy
+	})
+	return out
+}
+
+// Witness finds facts that put a component of type t in state, with its
+// healthy rules holding or failing as healthy says: the facts a scenario
+// injects to show that state. It tries the values HealthStateDisagreements
+// tries and returns the first assignment that works, or false when none
+// does -- a failure state the rules call healthy has no unhealthy witness.
+// vars may be nil.
+func Witness(rules []expr.Node, t *providersupport.Type, component string, vars expr.VarLookup, state string, healthy bool) (map[string]any, bool) {
+	if t == nil {
+		return nil, false
+	}
+	// Zero first, when it serves: a witness is read by people, and
+	// restart_count 0 says healthy more plainly than the 4 just under a
+	// threshold of 5.
+	cands := candidates(rules, t, component, vars)
+	// And a string fact may take a value the type never names: `status !=
+	// healthy` needs one. "other" stands for it, after the named values.
+	for name, vals := range cands {
+		var zero any = 0.0 // numbers are floats unless the fact is an int, as in candidates
+		switch t.Facts[name].TypeName {
+		case "mgtt.bool":
+			continue
+		case "mgtt.string":
+			other := "other"
+			for slices.Contains(vals, any(other)) {
+				other += "-value"
+			}
+			cands[name] = append(vals, other)
+			continue
+		case "mgtt.int":
+			zero = 0
+		}
+		if !slices.Contains(vals, zero) {
+			cands[name] = append([]any{zero}, vals...)
+		}
+	}
+	var found map[string]any
+	eachAssignment(cands, func(assign map[string]any) bool {
+		ctx := expr.Ctx{CurrentComponent: component, Facts: mapLookup{component: assign}, Vars: vars}
+		h, decided := allTrue(rules, ctx)
+		if decided && h == healthy && stateOf(t, ctx) == state {
+			found = assign
+			return false
+		}
+		return true
+	})
+	return found, found != nil
+}
+
+// eachAssignment calls f with assignments of cands' values -- every
+// combination when there are at most maxAssignments, else maxAssignments
+// of them drawn with a fixed seed -- until f returns false. Each call gets
+// a fresh map.
+func eachAssignment(cands map[string][]any, f func(map[string]any) bool) {
 	names := make([]string, 0, len(cands))
 	for n := range cands {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	if len(names) == 0 {
-		return nil
-	}
-
 	total := 1
 	for _, n := range names {
 		total *= len(cands[n])
@@ -75,8 +160,6 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 		}
 	}
 	rng := rand.New(rand.NewPCG(1, uint64(len(names))))
-	seen := map[string]bool{}
-	var out []Disagreement
 	for i := 0; i < maxAssignments && (total > maxAssignments || i < total); i++ {
 		assign := map[string]any{}
 		idx := i
@@ -89,41 +172,24 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 				idx /= len(vals)
 			}
 		}
-		ctx := expr.Ctx{CurrentComponent: component, Facts: mapLookup{component: assign}, Vars: vars}
-		healthy, decided := allTrue(rules, ctx)
-		if !decided {
-			continue
+		if !f(assign) {
+			return
 		}
-		state := ""
-		for _, st := range t.States {
-			if st.When == nil {
-				continue
-			}
-			if ok, err := st.When.Eval(ctx); err == nil && ok {
-				state = st.Name
-				break
-			}
-		}
-		switch {
-		case state == "" && healthy:
-			continue // healthy, and no failure state claims it: fine
-		case state != "" && healthy == (state == t.DefaultActiveState):
-			continue // rules and states agree
-		}
-		key := fmt.Sprintf("%s/%v", state, healthy)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, Disagreement{State: state, Healthy: healthy, Witness: assign})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].State != out[j].State {
-			return out[i].State < out[j].State
+}
+
+// stateOf is the state the facts in ctx put a component of type t in: the
+// first whose `when` holds, as the engine reads it; "" when none does.
+func stateOf(t *providersupport.Type, ctx expr.Ctx) string {
+	for _, st := range t.States {
+		if st.When == nil {
+			continue
 		}
-		return out[i].Healthy && !out[j].Healthy
-	})
-	return out
+		if ok, err := st.When.Eval(ctx); err == nil && ok {
+			return st.Name
+		}
+	}
+	return ""
 }
 
 func allTrue(rules []expr.Node, ctx expr.Ctx) (healthy, decided bool) {

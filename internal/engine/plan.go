@@ -32,6 +32,16 @@ func Plan(m *model.Model, reg *providersupport.Registry, store *facts.Store, ent
 // bias probe ordering toward the agent's suspicion; an empty slice is the
 // no-hint case.
 func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store, entry string, suspects []strategy.SuspectHint) *PathTree {
+	tree := Conclude(m, reg, store, entry)
+	// Stage 5 — strategy dispatch.
+	tree.Suggested = suggestNextProbe(m, reg, store, suspects)
+	return tree
+}
+
+// Conclude is Plan without the next probe: what the facts say now, and
+// nothing about what to read next. Simulation needs no more, and skipping
+// the probe choice skips loading the scenario sidecar, which only it reads.
+func Conclude(m *model.Model, reg *providersupport.Registry, store *facts.Store, entry string) *PathTree {
 	if entry == "" {
 		entry = m.EntryPoint()
 	}
@@ -62,8 +72,6 @@ func PlanWith(m *model.Model, reg *providersupport.Registry, store *facts.Store,
 	}
 	tree.CannotRuleOut = strategy.CannotRuleOut(m, reg, store)
 	tree.RedundancyDegraded = strategy.RedundancyDegraded(m, reg, store)
-	// Stage 5 — strategy dispatch.
-	tree.Suggested = suggestNextProbe(m, reg, store, suspects)
 	return tree
 }
 

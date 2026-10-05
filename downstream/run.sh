@@ -63,7 +63,10 @@ suite_minishop() {
 suite_storefront() {
   cd "$root/examples/storefront" || return 1
   mgtt model validate system.model.yaml || return 1
-  mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios
+  mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios || return 1
+  # Drafted scenarios, written out and read back, pass as written.
+  mgtt simulate --model system.model.yaml --suggest --write --scenarios-dir "$tmp/drafts" >/dev/null || return 1
+  mgtt simulate --model system.model.yaml --all --scenarios-dir "$tmp/drafts" | tail -n 1
 }
 
 # A redundancy group (need: 1 of 2 webs) on the real kubernetes types:
@@ -81,6 +84,13 @@ suite_redundant_web() {
   sed '/need: 1/d' system.model.yaml >"$tmp/hard.yaml"
   mgtt model diff system.model.yaml "$tmp/hard.yaml" | tee "$tmp/diff"
   grep -q "web-a fails: now reaches shop-svc" "$tmp/diff" || { echo "diff: removing the group should newly expose shop-svc"; return 1; }
+  # Drafted scenarios: one web down is the redundancy archetype, the
+  # database under both is the root cause.
+  mgtt simulate --model system.model.yaml --suggest --component web-a 2>/dev/null >"$tmp/web-a.yaml" || return 1
+  grep -q "redundancy_degraded: \[web-a\]" "$tmp/web-a.yaml" && grep -q "root_cause: none" "$tmp/web-a.yaml" ||
+    { echo "suggest web-a: want the group to hold"; cat "$tmp/web-a.yaml"; return 1; }
+  mgtt simulate --model system.model.yaml --suggest --component db 2>/dev/null | grep -q "root_cause: db" ||
+    { echo "suggest db: want db named"; return 1; }
   # And writ, exhaustively, on the same model and types: in every reachable
   # situation the health rules agree with the states, and the group holds
   # there as it does in simulate. Walked by move name from the initial
@@ -244,9 +254,11 @@ suite_mcp_authoring() {
     printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"model_validate","arguments":{"model_source":"%s"}}}\n' "$src"
     printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"scenario_simulate","arguments":{"model_source":"%s","scenarios_source":"%s"}}}\n' "$src" "$scs"
     printf '%s\n' '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"guide","arguments":{}}}'
+    printf '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"scenario_suggest","arguments":{"model_source":"%s","limit":2}}}\n' "$src"
     await_reply 4
     await_reply 5
     await_reply 6
+    await_reply 7
   } | timeout 60 mgtt mcp serve --toolset authoring 2>"$tmp/mcp.err" >"$tmp/mcp.out"
   grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"model_validate"' || { echo "model_validate not listed"; return 1; }
   if grep '"id":2' "$tmp/mcp.out" | grep -q '"name":"incident_start"'; then echo "authoring toolset serves incident_start"; return 1; fi
@@ -254,7 +266,9 @@ suite_mcp_authoring() {
   grep '"id":4' "$tmp/mcp.out" | grep -q '\\"ok\\":true' || { echo "storefront model_source did not validate ok"; grep '"id":4' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
   grep '"id":5' "$tmp/mcp.out" | grep -q '\\"failed\\":0' || { echo "storefront scenarios did not all pass inline"; grep '"id":5' "$tmp/mcp.out" | cut -c1-600; return 1; }
   grep '"id":6' "$tmp/mcp.out" | grep -q 'authoring loop' || { echo "guide index missing"; return 1; }
-  echo "authoring toolset: listed, described, validated, simulated ($(grep '"id":5' "$tmp/mcp.out" | grep -o 'passed[^,]*' | tr -d '\\"')), guided"
+  grep '"id":7' "$tmp/mcp.out" | grep -q '\\"next_page_token\\":\\"2\\"' ||
+    { echo "scenario_suggest should page its drafts"; grep '"id":7' "$tmp/mcp.out" | cut -c1-600; cat "$tmp/mcp.err"; return 1; }
+  echo "authoring toolset: listed, described, validated, simulated ($(grep '"id":5' "$tmp/mcp.out" | grep -o 'passed[^,]*' | tr -d '\\"')), guided, drafted ($(grep '"id":7' "$tmp/mcp.out" | grep -o 'total[^,]*' | head -n 1 | tr -d '\\"'))"
 }
 
 suites="providers"

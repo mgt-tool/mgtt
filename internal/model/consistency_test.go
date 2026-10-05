@@ -128,3 +128,74 @@ types:
 		t.Errorf("acknowledging a state the type lacks is an error: %q", got)
 	}
 }
+
+func TestWitness_PutsTheComponentInTheState(t *testing.T) {
+	ty := datastore(t)
+	for _, c := range []struct {
+		state   string
+		healthy bool
+	}{{"live", true}, {"saturated", false}, {"stopped", false}} {
+		w, ok := model.Witness(ty.Healthy, ty, "store", nil, c.state, c.healthy)
+		if !ok {
+			t.Fatalf("%s: no witness", c.state)
+		}
+		ctx := expr.Ctx{CurrentComponent: "store", Facts: lookup{"store": w}}
+		for _, st := range ty.States {
+			if ok, err := st.When.Eval(ctx); err == nil && ok {
+				if st.Name != c.state {
+					t.Errorf("%s: %v is first in %s", c.state, w, st.Name)
+				}
+				break
+			}
+		}
+		for _, r := range ty.Healthy {
+			ok, err := r.Eval(ctx)
+			if err != nil {
+				t.Fatalf("%s: %v leaves a rule undecided: %v", c.state, w, err)
+			}
+			if !ok && c.healthy {
+				t.Errorf("%s: %v fails a healthy rule", c.state, w)
+			}
+		}
+	}
+}
+
+// A failure state the rules call healthy has no unhealthy witness: a
+// scenario cannot show the engine that failure.
+func TestWitness_NoneWhenTheRulesDisagree(t *testing.T) {
+	ty := datastore(t)
+	loose, _ := expr.Parse("available == true")
+	if w, ok := model.Witness([]expr.Node{loose}, ty, "store", nil, "saturated", false); ok {
+		t.Fatalf("saturated is healthy under the loosened rule; got witness %v", w)
+	}
+}
+
+type lookup map[string]map[string]any
+
+func (l lookup) LookupValue(component, key string) (any, bool) {
+	v, ok := l[component][key]
+	return v, ok
+}
+
+// A string fact can take a value the type never names, which `!=` needs.
+func TestWitness_StringOutsideTheNamedValues(t *testing.T) {
+	parse := func(s string) expr.Node {
+		n, err := expr.Parse(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	ty := &providersupport.Type{
+		Facts:              map[string]*providersupport.FactSpec{"status": {TypeName: "mgtt.string"}},
+		Healthy:            []expr.Node{parse("status == healthy")},
+		States:             []providersupport.StateDef{{Name: "live", When: parse("status == healthy")}, {Name: "broken", When: parse("status != healthy")}},
+		DefaultActiveState: "live",
+	}
+	if w, ok := model.Witness(ty.Healthy, ty, "api", nil, "broken", false); !ok || w["status"] == "healthy" {
+		t.Fatalf("broken needs a status other than healthy; got %v, %v", w, ok)
+	}
+	if w, _ := model.Witness(ty.Healthy, ty, "api", nil, "live", true); w["status"] != "healthy" {
+		t.Errorf("live should use the named value; got %v", w)
+	}
+}

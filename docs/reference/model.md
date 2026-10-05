@@ -30,6 +30,8 @@ components:
       degraded: { can_cause: [upstream_5xx] }
 ```
 
+A probe reads `resource:` when it is set, else the component's key, and a command's `{name}` is what it reads. A Deployment and the Service in front of it often share a name: key them by kind, `deployment/shop-api` and `service/shop-api`, and probes read `shop-api` for both, as `kubectl get service/shop-api` does. The prefix must be the component's type; `svc/shop-api` reads whole, and validate says so. Expressions name such a component whole: `service/shop-api.endpoint_count > 0`.
+
 `source:` says where a component came from. `mgtt model build` writes `source: discovered` on what it found. Any other component is authored: business processes, external services, hand-written wiring. A rebuild keeps authored components whether discovery returns them or not, and names them as kept. Only a discovered component that discovery stops returning goes through the deletion gate (`--allow-deletes`, `--tombstone`).
 
 ### Health rules

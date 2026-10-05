@@ -61,7 +61,7 @@ func (h *Handler) Probe(p ProbeParams) (*ProbeResult, error) {
 			tree := engine.PlanWith(m, reg, inc.Store, entryOrDefault(m, p.Component), strategy.ParseSuspectHints(inc.Store.Meta.Suspects))
 			return &ProbeResult{Status: "no_suggestion", Reason: tree.RootCause}, nil
 		}
-		rendered := probe.Substitute(s.Command, s.Component, s.Vars, nil)
+		rendered := probe.Substitute(s.Command, s.Target(), s.Vars, nil)
 		if !p.Execute {
 			return &ProbeResult{Status: "rendered", Component: s.Component, Fact: s.Fact, Provider: s.Provider, RenderedCommand: rendered}, nil
 		}

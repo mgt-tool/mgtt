@@ -141,3 +141,12 @@ type Probe struct {
 	Vars       map[string]string // model.meta.vars forwarded for {key} substitution
 	Eliminates []string          // scenario IDs this probe would invalidate (display only)
 }
+
+// Target is the resource the probe reads, which a command's {name} stands
+// for: Resource, else Component.
+func (p *Probe) Target() string {
+	if p.Resource != "" {
+		return p.Resource
+	}
+	return p.Component
+}

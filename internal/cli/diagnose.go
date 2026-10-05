@@ -493,7 +493,7 @@ type shellProbeRunner struct {
 // are recorded as unknown facts so diagnose keeps going; any other error
 // terminates the run.
 func (r *shellProbeRunner) Run(ctx context.Context, p *strategy.Probe, store *facts.Store) (string, error) {
-	rendered := probe.Substitute(p.Command, p.Component, p.Vars, nil)
+	rendered := probe.Substitute(p.Command, p.Target(), p.Vars, nil)
 	if err := probe.ValidateCommand(rendered, p.Command); err != nil {
 		return "", err
 	}

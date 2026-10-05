@@ -21,10 +21,11 @@ import (
 // Each resulting component records its originating provider in
 // Component.Providers so later probe-time dispatch knows who owns it.
 //
-// Collision rule: if two providers return the same component name,
-// BuildModel errors. Providers are expected to return stable names
-// within their own domain; a collision almost always indicates a bug
-// in one of them.
+// Collision rule: a name two providers both return -- a Deployment and an
+// RDS instance both called api -- is keyed by kind in each,
+// deployment/api and rds_instance/api, which probes read back as api. A
+// name one provider returns twice is an error: its dependencies could not
+// say which one they mean. So is a kind key that still collides.
 func BuildModel(snapshots map[string]provider.DiscoveryResult) (*model.Model, error) {
 	m := &model.Model{
 		Meta: model.Meta{
@@ -34,39 +35,55 @@ func BuildModel(snapshots map[string]provider.DiscoveryResult) (*model.Model, er
 		},
 		Components: map[string]*model.Component{},
 	}
-	// First pass: register components.
-	for _, providerName := range slices.Sorted(maps.Keys(snapshots)) {
-		snap := snapshots[providerName]
-		for _, dc := range snap.Components {
-			if existing, clash := m.Components[dc.Name]; clash {
-				ownerProv := ""
-				if len(existing.Providers) > 0 {
-					ownerProv = existing.Providers[0]
-				}
-				return nil, fmt.Errorf("component name collision: %q present in providers %q and %q", dc.Name, ownerProv, providerName)
+	providers := slices.Sorted(maps.Keys(snapshots))
+	returnedBy := map[string]int{} // name -> how many providers return it
+	for _, providerName := range providers {
+		seen := map[string]bool{}
+		for _, dc := range snapshots[providerName].Components {
+			if seen[dc.Name] {
+				return nil, fmt.Errorf("provider %q returned component %q twice", providerName, dc.Name)
 			}
-			m.Components[dc.Name] = &model.Component{
-				Name:      dc.Name,
+			seen[dc.Name] = true
+			returnedBy[dc.Name]++
+		}
+	}
+	// First pass: register components, remembering each provider's key
+	// for every name it returned.
+	keyOf := map[string]map[string]string{}
+	for _, providerName := range providers {
+		keyOf[providerName] = map[string]string{}
+		for _, dc := range snapshots[providerName].Components {
+			key := dc.Name
+			if returnedBy[dc.Name] > 1 {
+				key = model.KindKey(dc.Type, dc.Name)
+			}
+			if existing, clash := m.Components[key]; clash {
+				return nil, fmt.Errorf("component name collision: %q present in providers %q and %q", key, existing.Providers[0], providerName)
+			}
+			keyOf[providerName][dc.Name] = key
+			m.Components[key] = &model.Component{
+				Name:      key,
 				Type:      dc.Type,
 				Providers: []string{providerName},
 				Source:    model.SourceDiscovered,
 			}
 		}
 	}
-	// Second pass: apply dependencies. Both endpoints must exist
-	// within the merged model; a discovery returning an edge to an
+	// Second pass: apply dependencies. Both endpoints must exist among the
+	// provider's own components; a discovery returning an edge to an
 	// unknown target is a bug to surface, not silently drop.
-	for _, providerName := range slices.Sorted(maps.Keys(snapshots)) {
-		snap := snapshots[providerName]
-		for _, dep := range snap.Dependencies {
-			from, ok := m.Components[dep.From]
+	for _, providerName := range providers {
+		for _, dep := range snapshots[providerName].Dependencies {
+			from, ok := keyOf[providerName][dep.From]
 			if !ok {
 				return nil, fmt.Errorf("provider %q: dependency from unknown component %q", providerName, dep.From)
 			}
-			if _, ok := m.Components[dep.To]; !ok {
+			to, ok := keyOf[providerName][dep.To]
+			if !ok {
 				return nil, fmt.Errorf("provider %q: dependency to unknown component %q", providerName, dep.To)
 			}
-			from.Depends = append(from.Depends, model.Dependency{On: []string{dep.To}})
+			c := m.Components[from]
+			c.Depends = append(c.Depends, model.Dependency{On: []string{to}})
 		}
 	}
 	return m, nil

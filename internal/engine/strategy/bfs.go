@@ -157,7 +157,7 @@ func firstUncollectedFact(in Input, compName string, t *providersupport.Type, pr
 			Fact:      fn,
 			Provider:  providerName,
 			Type:      t.Name,
-			Resource:  comp.Resource,
+			Resource:  comp.ResourceName(),
 			Cost:      fs.Probe.Cost,
 			Access:    fs.Probe.Access,
 			Command:   fs.Probe.Cmd,

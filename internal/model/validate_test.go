@@ -48,6 +48,52 @@ func TestValidate_DuplicateResourceWarning(t *testing.T) {
 	}
 }
 
+// A Service and the Deployment behind it share a name; keyed by kind they
+// stand apart, but a kind-prefixed key and a plain one of the same type
+// read the same object, and a prefix that is not the type reads whole.
+func TestValidate_KindPrefixedKeys(t *testing.T) {
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{
+		Meta: providersupport.ProviderMeta{Name: "kubernetes"},
+		Types: map[string]*providersupport.Type{
+			"service": {Name: "service"}, "deployment": {Name: "deployment"},
+		},
+	})
+	warnings := func(comps ...*model.Component) []string {
+		m := &model.Model{
+			Meta:       model.Meta{Name: "k", Version: "1.0", Providers: []string{"kubernetes"}},
+			Components: map[string]*model.Component{},
+		}
+		for _, c := range comps {
+			m.Components[c.Name] = c
+			m.Order = append(m.Order, c.Name)
+		}
+		var out []string
+		for _, w := range model.Validate(m, reg).Warnings {
+			out = append(out, w.Message)
+		}
+		return out
+	}
+	if w := warnings(
+		&model.Component{Name: "service/acme", Type: "service"},
+		&model.Component{Name: "acme", Type: "deployment"},
+	); len(w) != 0 {
+		t.Errorf("a Service and a Deployment named acme stand apart; got %v", w)
+	}
+	if w := warnings(
+		&model.Component{Name: "service/acme", Type: "service"},
+		&model.Component{Name: "acme", Type: "service"},
+	); len(w) != 1 || !strings.Contains(w[0], `duplicate resource "acme"`) {
+		t.Errorf("service/acme and acme both read Service acme; got %v", w)
+	}
+	if w := warnings(&model.Component{Name: "svc/acme", Type: "service"}); len(w) != 1 || !strings.Contains(w[0], "service/acme") {
+		t.Errorf("svc is not the type: want a warning naming service/acme; got %v", w)
+	}
+	if w := warnings(&model.Component{Name: "svc/acme", Type: "service", Resource: "acme"}); len(w) != 0 {
+		t.Errorf("resource: says what to probe; got %v", w)
+	}
+}
+
 // A component's healthy: list replaces its type's rules, it does not add
 // to them. Dropping a type rule that way is the most common modelling
 // mistake (an RDS override that loses `available == true` calls a stopped

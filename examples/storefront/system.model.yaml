@@ -52,10 +52,23 @@ components:
   acme-shop-nginx-blue:
     type: deployment
     depends:
-      - on: acme-shop-php-fpm-blue
+      - on: service/acme-shop-php-fpm-blue
 
   acme-shop-nginx-green:
     type: deployment
+    depends:
+      - on: service/acme-shop-php-fpm-green
+
+  # nginx reaches php-fpm through its Service, which shares the
+  # Deployment's name. Keyed by kind, the two stand apart; probes read
+  # acme-shop-php-fpm-<color> for both, as kubectl reads service/<name>.
+  service/acme-shop-php-fpm-blue:
+    type: service
+    depends:
+      - on: acme-shop-php-fpm-blue
+
+  service/acme-shop-php-fpm-green:
+    type: service
     depends:
       - on: acme-shop-php-fpm-green
 

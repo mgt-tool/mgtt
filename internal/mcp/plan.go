@@ -126,7 +126,7 @@ func toSuggested(p *engine.Probe, _ *model.Model) *SuggestedProbe {
 		EliminatesCount: len(p.Eliminates),
 		Cost:            p.Cost,
 		Access:          p.Access,
-		RenderedCommand: probe.Substitute(p.Command, p.Component, p.Vars, nil),
+		RenderedCommand: probe.Substitute(p.Command, p.Target(), p.Vars, nil),
 	}
 }
 

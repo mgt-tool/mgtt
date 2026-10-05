@@ -9,6 +9,7 @@ package strategy
 
 import (
 	"strings"
+	"time"
 
 	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/model"
@@ -138,6 +139,8 @@ type Probe struct {
 	Access     string
 	Command    string
 	ParseMode  string
+	Window     time.Duration     // a derived fact's window, passed to the runner as --window
+	Derive     string            // and its derivation (delta, rate, max), as --derive
 	Vars       map[string]string // model.meta.vars forwarded for {key} substitution
 	Eliminates []string          // scenario IDs this probe would invalidate (display only)
 }

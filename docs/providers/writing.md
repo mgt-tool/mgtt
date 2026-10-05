@@ -52,9 +52,11 @@ failure_modes:
 
 `failure_modes` labels are what connect a failure to the components that depend on it. A fact with `probe: {cmd, parse}` runs a shell command. A provider that defines every fact this way needs no binary at all.
 
+A fact can be derived over a trailing window, so health rests on a trend rather than a level: `queue_depth_delta_5m: { type: mgtt.int, window: 5m, derive: delta }`. `derive` is `delta` (last sample minus first), `rate` (that per second) or `max`. The provider computes the value, and the engine and scenarios see an ordinary number.
+
 ## The runner protocol
 
-mgtt invokes `bin/mgtt-provider-<name> probe <component> <fact> --type <type> [--<var> <value> …]`, with every model var passed as a flag. On success, the runner writes one JSON line to stdout:
+mgtt invokes `bin/mgtt-provider-<name> probe <component> <fact> --type <type> [--window 5m --derive delta] [--<var> <value> …]`, with every model var passed as a flag; `--window` and `--derive` come with a derived fact. On success, the runner writes one JSON line to stdout:
 
 ```json
 {"value": 42, "raw": "42 clients", "status": "ok"}
@@ -89,6 +91,8 @@ func main() {
     provider.Main(r)   // handles argv, JSON, exit codes, version, discover
 }
 ```
+
+For a derived fact, register `provider.Windowed(series)`: `series` returns the samples taken since the window began, and the SDK reduces them as the request's `--window` and `--derive` say. One series serves every window a type declares over it. Too few samples to tell is transient: the fact is unknown, not zero.
 
 The SDK is Apache-2.0, so your provider is not bound by the engine's AGPL. `sdk/provider/shell` wraps CLI calls and classifies their errors.
 

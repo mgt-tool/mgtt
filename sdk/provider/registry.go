@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Request is the typed input handed to a ProbeFn. Type is reserved by the
@@ -25,7 +26,11 @@ type Request struct {
 	Name      string
 	Namespace string // shorthand for Extra["namespace"]; may be empty
 	Fact      string
-	Extra     map[string]string // every --<key> <value> pair from the runner argv (except --type)
+	// Window and Derive are set for a derived fact: the trailing window and
+	// how it becomes one value (delta, rate, max). Windowed reads them.
+	Window time.Duration
+	Derive string
+	Extra  map[string]string // every --<key> <value> pair from the runner argv (except the reserved --type, --window, --derive)
 }
 
 // ProbeFn implements one fact for one type.

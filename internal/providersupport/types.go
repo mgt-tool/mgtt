@@ -128,7 +128,17 @@ type FactSpec struct {
 	TypeName string
 	TTL      time.Duration
 	Probe    ProbeDef
+	// Window and Derive declare a derived fact: a quantity reduced over a
+	// trailing window -- delta, rate or max over the last 5m -- which the
+	// provider computes, so the engine sees an ordinary value. Both or
+	// neither.
+	Window time.Duration
+	Derive string
 }
+
+// Derivations are the ways a window becomes a value: delta is the last
+// sample minus the first, rate is that per second, max the largest.
+var Derivations = []string{"delta", "rate", "max"}
 
 type ProbeDef struct {
 	Cmd     string

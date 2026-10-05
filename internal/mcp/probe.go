@@ -134,6 +134,8 @@ func (h *Handler) runProbeAndStore(d *probedispatch.Dispatcher, inc *incident.In
 		Fact:      s.Fact,
 		Type:      s.Type,
 		Resource:  s.Resource,
+		Window:    s.Window,
+		Derive:    s.Derive,
 		Vars:      s.Vars,
 		Timeout:   probeTimeoutFromConfig(h.cfg),
 	})

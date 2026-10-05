@@ -176,6 +176,18 @@ func killProcessGroup(c *exec.Cmd) error {
 	return syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 }
 
+// shortDuration writes a duration as a fact spec would: 5m, 1h, 1m30s.
+func shortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
 // buildArgs constructs the runner argv per the probe protocol:
 //
 //	probe <component> <fact> [--type T] [--<key> <value> ...]
@@ -187,6 +199,11 @@ func buildArgs(cmd Command) ([]string, error) {
 	for k := range cmd.Extra {
 		if _, conflict := cmd.Vars[k]; conflict {
 			return nil, fmt.Errorf("%w: key %q present in both Vars and Extra", ErrUsage, k)
+		}
+	}
+	for _, reserved := range []string{"type", "window", "derive"} {
+		if cmd.Vars[reserved] != "" || cmd.Extra[reserved] != "" {
+			return nil, fmt.Errorf("%w: --%s is reserved by the probe protocol", ErrUsage, reserved)
 		}
 	}
 	merged := make(map[string]string, len(cmd.Vars)+len(cmd.Extra))
@@ -213,6 +230,9 @@ func buildArgs(cmd Command) ([]string, error) {
 	args := []string{"probe", name, cmd.Fact}
 	if cmd.Type != "" {
 		args = append(args, "--type", cmd.Type)
+	}
+	if cmd.Window > 0 && cmd.Derive != "" {
+		args = append(args, "--window", shortDuration(cmd.Window), "--derive", cmd.Derive)
 	}
 	for _, k := range keys {
 		args = append(args, "--"+k, merged[k])

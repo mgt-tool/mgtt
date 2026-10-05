@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,9 +64,11 @@ type rawVar struct {
 }
 
 type rawFact struct {
-	Type  string   `yaml:"type"`
-	TTL   string   `yaml:"ttl"`
-	Probe rawProbe `yaml:"probe"`
+	Type   string   `yaml:"type"`
+	TTL    string   `yaml:"ttl"`
+	Window string   `yaml:"window"`
+	Derive string   `yaml:"derive"`
+	Probe  rawProbe `yaml:"probe"`
 }
 
 type rawProbe struct {
@@ -483,6 +486,22 @@ func parseFact(rf *rawFact) (*FactSpec, error) {
 			return nil, fmt.Errorf("probe timeout %q: %w", rf.Probe.Timeout, err)
 		}
 		fs.Probe.Timeout = d
+	}
+
+	switch {
+	case rf.Window == "" && rf.Derive == "":
+	case rf.Window == "" || rf.Derive == "":
+		return nil, fmt.Errorf("a derived fact declares window and derive together")
+	case !slices.Contains(Derivations, rf.Derive):
+		return nil, fmt.Errorf("derive %q: want one of %s", rf.Derive, strings.Join(Derivations, ", "))
+	case rf.Type != "mgtt.int" && rf.Type != "mgtt.float" && rf.Type != "mgtt.percentage":
+		return nil, fmt.Errorf("derive %s: a derived fact is a number, not %s", rf.Derive, rf.Type)
+	default:
+		d, err := time.ParseDuration(rf.Window)
+		if err != nil || d <= 0 {
+			return nil, fmt.Errorf("window %q: want a positive duration such as 5m", rf.Window)
+		}
+		fs.Window, fs.Derive = d, rf.Derive
 	}
 
 	return fs, nil

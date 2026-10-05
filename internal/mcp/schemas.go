@@ -251,7 +251,8 @@ const TypesDescribeOutputSchema = `{
     "type":{"type":"string"},
     "description":{"type":"string"},
     "facts":{"type":"array","items":{"type":"object","properties":{
-      "name":{"type":"string"},"type":{"type":"string"},"cost":{"type":"string"},"access":{"type":"string"}},
+      "name":{"type":"string"},"type":{"type":"string"},"cost":{"type":"string"},"access":{"type":"string"},
+      "window":{"type":"string"},"derive":{"type":"string","enum":["delta","rate","max"]}},
       "required":["name"]}},
     "healthy":{"type":"array","items":{"type":"string"}},
     "states":{"type":"array","items":{"type":"object","properties":{

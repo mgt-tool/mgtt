@@ -88,7 +88,7 @@ FROM ${OCAML_IMAGE} AS mgtt2writ
 # `opam update`, so this resolves to the same dune every time.
 RUN opam install -y dune.3.24.2
 ARG MGTT2WRIT_REPO=https://github.com/mgt-tool/mgtt2writ.git
-ARG MGTT2WRIT_REF=b606fa7964f2d763a6705e01433f926b56ae6071
+ARG MGTT2WRIT_REF=9e089f37e32d428ff529d865638e72574ef7f1fd
 WORKDIR /home/opam
 RUN git clone -q "$MGTT2WRIT_REPO" mgtt2writ \
  && cd mgtt2writ && git checkout -q "$MGTT2WRIT_REF" \

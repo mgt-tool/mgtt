@@ -24,8 +24,9 @@ api  ──depends on──▶  store
 
 `store` is a `datastore`, with two facts: `available` and `connection_count`.
 `api` is a `service` with one fact, `reachable`, and its `down` state is
-`triggered_by: [connection_refused]` — which is what lets a store failure
-propagate across the dependency edge.
+`triggered_by: [connection_refused]`: a store failure that can cause
+`connection_refused` crosses the dependency edge into it. A failure state
+with no `triggered_by` would take any label.
 
 The `datastore` type has three states, and they are mutually exclusive:
 

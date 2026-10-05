@@ -19,10 +19,10 @@ states:
   down:
     when: "reachable == false"
     description: not serving
-    # `triggered_by` is how a failure crosses a dependency edge: a
-    # dependency whose failing state declares `can_cause: [connection_refused]`
-    # can put this component into `down`. Without it a model has origination
-    # moves but no propagation, and nothing a failure chain could be read from.
+    # `triggered_by` names the failures that cross a dependency edge into
+    # this state: a dependency whose failing state declares
+    # `can_cause: [connection_refused]` can put this component into `down`.
+    # A failure state that lists none takes any label a dependency can cause.
     triggered_by: [connection_refused]
 
 default_active_state: up

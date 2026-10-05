@@ -81,6 +81,37 @@ suite_redundant_web() {
   sed '/need: 1/d' system.model.yaml >"$tmp/hard.yaml"
   mgtt model diff system.model.yaml "$tmp/hard.yaml" | tee "$tmp/diff"
   grep -q "web-a fails: now reaches shop-svc" "$tmp/diff" || { echo "diff: removing the group should newly expose shop-svc"; return 1; }
+  # And writ, exhaustively, on the same model and types: in every reachable
+  # situation the health rules agree with the states, and the group holds
+  # there as it does in simulate. Walked by move name from the initial
+  # situation, so nothing about how facts become cells is assumed.
+  mgtt model export --json system.model.yaml | mgtt2writ >"$tmp/rw.writ" || return 1
+  writ check "$tmp/rw.writ" --no-certificate >"$tmp/rw.check" || { cat "$tmp/rw.check"; echo "writ: a law fails"; return 1; }
+  head -n 1 "$tmp/rw.check"
+  a=$(writ_after "$tmp/rw.writ" 0 web-a-fails-crashed)
+  [ -n "$a" ] || { echo "writ: web-a cannot crash"; return 1; }
+  if writ_offers "$tmp/rw.writ" "$a" web-a-crashed-triggers-shop-svc-no-endpoints; then
+    echo "writ: one web down takes shop-svc down"
+    return 1
+  fi
+  d=$(writ_after "$tmp/rw.writ" 0 db-fails-crashed)
+  da=$(writ_after "$tmp/rw.writ" "$d" db-crashed-triggers-web-a-crashed)
+  dab=$(writ_after "$tmp/rw.writ" "$da" db-crashed-triggers-web-b-crashed)
+  [ -n "$dab" ] || { echo "writ: db cannot push both webs over"; return 1; }
+  writ_offers "$tmp/rw.writ" "$dab" web-a-crashed-triggers-shop-svc-no-endpoints ||
+    { echo "writ: db under both webs does not reach shop-svc"; return 1; }
+}
+
+# writ_after MODEL N MOVE: the situation MOVE leads to from situation N, or
+# nothing when MOVE is not enabled there.
+writ_after() {
+  writ show "$1" --at "$2" | sed -n '/moves:/,$p' | tr -s ' \n' '\n\n' |
+    awk -v mv="$3" '$0 == mv { getline; getline; print; exit }'
+}
+
+# writ_offers MODEL N MOVE: whether MOVE is enabled in situation N.
+writ_offers() {
+  writ show "$1" --at "$2" | sed -n '/moves:/,$p' | tr -s ' \n' '\n\n' | grep -qx "$3"
 }
 
 # Scenario-guided diagnosis on the flagship example decides a probe within the

@@ -215,3 +215,28 @@ func TestModelBuild_KeepsAuthoredComponents(t *testing.T) {
 		t.Errorf("build should flag checkout's dangling dependency; got: %s", o.String())
 	}
 }
+
+// --dry-run shows what a build would do, including removals it would
+// refuse, and writes nothing.
+func TestModelBuild_DryRun(t *testing.T) {
+	home := t.TempDir()
+	installStubProviderInline(t, home, "kubernetes", `{"components":[{"name":"api","type":"deployment"},{"name":"old-svc","type":"service"}]}`)
+	out := filepath.Join(t.TempDir(), "system.model.yaml")
+	var o, e bytes.Buffer
+	if code := runModelBuild(context.Background(), modelBuildFlags{mgttHome: home, output: out}, &o, &e); code != 0 {
+		t.Fatalf("build: %s", e.String())
+	}
+	before, _ := os.ReadFile(out)
+	installStubProviderInline(t, home, "kubernetes", `{"components":[{"name":"api","type":"deployment"}]}`)
+	o.Reset()
+	e.Reset()
+	if code := runModelBuild(context.Background(), modelBuildFlags{mgttHome: home, output: out, dryRun: true}, &o, &e); code != 0 {
+		t.Fatalf("dry run must not refuse; it reports: %s", e.String())
+	}
+	if !strings.Contains(o.String(), "Removed: old-svc") || !strings.Contains(o.String(), "would refuse") || !strings.Contains(o.String(), "nothing written") {
+		t.Errorf("dry-run output: %s", o.String())
+	}
+	if after, _ := os.ReadFile(out); string(after) != string(before) {
+		t.Error("dry run wrote the model")
+	}
+}

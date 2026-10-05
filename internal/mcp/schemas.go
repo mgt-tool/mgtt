@@ -333,3 +333,20 @@ const ModelDiffOutputSchema = `{
   },
   "required":["same","added","removed","changed","reach","old_scenarios","new_scenarios"]
 }`
+
+// ModelDiscoverOutputSchema describes a discovery proposal.
+const ModelDiscoverOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "proposed_model":{"type":"string"},
+    "discovered":{"type":"array","items":{"type":"object","properties":{
+      "provider":{"type":"string"},"components":{"type":"integer"},"dependencies":{"type":"integer"}},
+      "required":["provider","components","dependencies"]}},
+    "failures":{"type":"object","additionalProperties":{"type":"string"}},
+    "added":{"type":"array","items":{"type":"string"}},
+    "removed":{"type":"array","items":{"type":"string"}},
+    "kept_authored":{"type":"array","items":{"type":"string"}},
+    "dangling":{"type":"array","items":{"type":"string"}}
+  },
+  "required":["proposed_model","discovered","added","removed","kept_authored","dangling"]
+}`

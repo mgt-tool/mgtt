@@ -105,4 +105,4 @@ incident_end {incident_id, verdict: "rds stopped by maintenance window", emit_sc
 
 ## All tools
 
-Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`, `model_impact`, `model_diff`. Diagnosis: `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.
+Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`, `model_impact`, `model_diff`. Diagnosis: `model_discover` (runs provider discovery and proposes a model, merged with the existing one; writes nothing), `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.

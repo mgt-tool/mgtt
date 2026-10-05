@@ -74,6 +74,7 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerScenariosList(s, h)
 		registerScenariosAlive(s, h)
 		registerIncidentSnapshot(s, h)
+		registerModelDiscover(s, h)
 		if cfg.LegacyToolNames {
 			registerLegacyAliases(s)
 		}
@@ -172,6 +173,21 @@ func registerModelImpact(s *server.MCPServer, h *Handler) {
 			}
 		},
 		h.ModelImpact,
+	))
+}
+
+func registerModelDiscover(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("model_discover",
+		mcpgo.WithDescription("Run every installed provider's discovery -- this reads the live systems they cover -- and propose the model it implies: the proposed YAML, components added, discovered components no longer found (a real build refuses to drop them without --allow-deletes or --tombstone), authored components kept, dangling dependencies, and providers whose discovery failed. Merges with model_path when given, so hand-written components survive. Writes nothing; the proposal reaches the repository as a reviewed change. In the diagnose toolset, since it needs the providers' credentials."),
+		mcpgo.WithString("model_path", mcpgo.Description("the existing model the proposal would replace, on the server")),
+		mcpgo.WithArray("tombstone", mcpgo.WithStringItems(), mcpgo.Description("discovered components to keep although discovery no longer returns them")),
+		rawOutput(ModelDiscoverOutputSchema),
+	)
+	s.AddTool(tool, dispatch("model_discover",
+		func(req mcpgo.CallToolRequest) ModelDiscoverParams {
+			return ModelDiscoverParams{ModelPath: req.GetString("model_path", ""), Tombstone: req.GetStringSlice("tombstone", nil)}
+		},
+		h.ModelDiscover,
 	))
 }
 

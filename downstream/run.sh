@@ -96,9 +96,13 @@ suite_storefront_speed() {
   fi
 }
 
-# End to end on the fixture the translator pins. Exit 77 is a failure here.
+# End to end on the fixtures the translator pins, except that its
+# redundancy-group checks read a fresh export from this mgtt: one store of two
+# down must not take api down in writ, both must. Exit 77 is a failure here.
 suite_mgtt2writ() {
-  (cd "$root/mgtt2writ" && MGTT2WRIT=mgtt2writ sh test/pipeline.sh)
+  MGTT_HOME="$root/examples/minishop/mgtt-home" mgtt model export --json \
+    "$root/mgtt2writ/test/fixtures/mgtt-export-group.yaml" >"$tmp/group.json" || return 1
+  (cd "$root/mgtt2writ" && MGTT2WRIT=mgtt2writ GROUP_FIXTURE="$tmp/group.json" sh test/pipeline.sh)
 }
 
 # The MCP server answers over stdio, and every tool name is portable: some

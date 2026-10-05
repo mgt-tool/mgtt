@@ -22,7 +22,9 @@ import (
 // Disagreement is a set of facts on which healthy rules and the type's
 // states part company.
 type Disagreement struct {
-	State   string         // the state those facts put the component in
+	// State is the state those facts put the component in; "" when the
+	// rules fail and no state matches, so a failure has no state to be.
+	State   string
 	Healthy bool           // what the healthy rules say
 	Witness map[string]any // the facts
 }
@@ -47,7 +49,8 @@ const maxAssignments = 4096
 // HealthStateDisagreements tries fact values around every constant the
 // rules and states compare against, and returns, for each state, one set
 // of facts where the rules call the component healthy outside the
-// default state, or unhealthy in it. Assignments where a rule or every
+// default state, or unhealthy in it -- and one where the rules fail and
+// no state matches at all. Assignments where a rule or every
 // state is undecided are skipped. vars resolves per-component thresholds;
 // it may be nil.
 func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, component string, vars expr.VarLookup) []Disagreement {
@@ -101,8 +104,11 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 				break
 			}
 		}
-		if state == "" || healthy == (state == t.DefaultActiveState) {
-			continue
+		switch {
+		case state == "" && healthy:
+			continue // healthy, and no failure state claims it: fine
+		case state != "" && healthy == (state == t.DefaultActiveState):
+			continue // rules and states agree
 		}
 		key := fmt.Sprintf("%s/%v", state, healthy)
 		if seen[key] {
@@ -133,8 +139,9 @@ func allTrue(rules []expr.Node, ctx expr.Ctx) (healthy, decided bool) {
 }
 
 // candidates collects, per fact the rules and states read, the values
-// worth trying: both booleans; the string literals compared with, and one
-// other; and each number compared with, with its neighbours.
+// worth trying: both booleans; the string literals compared with (string
+// facts are closed enums, so no other value is tried); and each number
+// compared with, with its neighbours.
 func candidates(rules []expr.Node, t *providersupport.Type, component string, vars expr.VarLookup) map[string][]any {
 	nums := map[string]map[float64]bool{}
 	strs := map[string]map[string]bool{}
@@ -204,7 +211,7 @@ func candidates(rules []expr.Node, t *providersupport.Type, component string, va
 				vals = append(vals, s)
 			}
 			sort.Slice(vals, func(i, j int) bool { return vals[i].(string) < vals[j].(string) })
-			out[name] = append(vals, "<other>")
+			out[name] = vals // string facts are enums: only the values named
 		case nums[name] != nil:
 			isInt := f.TypeName == "mgtt.int"
 			set := map[float64]bool{}

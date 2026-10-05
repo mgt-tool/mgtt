@@ -150,7 +150,9 @@ func checkType(typeName string, typ *providersupport.Type, vars map[string]provi
 // differently.
 func checkHealthMatchesStates(typeName string, typ *providersupport.Type, r *Report) {
 	for _, d := range model.HealthStateDisagreements(typ.Healthy, typ, "x", nil) {
-		if d.Healthy {
+		if d.State == "" {
+			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: healthy rules fail where no state matches, so the failure has no state (e.g. %s)", typeName, d.WitnessString()))
+		} else if d.Healthy {
 			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: healthy rules hold in state %q, which is not the default state %q (e.g. %s)", typeName, d.State, typ.DefaultActiveState, d.WitnessString()))
 		} else {
 			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: healthy rules fail in the default state %q (e.g. %s)", typeName, d.State, d.WitnessString()))

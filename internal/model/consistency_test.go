@@ -53,6 +53,17 @@ func TestHealthStateDisagreements(t *testing.T) {
 	}
 }
 
+// Failing rules that no state matches leave a failure with no state for
+// the scenario engine to name: reported with State "".
+func TestHealthStateDisagreements_Uncovered(t *testing.T) {
+	ty := datastore(t)
+	ty.States = ty.States[:2] // drop stopped: available=false matches nothing
+	d := model.HealthStateDisagreements(ty.Healthy, ty, "store", nil)
+	if len(d) != 1 || d[0].State != "" || d[0].Healthy || d[0].Witness["available"] != false {
+		t.Fatalf("available=false fails the rules with no state; got %+v", d)
+	}
+}
+
 // validate reports what the component's own override introduces, not
 // what it inherits; healthy_diverges_from acknowledges a state, and must
 // name a real one.

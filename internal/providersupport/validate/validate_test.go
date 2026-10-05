@@ -45,6 +45,8 @@ types:
     states:
       live:
         when: "f > 0"
+      down:
+        when: "f <= 0"
     default_active_state: live
 `
 

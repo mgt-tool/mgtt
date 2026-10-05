@@ -464,7 +464,9 @@ func pass9HealthMatchesStates(m *Model, reg *providersupport.Registry, result *V
 				continue
 			}
 			msg := fmt.Sprintf("healthy rules hold in state %s, which is not the default state %s (e.g. %s)", d.State, t.DefaultActiveState, d.WitnessString())
-			if !d.Healthy {
+			if d.State == "" {
+				msg = fmt.Sprintf("healthy rules fail where no state of %s matches (e.g. %s)", comp.Type, d.WitnessString())
+			} else if !d.Healthy {
 				msg = fmt.Sprintf("healthy rules fail in the default state %s (e.g. %s)", d.State, d.WitnessString())
 			}
 			result.Warnings = append(result.Warnings, ValidationWarning{

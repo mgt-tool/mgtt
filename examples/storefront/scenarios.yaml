@@ -1,5 +1,5 @@
 # GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
-source_hash: sha256:803f3c69074adbe1ac5b4fd7b2c7dc8661f78685480176a12ca7a072a721fb45
+source_hash: sha256:9169d5226f9650fa9da1a7858b9b09227a8cfa400a165b9191b8dfec1c420ab7
 format: graph/v1
 scenario_count: 31682
 components:
@@ -372,6 +372,7 @@ components:
       - available
       - consumer_count
       - queue_depth
+      - queue_depth_delta_5m
     states:
       - name: backlogged
         emits:
@@ -436,6 +437,7 @@ components:
     observes:
       - available
       - connection_count
+      - connection_count_max_5m
     states:
       - name: saturated
         emits:

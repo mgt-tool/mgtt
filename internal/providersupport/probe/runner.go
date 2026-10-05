@@ -176,8 +176,8 @@ func killProcessGroup(c *exec.Cmd) error {
 	return syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 }
 
-// shortDuration writes a duration as a fact spec would: 5m, 1h, 1m30s.
-func shortDuration(d time.Duration) string {
+// ShortDuration writes a duration as a fact spec would: 5m, 1h, 1m30s.
+func ShortDuration(d time.Duration) string {
 	s := d.String()
 	if strings.HasSuffix(s, "m0s") {
 		s = strings.TrimSuffix(s, "0s")
@@ -232,7 +232,7 @@ func buildArgs(cmd Command) ([]string, error) {
 		args = append(args, "--type", cmd.Type)
 	}
 	if cmd.Window > 0 && cmd.Derive != "" {
-		args = append(args, "--window", shortDuration(cmd.Window), "--derive", cmd.Derive)
+		args = append(args, "--window", ShortDuration(cmd.Window), "--derive", cmd.Derive)
 	}
 	for _, k := range keys {
 		args = append(args, "--"+k, merged[k])

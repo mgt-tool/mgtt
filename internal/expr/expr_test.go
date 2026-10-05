@@ -89,6 +89,22 @@ func TestParseComponentFact(t *testing.T) {
 	}
 }
 
+// A kind-prefixed component reads whole: the slash is part of the name.
+func TestParseKindPrefixedComponentFact(t *testing.T) {
+	node, err := expr.Parse("service/acme-shop.endpoint_count > 0 & ready == true")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	and, ok := node.(*expr.AndNode)
+	if !ok {
+		t.Fatalf("expected *AndNode, got %T", node)
+	}
+	cmp := and.L.(*expr.CmpNode)
+	if cmp.Component != "service/acme-shop" || cmp.Fact != "endpoint_count" {
+		t.Errorf("got component %q fact %q, want service/acme-shop and endpoint_count", cmp.Component, cmp.Fact)
+	}
+}
+
 func TestParseStateComparison(t *testing.T) {
 	node, err := expr.Parse("vault.state == starting")
 	if err != nil {

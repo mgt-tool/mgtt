@@ -275,30 +275,40 @@ func levenshtein(a, b string) int {
 	return dp[la][lb]
 }
 
-// pass6DuplicateResource warns when two components share the same
-// (owning-provider, type, resource) triple — almost always a
-// copy-paste mistake. Components with empty Resource are skipped:
-// they fall back to Name at probe time, and key uniqueness is
-// already enforced by pass1Structural.
+// pass6DuplicateResource warns when two components read the same
+// (owning-provider, type, resource) triple -- almost always a copy-paste
+// mistake. The resource is the one a probe reads (ResourceName), so a
+// kind-prefixed key and a plain one naming the same object collide too.
+//
+// It also warns when a key looks kind-prefixed (kind/name) but the prefix
+// is not the component's type and no resource: is set: probes then read
+// the whole key, and svc/acme probes a Service named "svc/acme".
 func pass6DuplicateResource(m *Model, reg *providersupport.Registry, result *ValidationResult) {
 	type seenKey struct{ owner, typ, resource string }
 	seen := map[seenKey]string{} // first component owning each triple
 
 	for _, name := range m.Order {
 		comp := m.Components[name]
-		if comp == nil || comp.Resource == "" {
+		if comp == nil {
 			continue
+		}
+		if kind, rest, ok := kindPrefixed(name); ok && comp.Resource == "" && kind != shortType(comp.Type) {
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Component: name,
+				Field:     "resource",
+				Message:   fmt.Sprintf("probes read %q whole: to key it by kind, the prefix must be its type (%s/%s); or set resource: to the name to probe", name, shortType(comp.Type), rest),
+			})
 		}
 		_, owner, err := comp.ResolveType(m, reg)
 		if err != nil {
 			continue
 		}
-		key := seenKey{owner: owner, typ: comp.Type, resource: comp.Resource}
+		key := seenKey{owner: owner, typ: comp.Type, resource: comp.ResourceName()}
 		if prior, ok := seen[key]; ok {
 			result.Warnings = append(result.Warnings, ValidationWarning{
 				Component: name,
 				Field:     "resource",
-				Message:   fmt.Sprintf("duplicate resource %q — same (provider %q, type %q) as component %q", comp.Resource, owner, comp.Type, prior),
+				Message:   fmt.Sprintf("duplicate resource %q — same (provider %q, type %q) as component %q", key.resource, owner, comp.Type, prior),
 			})
 			continue
 		}

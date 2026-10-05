@@ -13,17 +13,18 @@ var placeholderRE = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 
 // Substitute replaces template placeholders in a command string.
 //
-//   - {name}      → component
+//   - {name}      → name: the resource the probe reads (resource:, else
+//     the component key less a prefix naming its type)
 //   - {namespace} → modelVars["namespace"]
 //   - {varName}   → modelVars[varName] or providerVars[varName]
 //
 // Lookup order: modelVars takes precedence over providerVars. Unknown
 // placeholders are left intact.
-func Substitute(template, component string, modelVars, providerVars map[string]string) string {
+func Substitute(template, name string, modelVars, providerVars map[string]string) string {
 	return placeholderRE.ReplaceAllStringFunc(template, func(match string) string {
 		key := match[1 : len(match)-1]
 		if key == "name" {
-			return component
+			return name
 		}
 		if v, ok := modelVars[key]; ok {
 			return v

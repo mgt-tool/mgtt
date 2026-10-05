@@ -140,7 +140,7 @@ func loadPlanContext(f *planFlags) (*planContext, error) {
 // the store with its result. Returns true when the loop should stop
 // (error or probe rejected); false when the caller should keep going.
 func runPlanProbe(w io.Writer, m *model.Model, reg *providersupport.Registry, store *facts.Store, executor probe.Executor, s *engine.Probe) (stop bool) {
-	rendered := probe.Substitute(s.Command, s.Component, s.Vars, nil)
+	rendered := probe.Substitute(s.Command, s.Target(), s.Vars, nil)
 	if err := probe.ValidateCommand(rendered, s.Command); err != nil {
 		fmt.Fprintf(w, "\n  probe rejected: %v\n", err)
 		return true

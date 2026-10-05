@@ -95,7 +95,7 @@ func scanStringLiteral(runes []rune, i int) (string, int, error) {
 }
 
 // scanWord reads an identifier / number / component.fact reference:
-// letters, digits, underscore, dot, minus per isWordContinue.
+// letters, digits, underscore, dot, minus and slash per isWordContinue.
 func scanWord(runes []rune, i int) (string, int) {
 	j := i
 	for j < len(runes) && isWordContinue(runes[j]) {
@@ -113,8 +113,11 @@ func isWordStart(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
+// The slash lets a reference name a kind-prefixed component, as in
+// service/acme.endpoint_count; the language has no arithmetic for it to
+// collide with.
 func isWordContinue(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' || r == '-'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' || r == '-' || r == '/'
 }
 
 type parser struct {

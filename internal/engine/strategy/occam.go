@@ -157,7 +157,7 @@ func probeForStep(step scenarios.Step, store *facts.Store, m *model.Model, reg *
 		Fact:      factName,
 		Provider:  providerName,
 		Type:      t.Name,
-		Resource:  comp.Resource,
+		Resource:  comp.ResourceName(),
 		Cost:      fs.Probe.Cost,
 		Access:    fs.Probe.Access,
 		Command:   fs.Probe.Cmd,

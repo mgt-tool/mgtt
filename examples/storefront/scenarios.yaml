@@ -1,7 +1,7 @@
 # GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
-source_hash: sha256:bd4bbc8f35df01d61023f690e403ee67788b7874c28c4511011b7bd4a2c0639c
+source_hash: sha256:803f3c69074adbe1ac5b4fd7b2c7dc8661f78685480176a12ca7a072a721fb45
 format: graph/v1
-scenario_count: 15982
+scenario_count: 31682
 components:
   acme-shop-consumer-blue:
     observes:
@@ -236,7 +236,7 @@ components:
           - upstream_failure
           - connection_refused
     dependents:
-      - to: acme-shop-nginx-blue
+      - to: service/acme-shop-php-fpm-blue
   acme-shop-php-fpm-green:
     observes:
       - available_replicas
@@ -272,7 +272,7 @@ components:
           - upstream_failure
           - connection_refused
     dependents:
-      - to: acme-shop-nginx-green
+      - to: service/acme-shop-php-fpm-green
   acme-shop-svc:
     observes:
       - endpoint_count
@@ -482,6 +482,46 @@ components:
       - name: stopped
         emits:
           - upstream_failure
+  service/acme-shop-php-fpm-blue:
+    observes:
+      - endpoint_count
+      - external_ip_assigned
+      - selector_match
+      - selector_value
+      - type
+    states:
+      - name: no_endpoints
+        emits:
+          - upstream_failure
+          - connection_refused
+          - dns_failure
+      - name: pending_lb
+        emits:
+          - upstream_failure
+          - connection_refused
+          - timeout
+    dependents:
+      - to: acme-shop-nginx-blue
+  service/acme-shop-php-fpm-green:
+    observes:
+      - endpoint_count
+      - external_ip_assigned
+      - selector_match
+      - selector_value
+      - type
+    states:
+      - name: no_endpoints
+        emits:
+          - upstream_failure
+          - connection_refused
+          - dns_failure
+      - name: pending_lb
+        emits:
+          - upstream_failure
+          - connection_refused
+          - timeout
+    dependents:
+      - to: acme-shop-nginx-green
   ssm-app-config:
     observes:
       - exists

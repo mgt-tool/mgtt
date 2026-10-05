@@ -58,7 +58,7 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 	if t == nil || t.DefaultActiveState == "" || len(rules) == 0 {
 		return nil
 	}
-	cands := candidates(rules, t, component, vars)
+	cands, _ := candidates(rules, t, component, vars)
 	if len(cands) == 0 {
 		return nil
 	}
@@ -104,12 +104,13 @@ func Witness(rules []expr.Node, t *providersupport.Type, component string, vars 
 	if t == nil {
 		return nil, false
 	}
-	// Zero first, when it serves: a witness is read by people, and
-	// restart_count 0 says healthy more plainly than the 4 just under a
-	// threshold of 5.
-	cands := candidates(rules, t, component, vars)
-	// And a string fact may take a value the type never names: `status !=
-	// healthy` needs one. "other" stands for it, after the named values.
+	// A witness is read by people, so the values are ordered to read
+	// plainly. Zero first: restart_count 0 says healthy more plainly than
+	// the 4 just under a threshold of 5. But zero last for a count compared
+	// with another count: one replica of one, not zero of zero. And a string
+	// fact may take a value the type never names, which `status != healthy`
+	// needs: "other" stands for it, after the named values.
+	cands, relative := candidates(rules, t, component, vars)
 	for name, vals := range cands {
 		var zero any = 0.0 // numbers are floats unless the fact is an int, as in candidates
 		switch t.Facts[name].TypeName {
@@ -125,8 +126,11 @@ func Witness(rules []expr.Node, t *providersupport.Type, component string, vars 
 		case "mgtt.int":
 			zero = 0
 		}
-		if !slices.Contains(vals, zero) {
-			cands[name] = append([]any{zero}, vals...)
+		rest := slices.DeleteFunc(slices.Clone(vals), func(v any) bool { return v == zero })
+		if relative[name] {
+			cands[name] = append(rest, zero)
+		} else {
+			cands[name] = append([]any{zero}, rest...)
 		}
 	}
 	var found map[string]any
@@ -207,10 +211,12 @@ func allTrue(rules []expr.Node, ctx expr.Ctx) (healthy, decided bool) {
 // candidates collects, per fact the rules and states read, the values
 // worth trying: both booleans; the string literals compared with (string
 // facts are closed enums, so no other value is tried); and each number
-// compared with, with its neighbours.
-func candidates(rules []expr.Node, t *providersupport.Type, component string, vars expr.VarLookup) map[string][]any {
+// compared with, with its neighbours. relative names the facts compared
+// with another fact.
+func candidates(rules []expr.Node, t *providersupport.Type, component string, vars expr.VarLookup) (out map[string][]any, relative map[string]bool) {
 	nums := map[string]map[float64]bool{}
 	strs := map[string]map[string]bool{}
+	relative = map[string]bool{}
 	addNum := func(fact string, v float64) {
 		if nums[fact] == nil {
 			nums[fact] = map[float64]bool{}
@@ -247,6 +253,7 @@ func candidates(rules []expr.Node, t *providersupport.Type, component string, va
 					addNum(val, 0)
 					// Compared with another fact: let them meet.
 					nums[val][1], nums[v.Fact][1] = true, true
+					relative[val], relative[v.Fact] = true, true
 				} else if vars != nil {
 					if raw, ok := vars.LookupVar(component, val); ok {
 						if x, err := strconv.ParseFloat(raw, 64); err == nil {
@@ -266,7 +273,7 @@ func candidates(rules []expr.Node, t *providersupport.Type, component string, va
 		}
 	}
 
-	out := map[string][]any{}
+	out = map[string][]any{}
 	for name, f := range t.Facts {
 		switch {
 		case f.TypeName == "mgtt.bool":
@@ -306,7 +313,7 @@ func candidates(rules []expr.Node, t *providersupport.Type, component string, va
 			}
 		}
 	}
-	return out
+	return out, relative
 }
 
 type mapLookup map[string]map[string]any

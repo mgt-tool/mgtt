@@ -59,9 +59,11 @@ type SuggestOptions struct {
 // chain's components in its state with its healthy rules failing, and every
 // component the failure cannot reach in its default state with its rules
 // holding. A component the failure can reach off that chain is left out,
-// unknown, as it would be mid-incident. expect: is what the engine concludes
-// from exactly those facts, so a draft passes as written: it is a baseline
-// to review, not a verdict.
+// unknown, as it would be mid-incident. Where the entry point cannot reach
+// the chain's end -- a background job no request path touches -- the draft
+// starts diagnosis there instead (entry:). expect: is what the engine
+// concludes from exactly those facts, so a draft passes as written: it is a
+// baseline to review, not a verdict.
 func Suggest(m *model.Model, reg *providersupport.Registry, opts SuggestOptions) (*Drafts, error) {
 	if opts.Component != "" && m.Components[opts.Component] == nil {
 		return nil, fmt.Errorf("component %q is not in the model", opts.Component)
@@ -77,14 +79,16 @@ func Suggest(m *model.Model, reg *providersupport.Registry, opts SuggestOptions)
 				inject[name] = f
 			}
 		}
-		d := draft(m, reg, "all healthy", "Every component healthy: no root cause.", inject)
+		d := draft(m, reg, "all healthy", "Every component healthy: no root cause.", "", inject)
 		if got := d.Scenario.Expect.RootCause; got != "none" {
 			d.Review = fmt.Sprintf("a healthy system reads as broken: the engine names %s", got)
 		}
 		out.Drafts = append(out.Drafts, d)
 	}
 
-	for _, c := range classify(all, m.EntryPoint()) {
+	entry := m.EntryPoint()
+	seen := below(m, entry)
+	for _, c := range classify(all, entry) {
 		root := c.rep.Root
 		if opts.Component != "" && root.Component != opts.Component {
 			continue
@@ -107,12 +111,14 @@ func Suggest(m *model.Model, reg *providersupport.Registry, opts SuggestOptions)
 				inject[name] = f
 			}
 		}
-		desc := fmt.Sprintf("From the failure chain %s, one of %d rooted at %s.%s.", RenderChain(c.rep), c.count, root.Component, root.State)
-		d := draft(m, reg, root.Component+" "+strings.ReplaceAll(root.State, "_", " "), desc, inject)
-		d.Chain, d.Count = c.rep, c.count
-		if got := d.Scenario.Expect; got.RootCause != root.Component && !slices.Contains(got.RedundancyDegraded, root.Component) {
-			d.Review = fmt.Sprintf("the engine names %s from these facts, not %s", got.RootCause, root.Component)
+		seenAt := ""
+		if !seen[c.rep.Terminal()] {
+			seenAt = c.rep.Terminal()
 		}
+		desc := fmt.Sprintf("From the failure chain %s, one of %d rooted at %s.%s.", RenderChain(c.rep), c.count, root.Component, root.State)
+		d := draft(m, reg, root.Component+" "+strings.ReplaceAll(root.State, "_", " "), desc, seenAt, inject)
+		d.Chain, d.Count = c.rep, c.count
+		d.Review = review(root.Component, d.Scenario.Expect)
 		out.Drafts = append(out.Drafts, d)
 	}
 	return out, nil
@@ -127,8 +133,8 @@ func RenderChain(s scenarios.Scenario) string {
 	return strings.Join(parts, " → ")
 }
 
-func draft(m *model.Model, reg *providersupport.Registry, name, desc string, inject map[string]map[string]any) Draft {
-	sc := &Scenario{Name: name, Description: desc, Inject: inject}
+func draft(m *model.Model, reg *providersupport.Registry, name, desc, entry string, inject map[string]map[string]any) Draft {
+	sc := &Scenario{Name: name, Description: desc, Entry: entry, Inject: inject}
 	got := Run(m, reg, sc).Actual
 	sc.Expect = Expectation{RootCause: got.RootCause, Path: got.Path, Eliminated: got.Eliminated, RedundancyDegraded: got.RedundancyDegraded}
 	return Draft{Scenario: sc}
@@ -139,6 +145,31 @@ type class struct {
 	rep   scenarios.Scenario // the chain to draft from
 	count int
 	reach map[string]bool // every component on any of the chains
+}
+
+// review is the note a draft for a failure rooted at root carries when the
+// engine concludes got: none when it names root, or root is a member of a
+// redundancy group that holds.
+func review(root string, got Expectation) string {
+	if got.RootCause == root || slices.Contains(got.RedundancyDegraded, root) {
+		return ""
+	}
+	return fmt.Sprintf("the engine names %s from these facts, not %s", got.RootCause, root)
+}
+
+// below is every component entry reaches through dependencies, itself
+// included: where a diagnosis starting at entry can look.
+func below(m *model.Model, entry string) map[string]bool {
+	seen := map[string]bool{entry: true}
+	for queue := []string{entry}; len(queue) > 0; queue = queue[1:] {
+		for _, d := range m.DependenciesOf(queue[0]) {
+			if !seen[d] {
+				seen[d] = true
+				queue = append(queue, d)
+			}
+		}
+	}
+	return seen
 }
 
 // classify groups chains by root and root state, in order of first
@@ -249,6 +280,9 @@ func MarshalDraft(d Draft, order []string) ([]byte, error) {
 	add := func(m *yaml.Node, k string, v *yaml.Node) { m.Content = append(m.Content, str(k), v) }
 	add(doc, "name", str(sc.Name))
 	add(doc, "description", str(sc.Description))
+	if sc.Entry != "" {
+		add(doc, "entry", str(sc.Entry))
+	}
 
 	inject := &yaml.Node{Kind: yaml.MappingNode}
 	for _, name := range order {

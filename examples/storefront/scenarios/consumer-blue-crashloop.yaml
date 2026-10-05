@@ -1,0 +1,19 @@
+name: orders stall, blue consumer crash-looping
+
+# No request path reaches the queue consumers: checkout still answers, orders
+# just stop being processed. Diagnosis starts where that is seen.
+entry: async_jobs
+
+inject:
+  async_jobs:               { operator_says_healthy: false }
+  acme-shop-consumer-blue:  { ready_replicas: 0, desired_replicas: 1, condition_available: false, restart_count: 12 }
+  acme-shop-consumer-green: { ready_replicas: 1, desired_replicas: 1, condition_available: true,  restart_count: 0 }
+  mq:                       { available: true, consumer_count: 22, queue_depth: 40 }
+  rds:                      { available: true, connection_count: 140 }
+  redis:                    { available: true, connection_count: 200, cache_hit_ratio: 0.94 }
+  external-secrets:         { deployment_ready: true, crd_registered: true, restart_count: 0 }
+
+expect:
+  root_cause: acme-shop-consumer-blue
+  path: [async_jobs, acme-shop-consumer-blue]
+  eliminated: [acme-shop-consumer-green, mq, rds, redis, external-secrets]

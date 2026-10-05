@@ -6,6 +6,7 @@ Start from `scenario_suggest` (`mgtt simulate --suggest`): one draft with everyt
 
 ```yaml
 name: rds unavailable
+entry: edge                       # where diagnosis starts; default: the model's entry point
 inject:
   rds:    { available: false, connection_count: 0 }
   api:    { ready_replicas: 0, desired_replicas: 3, condition_available: false, restart_count: 14 }
@@ -21,6 +22,8 @@ expect:
 ```
 
 `eliminated` passes with extras, so it cannot catch a component cleared that should not have been. Use `not_eliminated` for that.
+
+A failure the model's entry point can't reach, such as a queue consumer behind a background job, is never named from there: set `entry` to the component where it is seen.
 
 ## The archetypes: write at least these
 

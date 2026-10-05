@@ -73,6 +73,7 @@ One repo can hold several models, for example `edge.model.yaml` and `data.model.
 ```yaml
 name: rds forbidden
 description: IAM denies every rds probe; api is crashing.
+entry: nginx                       # where diagnosis starts; default: the model's entry point
 inject:                            # component → fact → value
   api: { ready_replicas: 0, desired_replicas: 3, restart_count: 9 }
 unresolved:                        # probes that ran but produced no value
@@ -89,6 +90,7 @@ expect:
 - **`unresolved`** outcomes are `forbidden`, `transient` (both unknown, so the component is kept in play) or `not_found`. If every fact of a component is `not_found`, the component is absent, and it can be the root cause.
 - **Inject enough facts** for the state you mean. `ready_replicas: 0` without `restart_count` can resolve to `degraded` rather than `crashed`.
 - A component you don't mention has no facts, so it is never eliminated.
+- **`entry`** names the component diagnosis starts from, as `plan --component` does. Set it for a failure the model's entry point can't reach, such as a background job no request path touches.
 
 Run them with `mgtt simulate --all`, or `--scenario <file>` for one. `--from-scenarios` checks every enumerated chain. `--fuzz N` checks that the engine reaches a conclusion from random, partial evidence.
 

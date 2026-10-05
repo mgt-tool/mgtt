@@ -39,7 +39,7 @@ func Run(m *model.Model, reg *providersupport.Registry, sc *Scenario) *Result {
 		}
 	}
 
-	tree := engine.Plan(m, reg, store, "")
+	tree := engine.Conclude(m, reg, store, "")
 	actual := extractConclusion(tree)
 	pass := matches(sc.Expect, actual)
 

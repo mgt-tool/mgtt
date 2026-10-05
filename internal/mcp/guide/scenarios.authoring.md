@@ -2,6 +2,8 @@
 
 A scenario injects facts, optionally records probes that failed, and states the conclusion the model must reach. Run scenarios with `scenario_simulate`, or `mgtt simulate --all` in CI.
 
+Start from `scenario_suggest` (`mgtt simulate --suggest`): one draft with everything healthy and one per root and root state, with facts that put the failure's chain in its states and everything out of its reach healthy. A draft records what the engine concludes today, so it passes as written: read each one, and treat `review` as a question about the model. `unshowable` names failure states the healthy rules call healthy, which no scenario can show.
+
 ```yaml
 name: rds unavailable
 inject:

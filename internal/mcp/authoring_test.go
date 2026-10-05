@@ -265,3 +265,48 @@ func TestModelDiff_Inline(t *testing.T) {
 		t.Errorf("a missing revision names which: %v", err)
 	}
 }
+
+// Drafts come back as YAML that scenario_simulate accepts and passes, ten to
+// a page by default, and can be narrowed to one component's failures.
+func TestScenarioSuggest_DraftsRoundTripThroughSimulate(t *testing.T) {
+	h := authoringHandler(t)
+	model := "meta:\n  name: s\n  version: \"1\"\n  providers: [testwriter]\ncomponents:\n  api:\n    type: service\n  worker:\n    type: service\n"
+	res, err := h.ScenarioSuggest(ScenarioSuggestParams{ModelSource: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total < 3 || len(res.Drafts) != res.Total || res.Drafts[0].Name != "all healthy" || res.Chains == 0 {
+		t.Fatalf("want all healthy plus a draft per failure; got %+v", res)
+	}
+	var docs []string
+	for _, d := range res.Drafts {
+		docs = append(docs, d.YAML)
+		if d.Name != "all healthy" && (len(d.Chain) == 0 || d.Count == 0) {
+			t.Errorf("%s: a failure draft names its chain and count", d.Name)
+		}
+	}
+	sim, err := h.ScenarioSimulate(ScenarioSimulateParams{ModelSource: model, ScenariosSource: strings.Join(docs, "---\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sim.Failed != 0 || sim.Passed != len(res.Drafts) {
+		t.Errorf("drafts handed back to scenario_simulate: %d passed, %d failed", sim.Passed, sim.Failed)
+	}
+
+	first, err := h.ScenarioSuggest(ScenarioSuggestParams{ModelSource: model, Limit: 1})
+	if err != nil || len(first.Drafts) != 1 || first.NextPageToken != "1" || first.Total != res.Total {
+		t.Fatalf("limit 1: got %+v, %v", first, err)
+	}
+	only, err := h.ScenarioSuggest(ScenarioSuggestParams{ModelSource: model, Component: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range only.Drafts {
+		if !strings.HasPrefix(d.Name, "worker ") {
+			t.Errorf("component worker: got draft %q", d.Name)
+		}
+	}
+	if _, err := h.ScenarioSuggest(ScenarioSuggestParams{ModelSource: model, Component: "ghost"}); err == nil {
+		t.Error("a component the model lacks should be an error")
+	}
+}

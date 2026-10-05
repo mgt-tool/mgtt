@@ -22,6 +22,7 @@ Commands that take a model default to `system.model.yaml` in the current directo
 - `--scenarios-dir <dir>`: read scenarios from another directory.
 - `--from-scenarios`: check every enumerated chain.
 - `--fuzz N` (with `--fuzz-seed`): check conclusions from random partial evidence.
+- `--suggest`: draft scenarios from the model's failure chains, one with everything healthy and one per root and root state, each with `expect:` set to what the engine concludes today. Drafts the engine does not attribute to their chain's root are marked `REVIEW`. `--component <name>` keeps one component's failures; `--write` saves each draft into `--scenarios-dir`, never over an existing file.
 
 ## Incident
 

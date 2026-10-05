@@ -211,6 +211,26 @@ const IncidentSnapshotOutputSchema = `{
   "required":["incident_id","model_ref","started_at","status","entry_point","surviving_scenarios","eliminated_scenarios","surviving_chains","surviving_classes","eliminated_chains","eliminated_classes","facts"]
 }`
 
+// ScenarioSuggestOutputSchema describes one page of drafted scenarios.
+const ScenarioSuggestOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "drafts":{"type":"array","items":{"type":"object","properties":{
+      "name":{"type":"string"},
+      "chain":{"type":"array","items":{"type":"string"}},
+      "count":{"type":"integer"},
+      "root_cause":{"type":"string"},
+      "review":{"type":"string"},
+      "yaml":{"type":"string"}},
+      "required":["name","root_cause","yaml"]}},
+    "chains":{"type":"integer"},
+    "total":{"type":"integer"},
+    "next_page_token":{"type":"string"},
+    "unshowable":{"type":"array","items":{"type":"string"}}
+  },
+  "required":["drafts","chains","total"]
+}`
+
 // TypesListOutputSchema describes the installed vocabulary listing.
 const TypesListOutputSchema = `{
   "type":"object",

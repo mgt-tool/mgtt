@@ -84,6 +84,7 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerTypesDescribe(s, h)
 		registerModelValidate(s, h)
 		registerScenarioSimulate(s, h)
+		registerScenarioSuggest(s, h)
 		registerGuide(s, h)
 		registerModelImpact(s, h)
 		registerModelDiff(s, h)
@@ -243,13 +244,34 @@ func registerScenarioSimulate(s *server.MCPServer, h *Handler) {
 	))
 }
 
+func registerScenarioSuggest(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("scenario_suggest",
+		mcpgo.WithDescription("Draft scenarios from the model's own failure chains: one with every component healthy, and one per root and root state, with facts that put the chain's components in their failure states and everything out of the failure's reach healthy. Each draft's expect: is what the engine concludes from those facts today, so it passes as written; review marks drafts whose conclusion is not the chain's root, and unshowable lists failures no facts can show. Ten drafts to a page. Model by path or inline; no live system, no writes."),
+		mcpgo.WithString("model_path", mcpgo.Description("path to system.model.yaml on the server")),
+		mcpgo.WithString("model_source", mcpgo.Description("the model YAML itself (max 512 KiB)")),
+		mcpgo.WithString("component", mcpgo.Description("only failures rooted at this component")),
+		mcpgo.WithNumber("limit", mcpgo.Description("drafts per page: 10 by default")),
+		mcpgo.WithString("page_token", mcpgo.Description("next_page_token from the previous page")),
+		rawOutput(ScenarioSuggestOutputSchema),
+	)
+	s.AddTool(tool, dispatch("scenario_suggest",
+		func(req mcpgo.CallToolRequest) ScenarioSuggestParams {
+			return ScenarioSuggestParams{
+				ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", ""),
+				Component: req.GetString("component", ""), Limit: req.GetInt("limit", 0), PageToken: req.GetString("page_token", ""),
+			}
+		},
+		h.ScenarioSuggest,
+	))
+}
+
 // serverInstructions is the workflow an agent needs before its first call.
 // Clients may drop it, so every step is also in the tool descriptions.
 const serverInstructions = `mgtt diagnoses a running system against its committed model.
 Workflow: incident_start with the model path, then loop: plan (what to check next and why), probe with execute=true (or fact_add for a fact you gathered yourself), until plan names a root cause or reports none. incident_snapshot summarises the state; incident_end closes it.
 A probe that returns forbidden or transient recorded an unknown fact: the component stays a suspect, it is not cleared.
 about reports the safety posture: read-only enforcement, the write-probe policy and the per-incident probe budget, and which toolset is served.
-To write or change a model, start with guide (no topic): types_list and types_describe for the vocabulary (never invent fact names), then model_validate with the draft as model_source until it reports no errors, then scenario_simulate with scenarios that pin what the model must conclude. These tools read no live system and write nothing; the model reaches the repository as a reviewed change.`
+To write or change a model, start with guide (no topic): types_list and types_describe for the vocabulary (never invent fact names), then model_validate with the draft as model_source until it reports no errors, then scenario_suggest for draft scenarios and scenario_simulate with the scenarios that pin what the model must conclude. These tools read no live system and write nothing; the model reaches the repository as a reviewed change.`
 
 // legacyToolNames maps each tool renamed in 0.4 to its old dotted name.
 var legacyToolNames = map[string]string{

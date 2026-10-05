@@ -47,6 +47,7 @@ guide {}                                    → the authoring loop and its pitfa
 types_list {provider: "kubernetes"}         → every type, with its fact count
 types_describe {type: "deployment"}         → facts, default healthy rules, states, variables
 model_validate {model_source: "<yaml>"}     → every error and warning, each with a suggestion
+scenario_suggest {model_source: "<yaml>"}   → draft scenarios from the model's own failure chains, to review
 scenario_simulate {model_source: "<yaml>", scenarios_source: "<yaml>---<yaml>"}
                                             → pass/fail, with expected and actual side by side
 model_impact {model_source: "<yaml>", component: "redis"}
@@ -105,4 +106,4 @@ incident_end {incident_id, verdict: "rds stopped by maintenance window", emit_sc
 
 ## All tools
 
-Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_simulate`, `model_impact`, `model_diff`. Diagnosis: `model_discover` (runs provider discovery and proposes a model, merged with the existing one; writes nothing), `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. The scenario listings return one chain per class (same root, root state and terminal component) with the count it stands for, 50 to a page; `all: true` lists every chain. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.
+Authoring: `guide`, `types_list`, `types_describe`, `model_validate`, `scenario_suggest`, `scenario_simulate`, `model_impact`, `model_diff`. Diagnosis: `model_discover` (runs provider discovery and proposes a model, merged with the existing one; writes nothing), `incident_start`, `plan`, `probe`, `fact_add`, `facts_list`, `incident_snapshot` (everything in one call), `scenarios_list`, `scenarios_alive`, `incident_end`. The scenario listings return one chain per class (same root, root state and terminal component) with the count it stands for, 50 to a page; `all: true` lists every chain. `about` reports the version, toolset and guardrails. Each tool's schema is served over `tools/list`. Tool names use underscores; `--legacy-tool-names` also registers the old dotted names.

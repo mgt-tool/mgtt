@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +27,9 @@ type simulateFlags struct {
 	fromScenarios bool
 	fuzzN         int
 	fuzzSeed      int64
+	suggest       bool
+	component     string
+	write         bool
 }
 
 func newSimulateCmd() *cobra.Command {
@@ -44,6 +48,9 @@ func newSimulateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&f.fromScenarios, "from-scenarios", false, "iterate enumerated scenarios as test cases; assert Occam identifies each root")
 	cmd.Flags().IntVar(&f.fuzzN, "fuzz", 0, "run N fuzz iterations: random scenario, random fact-trail truncation, assert convergence")
 	cmd.Flags().Int64Var(&f.fuzzSeed, "fuzz-seed", 0, "seed for --fuzz (default: time-based)")
+	cmd.Flags().BoolVar(&f.suggest, "suggest", false, "draft scenarios from the model's failure chains, one per root and root state, for review")
+	cmd.Flags().StringVar(&f.component, "component", "", "with --suggest, only failures rooted at this component")
+	cmd.Flags().BoolVar(&f.write, "write", false, "with --suggest, save each draft into --scenarios-dir instead of printing it; never overwrites")
 	cmd.SilenceErrors = true
 	return cmd
 }
@@ -53,8 +60,8 @@ func init() {
 }
 
 func runSimulate(cmd *cobra.Command, f *simulateFlags, args []string) error {
-	if !f.all && f.scenario == "" && !f.fromScenarios && f.fuzzN == 0 {
-		return fmt.Errorf("specify --scenario <file>, --all, --from-scenarios, or --fuzz N")
+	if !f.all && f.scenario == "" && !f.fromScenarios && f.fuzzN == 0 && !f.suggest {
+		return fmt.Errorf("specify --scenario <file>, --all, --from-scenarios, --fuzz N, or --suggest")
 	}
 
 	m, err := model.Load(f.model)
@@ -69,6 +76,8 @@ func runSimulate(cmd *cobra.Command, f *simulateFlags, args []string) error {
 	w := cmd.OutOrStdout()
 
 	switch {
+	case f.suggest:
+		return runSuggestMode(w, cmd.ErrOrStderr(), m, reg, f)
 	case f.fromScenarios:
 		return runFromScenariosMode(w, m, reg, f.model)
 	case f.fuzzN > 0:
@@ -78,6 +87,51 @@ func runSimulate(cmd *cobra.Command, f *simulateFlags, args []string) error {
 	default:
 		return runSingleScenarioMode(w, m, reg, f)
 	}
+}
+
+// runSuggestMode drafts scenarios from the model's failure chains: one YAML
+// stream on stdout, or with --write one file each in the scenarios
+// directory. A summary goes to stderr.
+func runSuggestMode(w, errw io.Writer, m *model.Model, reg *providersupport.Registry, f *simulateFlags) error {
+	ds, err := simulate.Suggest(m, reg, simulate.SuggestOptions{Component: f.component})
+	if err != nil {
+		return err
+	}
+	review := 0
+	for i, d := range ds.Drafts {
+		if d.Review != "" {
+			review++
+		}
+		if f.write {
+			path, err := simulate.WriteDraft(f.scenariosDir, d, m.Order)
+			var exists *simulate.ScenarioExistsError
+			switch {
+			case errors.As(err, &exists):
+				fmt.Fprintf(w, "kept %s (exists)\n", path)
+			case err != nil:
+				return err
+			default:
+				fmt.Fprintf(w, "wrote %s\n", path)
+			}
+			continue
+		}
+		data, err := simulate.MarshalDraft(d, m.Order)
+		if err != nil {
+			return err
+		}
+		if i > 0 {
+			fmt.Fprintln(w, "---")
+		}
+		if _, err := w.Write(data); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(errw, "%d drafts from %d failure chains, %d marked REVIEW", len(ds.Drafts), ds.Chains, review)
+	if len(ds.Unshowable) > 0 {
+		fmt.Fprintf(errw, "; no facts show %s failing", strings.Join(ds.Unshowable, ", "))
+	}
+	fmt.Fprintln(errw)
+	return nil
 }
 
 func runFromScenariosMode(w io.Writer, m *model.Model, reg *providersupport.Registry, modelPath string) error {

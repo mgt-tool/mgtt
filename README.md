@@ -34,6 +34,12 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/mgt-tool/mgtt:latest version
 - [How it works](docs/concepts/how-it-works.md)
 - [Docs site](https://mgt-tool.github.io/mgtt)
 
+## Examples
+
+- [`storefront`](examples/storefront/): a shop on EKS and AWS, blue/green behind one Service. Ten scenarios, one of them a queue consumer failing where only the background-jobs process sees it.
+- [`redundant-web`](examples/redundant-web/): two web Deployments as a redundancy group. One down is degraded; the database under both is the root cause.
+- [`minishop`](examples/minishop/): two components and a drifted copy, small enough to check by hand that verification with [writ](https://github.com/mgt-tool/mgtt2writ) catches the drift.
+
 ## License
 
 Copyright (C) 2026 Alex Kunich. Engine and CLI: [AGPL-3.0](LICENSE). Provider SDK: [Apache-2.0](sdk/provider/LICENSE), so provider authors don't inherit the engine's terms. See [NOTICE](NOTICE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).

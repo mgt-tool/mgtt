@@ -80,6 +80,10 @@ type FactInfo struct {
 	Type   string `json:"type,omitempty"` // mgtt.int, mgtt.bool, ...
 	Cost   string `json:"cost,omitempty"`
 	Access string `json:"access,omitempty"`
+	// Window and Derive mark a derived fact: delta, rate or max over the
+	// trailing window, computed by the provider.
+	Window string `json:"window,omitempty"`
+	Derive string `json:"derive,omitempty"`
 }
 
 // StateInfo is one state a type can be in.
@@ -154,7 +158,11 @@ func (h *Handler) TypesDescribe(p TypesDescribeParams) (*TypesDescribeResult, er
 		DefaultActiveState: t.DefaultActiveState,
 	}
 	for name, f := range t.Facts {
-		out.Facts = append(out.Facts, FactInfo{Name: name, Type: f.TypeName, Cost: f.Probe.Cost, Access: f.Probe.Access})
+		info := FactInfo{Name: name, Type: f.TypeName, Cost: f.Probe.Cost, Access: f.Probe.Access, Derive: f.Derive}
+		if f.Window > 0 {
+			info.Window = f.Window.String()
+		}
+		out.Facts = append(out.Facts, info)
 	}
 	sort.Slice(out.Facts, func(i, j int) bool { return out.Facts[i].Name < out.Facts[j].Name })
 	for _, st := range t.States {

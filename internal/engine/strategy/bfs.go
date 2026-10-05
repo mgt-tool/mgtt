@@ -162,6 +162,8 @@ func firstUncollectedFact(in Input, compName string, t *providersupport.Type, pr
 			Access:    fs.Probe.Access,
 			Command:   fs.Probe.Cmd,
 			ParseMode: fs.Probe.Parse,
+			Window:    fs.Window,
+			Derive:    fs.Derive,
 			Vars:      componentVars(in, compName),
 		}
 	}

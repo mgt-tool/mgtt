@@ -9,6 +9,7 @@ mgtt's engine and CLI talk to providers exclusively through the `Executor` inter
 - [Invocation](#invocation) — argv shape
 - [Success output](#success-output-stdout-exit-0) — JSON on stdout
 - [Error output](#error-output-stderr-non-zero-exit) — exit codes
+- [Derived facts](#derived-facts) — `window` and `derive`
 - [Timeouts and limits](#timeouts-and-limits)
 - [Debug output](#debug-output)
 - [Versioning](#versioning) — `requires.mgtt`
@@ -24,6 +25,7 @@ mgtt invokes the runner as:
 - `<runner>` is `runtime.entrypoint` from the provider's `manifest.yaml` (or the convention-default: `bin/mgtt-provider-<name>` for source installs, the image's `ENTRYPOINT` for image installs).
 - All entries from `Command.Vars` and `Command.Extra` are passed as `--<key> <value>` pairs in alphabetical order. Core does not privilege any key (no special `--namespace`, `--cluster`, etc.). Providers declare which flags they expect in their own README.
 - `--type <T>` is reserved by core when the model declares a typed component.
+- `--window <duration>` and `--derive delta|rate|max` are reserved by core for a derived fact (see [Derived facts](#derived-facts)); a model variable with either name is a usage error.
 - A key appearing in both `Vars` and `Extra` is a usage error — the runner reports `ErrUsage`.
 
 ## Success output (stdout, exit 0)
@@ -54,6 +56,23 @@ A single human-readable line on stderr, then exit code per table:
 | 5    | protocol    | Backend returned malformed data                      |
 
 Core maps exit codes to sentinel errors (`probe.ErrUsage`, `probe.ErrEnv`, `probe.ErrForbidden`, `probe.ErrTransient`, `probe.ErrProtocol`). Providers writing in Go can import the matching sentinel set from `github.com/mgt-tool/mgtt/sdk/provider`.
+
+## Derived facts
+
+A type may declare a fact over a trailing window:
+
+```yaml
+facts:
+  queue_depth_delta_5m: { type: mgtt.int, window: 5m, derive: delta }
+```
+
+Both keys or neither, and only on a numeric fact. Core passes them on every probe of that fact (`--window 5m --derive delta`) and otherwise treats the value like any other: the provider computes it, so the engine stays free of time.
+
+- `delta` is the last sample in the window minus the first.
+- `rate` is that per second between them.
+- `max` is the largest sample.
+
+A window holding too few samples to tell (one for `delta` or `rate`, none for `max`) is transient, exit 4: the fact is unknown, not zero. The Go SDK's `provider.Windowed` reads a series and does the reduction.
 
 ## Timeouts and limits
 

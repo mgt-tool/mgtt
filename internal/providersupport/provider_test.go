@@ -949,3 +949,22 @@ types:
 		t.Errorf("unexpected triggered_by: %v", stopped.TriggeredBy)
 	}
 }
+
+func TestParseFact_Derived(t *testing.T) {
+	fs, err := parseFact(&rawFact{Type: "mgtt.int", Window: "5m", Derive: "delta"})
+	if err != nil || fs.Window != 5*time.Minute || fs.Derive != "delta" {
+		t.Fatalf("got %+v, %v", fs, err)
+	}
+	for _, bad := range []rawFact{
+		{Type: "mgtt.int", Window: "5m"},                   // derive missing
+		{Type: "mgtt.int", Derive: "delta"},                // window missing
+		{Type: "mgtt.int", Window: "5m", Derive: "median"}, // unknown derivation
+		{Type: "mgtt.bool", Window: "5m", Derive: "max"},   // not a number
+		{Type: "mgtt.int", Window: "soon", Derive: "max"},  // not a duration
+		{Type: "mgtt.int", Window: "-5m", Derive: "max"},   // not positive
+	} {
+		if _, err := parseFact(&bad); err == nil {
+			t.Errorf("%+v: want an error", bad)
+		}
+	}
+}

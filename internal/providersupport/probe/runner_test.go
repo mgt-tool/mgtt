@@ -377,3 +377,27 @@ func TestBuildArgs_ResourceFallbackWhenEmpty(t *testing.T) {
 		t.Errorf("args[1] = %q, want %q (fallback to Component)", got[1], "rds")
 	}
 }
+
+// A derived fact's window and derivation travel as reserved flags, after
+// --type, and no variable may take their names.
+func TestBuildArgs_DerivedFact(t *testing.T) {
+	got, err := buildArgs(Command{Component: "orders", Fact: "queue_depth_delta_5m", Type: "mq_broker", Window: 5 * time.Minute, Derive: "delta", Vars: map[string]string{"region": "eu-central-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"probe", "orders", "queue_depth_delta_5m", "--type", "mq_broker", "--window", "5m", "--derive", "delta", "--region", "eu-central-1"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got  %v\nwant %v", got, want)
+	}
+	if _, err := buildArgs(Command{Component: "orders", Fact: "x", Vars: map[string]string{"window": "1h"}}); !errors.Is(err, ErrUsage) {
+		t.Errorf("a variable named window is a usage error, got %v", err)
+	}
+}
+
+func TestShortDuration(t *testing.T) {
+	for d, want := range map[time.Duration]string{5 * time.Minute: "5m", time.Hour: "1h", 90 * time.Second: "1m30s", 2*time.Hour + 30*time.Minute: "2h30m"} {
+		if got := shortDuration(d); got != want {
+			t.Errorf("%v: got %q, want %q", d, got, want)
+		}
+	}
+}

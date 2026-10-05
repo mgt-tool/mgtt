@@ -162,6 +162,8 @@ func probeForStep(step scenarios.Step, store *facts.Store, m *model.Model, reg *
 		Access:    fs.Probe.Access,
 		Command:   fs.Probe.Cmd,
 		ParseMode: fs.Probe.Parse,
+		Window:    fs.Window,
+		Derive:    fs.Derive,
 		Vars:      mergeVars(m.Meta.Vars, comp.Vars),
 	}
 }

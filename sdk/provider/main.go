@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 // Version is set by providers via ldflags at build time.
@@ -25,9 +26,11 @@ func Main(r *Registry) {
 // Run is the testable core of Main. Returns the exit code per the probe
 // protocol.
 //
-// Layering invariant: Run does not privilege any flag key. `--type` is the
-// ONE reserved flag (it maps to Request.Type because the registry is keyed
-// on type). Every other --key value pair lands in Request.Extra opaquely.
+// Layering invariant: Run does not privilege any flag key beyond the
+// protocol's reserved ones: `--type` maps to Request.Type because the
+// registry is keyed on type, and `--window` / `--derive` to Request.Window
+// and Request.Derive for a derived fact. Every other --key value pair lands
+// in Request.Extra opaquely.
 // Backend-specific keys (namespace, region, cluster, …) are not reserved
 // here; providers read them from Extra as needed.
 func Run(ctx context.Context, r *Registry, args []string, stdout, stderr io.Writer) int {
@@ -82,8 +85,20 @@ func parseProbeRequest(args []string, stderr io.Writer) (Request, int) {
 			return Request{}, 1
 		}
 		k := strings.TrimPrefix(key, "--")
-		if k == "type" {
+		switch k {
+		case "type":
 			req.Type = val
+			continue
+		case "window":
+			d, err := time.ParseDuration(val)
+			if err != nil || d <= 0 {
+				fmt.Fprintf(stderr, "--window %q: want a positive duration such as 5m\n", val)
+				return Request{}, 1
+			}
+			req.Window = d
+			continue
+		case "derive":
+			req.Derive = val
 			continue
 		}
 		req.Extra[k] = val

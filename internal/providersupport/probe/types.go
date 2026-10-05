@@ -40,6 +40,8 @@ type Command struct {
 	Fact      string
 	Type      string            // component type, passed to runner backends as --type
 	Resource  string            // upstream resource id; empty -> fall back to Component
+	Window    time.Duration     // derived fact: passed to runner backends as --window
+	Derive    string            // derived fact: delta, rate or max, passed as --derive
 	Vars      map[string]string // model-level variables
 	Extra     map[string]string // additional flags; key collision with Vars is a usage error
 	Timeout   time.Duration     // 0 = default (30s)

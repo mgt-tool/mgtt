@@ -156,6 +156,8 @@ func runPlanProbe(w io.Writer, m *model.Model, reg *providersupport.Registry, st
 		Fact:      s.Fact,
 		Type:      s.Type,
 		Resource:  s.Resource,
+		Window:    s.Window,
+		Derive:    s.Derive,
 		Vars:      s.Vars,
 		Timeout:   probeTimeout(),
 	})

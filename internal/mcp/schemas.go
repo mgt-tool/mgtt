@@ -294,7 +294,8 @@ const ScenarioSimulateOutputSchema = `{
     "failed":{"type":"integer"},
     "results":{"type":"array","items":{"type":"object","properties":{
       "name":{"type":"string"},"pass":{"type":"boolean"},
-      "expected":{"$ref":"#/$defs/conclusion"},"actual":{"$ref":"#/$defs/conclusion"}},
+      "expected":{"$ref":"#/$defs/conclusion"},"actual":{"$ref":"#/$defs/conclusion"},
+      "error":{"type":"string"}},
       "required":["name","pass","expected","actual"]}}
   },
   "required":["passed","failed","results"],

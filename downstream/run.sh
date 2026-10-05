@@ -64,8 +64,11 @@ suite_storefront() {
   cd "$root/examples/storefront" || return 1
   mgtt model validate system.model.yaml || return 1
   mgtt simulate --model system.model.yaml --all --scenarios-dir scenarios || return 1
-  # Drafted scenarios, written out and read back, pass as written.
-  mgtt simulate --model system.model.yaml --suggest --write --scenarios-dir "$tmp/drafts" >/dev/null || return 1
+  # Drafted scenarios, written out and read back, pass as written; and the
+  # engine names every drafted failure from where it is seen.
+  mgtt simulate --model system.model.yaml --suggest --write --scenarios-dir "$tmp/drafts" 2>"$tmp/drafts.txt" >/dev/null || return 1
+  cat "$tmp/drafts.txt"
+  grep -q ", 0 marked REVIEW" "$tmp/drafts.txt" || { echo "a drafted failure is not named from where it is seen"; return 1; }
   mgtt simulate --model system.model.yaml --all --scenarios-dir "$tmp/drafts" | tail -n 1
 }
 

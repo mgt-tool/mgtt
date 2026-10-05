@@ -268,6 +268,9 @@ type ScenarioOutcome struct {
 	Pass     bool       `json:"pass"`
 	Expected Conclusion `json:"expected"`
 	Actual   Conclusion `json:"actual"`
+	// Error says why the scenario could not run, such as an entry the
+	// model lacks.
+	Error string `json:"error,omitempty"`
 }
 
 // ScenarioSimulateResult reports every scenario.
@@ -300,7 +303,7 @@ func (h *Handler) ScenarioSimulate(p ScenarioSimulateParams) (*ScenarioSimulateR
 		} else {
 			out.Failed++
 		}
-		out.Results = append(out.Results, ScenarioOutcome{Name: sc.Name, Pass: r.Pass, Expected: conclusion(sc.Expect), Actual: conclusion(r.Actual)})
+		out.Results = append(out.Results, ScenarioOutcome{Name: sc.Name, Pass: r.Pass, Expected: conclusion(sc.Expect), Actual: conclusion(r.Actual), Error: r.Err})
 	}
 	return out, nil
 }

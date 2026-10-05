@@ -186,10 +186,10 @@ func TestMarshalDraft_ReadsBackAndPasses(t *testing.T) {
 	}
 }
 
-// A failure the engine cannot reach from the entry point is not named: the
-// draft says so, for the author to judge whether the model or the
-// expectation is wrong.
-func TestSuggest_ReviewWhenTheEngineNamesAnother(t *testing.T) {
+// A failure only another top-level component shows is drafted from there:
+// the draft names that component as its entry, and the engine names the
+// failure.
+func TestSuggest_SeenAtAnotherEntry(t *testing.T) {
 	m, reg := groupModel(t)
 	m.Components["cron"] = &model.Component{Name: "cron", Type: "app"}
 	m.Order = append(m.Order, "cron")
@@ -199,10 +199,35 @@ func TestSuggest_ReviewWhenTheEngineNamesAnother(t *testing.T) {
 		t.Fatalf("got %d drafts, want cron stopped", len(ds.Drafts))
 	}
 	d := ds.Drafts[0]
-	if d.Scenario.Expect.RootCause != "none" || d.Review != "the engine names none from these facts, not cron" {
-		t.Errorf("got root cause %q and review %q", d.Scenario.Expect.RootCause, d.Review)
+	if d.Scenario.Entry != "cron" || d.Scenario.Expect.RootCause != "cron" || d.Review != "" {
+		t.Errorf("got entry %q, root cause %q, review %q; want cron, cron, none", d.Scenario.Entry, d.Scenario.Expect.RootCause, d.Review)
 	}
-	if r := Run(m, reg, d.Scenario); !r.Pass {
-		t.Error("a draft marked for review still passes as written: it records today's conclusion")
+	data, _ := MarshalDraft(d, m.Order)
+	if !strings.Contains(string(data), "\nentry: cron\n") {
+		t.Errorf("the entry belongs in the file:\n%s", data)
+	}
+}
+
+func TestReview(t *testing.T) {
+	for _, c := range []struct {
+		got  Expectation
+		want string
+	}{
+		{Expectation{RootCause: "db"}, ""},
+		{Expectation{RootCause: "none", RedundancyDegraded: []string{"db"}}, ""},
+		{Expectation{RootCause: "none"}, "the engine names none from these facts, not db"},
+		{Expectation{RootCause: "api"}, "the engine names api from these facts, not db"},
+	} {
+		if got := review("db", c.got); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.got, got, c.want)
+		}
+	}
+}
+
+func TestRun_AnEntryTheModelLacksFails(t *testing.T) {
+	m, reg := groupModel(t)
+	r := Run(m, reg, &Scenario{Name: "x", Entry: "ghost", Expect: Expectation{RootCause: "none"}})
+	if r.Pass || !strings.Contains(r.Err, `"ghost"`) {
+		t.Errorf("got pass %v, err %q; want a failure naming the entry", r.Pass, r.Err)
 	}
 }

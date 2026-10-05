@@ -193,7 +193,7 @@ func TestGuide(t *testing.T) {
 	block := sa.Text[strings.Index(sa.Text, "```yaml\n")+len("```yaml\n"):]
 	block = block[:strings.Index(block, "```")]
 	scs, err := simulate.ParseScenarios([]byte(block))
-	if err != nil || len(scs) != 1 || len(scs[0].Unresolved) != 1 || len(scs[0].Expect.CannotRuleOut) != 1 {
+	if err != nil || len(scs) != 1 || scs[0].Entry != "edge" || len(scs[0].Unresolved) != 1 || len(scs[0].Expect.CannotRuleOut) != 1 {
 		t.Errorf("scenarios.authoring example does not parse as its fields say: %v %+v", err, scs)
 	}
 	if _, err := h.Guide(GuideParams{Topic: "nope"}); err == nil || !strings.Contains(err.Error(), "model.health") {

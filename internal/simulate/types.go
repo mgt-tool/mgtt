@@ -4,9 +4,14 @@
 package simulate
 
 type Scenario struct {
-	Name        string                    `yaml:"name"`
-	Description string                    `yaml:"description"`
-	Inject      map[string]map[string]any `yaml:"inject"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	// Entry is where diagnosis starts: the component the failure is seen
+	// at. Empty means the model's entry point, the first component nothing
+	// depends on; a failure only another top-level component shows, such as
+	// a background job, needs that component named here.
+	Entry  string                    `yaml:"entry"`
+	Inject map[string]map[string]any `yaml:"inject"`
 	// Unresolved records probes that ran without producing a value:
 	// component → fact → not_found | forbidden | transient. It is how a
 	// scenario says "the probe was refused" or "the resource is gone",
@@ -41,4 +46,7 @@ type Result struct {
 	Scenario *Scenario
 	Actual   Expectation
 	Pass     bool
+	// Err says why the scenario could not run, such as an entry the model
+	// lacks; such a scenario fails.
+	Err string
 }

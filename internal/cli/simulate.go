@@ -217,6 +217,10 @@ func renderSimulateResult(w io.Writer, result *simulate.Result) {
 		fmt.Fprintf(w, "  %-40s %s passed\n", result.Scenario.Name, checkmark(true))
 	} else {
 		fmt.Fprintf(w, "  %-40s %s FAILED\n", result.Scenario.Name, checkmark(false))
+		if result.Err != "" {
+			fmt.Fprintf(w, "    %s\n", result.Err)
+			return
+		}
 		fmt.Fprintf(w, "    expected: root_cause=%s path=[%s] eliminated=[%s]\n",
 			result.Scenario.Expect.RootCause,
 			strings.Join(result.Scenario.Expect.Path, ", "),

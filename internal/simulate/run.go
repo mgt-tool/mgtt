@@ -4,6 +4,7 @@
 package simulate
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -17,6 +18,9 @@ import (
 // Run executes a single simulation scenario against the model and returns
 // the result, including whether the scenario's expectations were met.
 func Run(m *model.Model, reg *providersupport.Registry, sc *Scenario) *Result {
+	if sc.Entry != "" && m.Components[sc.Entry] == nil {
+		return &Result{Scenario: sc, Err: fmt.Sprintf("entry %q is not a component of the model", sc.Entry)}
+	}
 	store := facts.NewInMemory()
 	for comp, kvs := range sc.Inject {
 		for k, v := range kvs {
@@ -39,7 +43,7 @@ func Run(m *model.Model, reg *providersupport.Registry, sc *Scenario) *Result {
 		}
 	}
 
-	tree := engine.Conclude(m, reg, store, "")
+	tree := engine.Conclude(m, reg, store, sc.Entry)
 	actual := extractConclusion(tree)
 	pass := matches(sc.Expect, actual)
 

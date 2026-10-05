@@ -199,3 +199,32 @@ func TestWitness_StringOutsideTheNamedValues(t *testing.T) {
 		t.Errorf("live should use the named value; got %v", w)
 	}
 }
+
+// Counts compared with each other read as counts: a healthy deployment has
+// one replica of one, not zero of zero, while a threshold fact reads zero.
+func TestWitness_CountsAreNotZeroOfZero(t *testing.T) {
+	parse := func(s string) expr.Node {
+		n, err := expr.Parse(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	ty := &providersupport.Type{
+		Facts: map[string]*providersupport.FactSpec{
+			"ready_replicas":   {TypeName: "mgtt.int"},
+			"desired_replicas": {TypeName: "mgtt.int"},
+			"restart_count":    {TypeName: "mgtt.int"},
+		},
+		Healthy: []expr.Node{parse("ready_replicas >= desired_replicas"), parse("restart_count < 5")},
+		States: []providersupport.StateDef{
+			{Name: "live", When: parse("ready_replicas >= desired_replicas & restart_count < 5")},
+			{Name: "degraded", When: parse("ready_replicas < desired_replicas")},
+		},
+		DefaultActiveState: "live",
+	}
+	w, ok := model.Witness(ty.Healthy, ty, "api", nil, "live", true)
+	if !ok || w["desired_replicas"] == 0 || w["restart_count"] != 0 {
+		t.Errorf("got %v; want a non-zero replica count and restart_count 0", w)
+	}
+}

@@ -1,7 +1,7 @@
 # GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
-source_hash: sha256:9169d5226f9650fa9da1a7858b9b09227a8cfa400a165b9191b8dfec1c420ab7
+source_hash: sha256:fb5d795ecf9ee2fe8ed6b4f3baea20950c6116e8d91017831d4ce4c2b6de8bb3
 format: graph/v1
-scenario_count: 31682
+scenario_count: 19569
 components:
   acme-shop-consumer-blue:
     observes:
@@ -33,10 +33,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: async_jobs
   acme-shop-consumer-green:
@@ -69,10 +65,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: async_jobs
   acme-shop-cron:
@@ -105,10 +97,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: scheduled_jobs
   acme-shop-ingress:
@@ -159,10 +147,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: acme-shop-svc
   acme-shop-nginx-green:
@@ -195,10 +179,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: acme-shop-svc
   acme-shop-php-fpm-blue:
@@ -231,10 +211,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: service/acme-shop-php-fpm-blue
   acme-shop-php-fpm-green:
@@ -267,10 +243,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: service/acme-shop-php-fpm-green
   acme-shop-svc:
@@ -426,10 +398,6 @@ components:
         emits:
           - upstream_failure
           - timeout
-      - name: scaled_to_zero
-        emits:
-          - upstream_failure
-          - connection_refused
     dependents:
       - to: acme-shop-php-fpm-blue
       - to: acme-shop-php-fpm-green

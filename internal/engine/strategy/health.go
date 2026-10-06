@@ -49,6 +49,12 @@ func ComponentVerdict(m *model.Model, reg *providersupport.Registry, store *fact
 	if store.IsAbsent(name) {
 		return Unhealthy
 	}
+	if v := stateVerdict(m, reg, store, name); v != "" {
+		if v == providersupport.VerdictBroken {
+			return Unhealthy
+		}
+		return Healthy
+	}
 	rules := effectiveHealthyFor(m, reg, comp)
 	if len(rules) == 0 {
 		// Nothing can fail, so an observed component is as healthy as it
@@ -136,4 +142,25 @@ func effectiveHealthyFor(m *model.Model, reg *providersupport.Registry, comp *mo
 		t = nil
 	}
 	return comp.HealthyRules(t)
+}
+
+// stateVerdict is the verdict of the state the facts put the component in,
+// when that state carries one: a model's own state is broken, a healthy_in
+// state healthy, whatever the rules say. The state is the first whose when
+// holds, as state.Derive picks it; "" when it carries no verdict or no
+// state is decided.
+func stateVerdict(m *model.Model, reg *providersupport.Registry, store *facts.Store, name string) string {
+	t, _, err := m.Components[name].ResolveType(m, reg)
+	if err != nil || t == nil {
+		return ""
+	}
+	for _, st := range t.States {
+		if st.When == nil {
+			continue
+		}
+		if ok, err := EvalStatePredicate(st.When, store, m.VarLookup(reg), name); err == nil && ok {
+			return st.Verdict
+		}
+	}
+	return ""
 }

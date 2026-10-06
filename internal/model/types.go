@@ -3,7 +3,10 @@
 
 package model
 
-import "github.com/mgt-tool/mgtt/internal/expr"
+import (
+	"github.com/mgt-tool/mgtt/internal/expr"
+	"github.com/mgt-tool/mgtt/internal/providersupport"
+)
 
 // Model is the in-memory representation of a system.model.yaml file after
 // loading and graph construction.
@@ -69,6 +72,13 @@ type Component struct {
 	// deliberate relaxation -- so validate does not warn about them.
 	HealthyDivergesFrom []string
 	FailureModes        map[string][]string // state → can_cause list
+	// States are the model's own failure states for this component,
+	// checked before its type's: matching one makes it broken whatever
+	// the provider's rules say. HealthyIn names type states in which it
+	// is healthy whatever they say. The provider owns what facts mean;
+	// the model owns what they mean for this node.
+	States    []providersupport.StateDef
+	HealthyIn []string
 	// Vars override Meta.Vars on a per-component basis for probe
 	// substitution and provider argv. Use this when a component lives
 	// in a different namespace/region/etc from the model-wide default.

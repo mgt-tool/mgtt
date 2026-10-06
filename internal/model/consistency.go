@@ -66,16 +66,15 @@ func HealthStateDisagreements(rules []expr.Node, t *providersupport.Type, compon
 	var out []Disagreement
 	eachAssignment(cands, func(assign map[string]any) bool {
 		ctx := expr.Ctx{CurrentComponent: component, Facts: mapLookup{component: assign}, Vars: vars}
-		healthy, decided := allTrue(rules, ctx)
+		state, healthy, decided := healthOf(rules, t, ctx)
 		if !decided {
 			return true
 		}
-		state := stateOf(t, ctx)
 		switch {
 		case state == "" && healthy:
 			return true // healthy, and no failure state claims it: fine
-		case state != "" && healthy == (state == t.DefaultActiveState):
-			return true // rules and states agree
+		case state != "" && healthy == (state == t.DefaultActiveState || stateVerdictOf(t, state) == providersupport.VerdictHealthy):
+			return true // rules and states agree, or the state decides
 		}
 		key := fmt.Sprintf("%s/%v", state, healthy)
 		if seen[key] {
@@ -136,8 +135,8 @@ func Witness(rules []expr.Node, t *providersupport.Type, component string, vars 
 	var found map[string]any
 	eachAssignment(cands, func(assign map[string]any) bool {
 		ctx := expr.Ctx{CurrentComponent: component, Facts: mapLookup{component: assign}, Vars: vars}
-		h, decided := allTrue(rules, ctx)
-		if decided && h == healthy && stateOf(t, ctx) == state {
+		st, h, decided := healthOf(rules, t, ctx)
+		if decided && h == healthy && st == state {
 			found = assign
 			return false
 		}
@@ -183,17 +182,33 @@ func eachAssignment(cands map[string][]any, f func(map[string]any) bool) {
 }
 
 // stateOf is the state the facts in ctx put a component of type t in: the
-// first whose `when` holds, as the engine reads it; "" when none does.
-func stateOf(t *providersupport.Type, ctx expr.Ctx) string {
+// first whose `when` holds, as the engine reads it; "" when none does. The
+// verdict is that state's, when it carries one.
+func stateOf(t *providersupport.Type, ctx expr.Ctx) (name, verdict string) {
 	for _, st := range t.States {
 		if st.When == nil {
 			continue
 		}
 		if ok, err := st.When.Eval(ctx); err == nil && ok {
-			return st.Name
+			return st.Name, st.Verdict
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// healthOf is a component's health under assign: the state's verdict when
+// it carries one, else its rules. decided is false when a rule cannot be
+// read.
+func healthOf(rules []expr.Node, t *providersupport.Type, ctx expr.Ctx) (state string, healthy, decided bool) {
+	state, verdict := stateOf(t, ctx)
+	switch verdict {
+	case providersupport.VerdictBroken:
+		return state, false, true
+	case providersupport.VerdictHealthy:
+		return state, true, true
+	}
+	healthy, decided = allTrue(rules, ctx)
+	return state, healthy, decided
 }
 
 func allTrue(rules []expr.Node, ctx expr.Ctx) (healthy, decided bool) {
@@ -321,4 +336,13 @@ type mapLookup map[string]map[string]any
 func (m mapLookup) LookupValue(component, key string) (any, bool) {
 	v, ok := m[component][key]
 	return v, ok
+}
+
+func stateVerdictOf(t *providersupport.Type, state string) string {
+	for _, st := range t.States {
+		if st.Name == state {
+			return st.Verdict
+		}
+	}
+	return ""
 }

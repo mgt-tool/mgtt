@@ -67,8 +67,8 @@ func BuildGraph(m *model.Model, reg *providersupport.Registry) *Graph {
 		} else {
 			gc.Observes = factNames(t.Facts)
 			for _, st := range t.States {
-				if st.Name == t.DefaultActiveState {
-					continue
+				if st.Name == t.DefaultActiveState || st.Verdict == providersupport.VerdictHealthy {
+					continue // not a failure: starts no chain, carries none
 				}
 				gc.States = append(gc.States, GraphState{Name: st.Name, Emits: t.FailureModes[st.Name], TriggeredBy: st.TriggeredBy})
 			}

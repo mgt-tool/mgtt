@@ -76,3 +76,28 @@ func TestRead_UnknownFormat(t *testing.T) {
 		t.Fatalf("want an unknown-format error, got %v", err)
 	}
 }
+
+// A failure every dependent ignores -- its failure states all name other
+// triggered_by labels -- is still a chain: one step, seen at the root.
+func TestExpand_FailureNoDependentAnswersTo(t *testing.T) {
+	g := &Graph{Components: map[string]*GraphComponent{
+		"worker": {
+			Observes:   []string{"up"},
+			States:     []GraphState{{Name: "stopped", Emits: []string{"upstream_failure"}}},
+			Dependents: []GraphLink{{To: "job"}},
+		},
+		"job": {
+			Observes: []string{"up"},
+			States:   []GraphState{{Name: "stopped", TriggeredBy: []string{"nothing_emits_this"}}},
+		},
+	}}
+	var got []string
+	for _, s := range Expand(g) {
+		if s.Root.Component == "worker" {
+			got = append(got, s.Terminal())
+		}
+	}
+	if len(got) != 1 || got[0] != "worker" {
+		t.Fatalf("worker.stopped chains end at %v; want one chain ending at worker", got)
+	}
+}

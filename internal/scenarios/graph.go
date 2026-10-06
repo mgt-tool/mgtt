@@ -149,7 +149,13 @@ func Expand(g *Graph) []Scenario {
 		}
 		w := walk{g: g, root: name}
 		for _, state := range gc.States {
-			for _, chain := range w.extendChain(name, state, map[string]bool{}) {
+			chains := w.extendChain(name, state, map[string]bool{})
+			// A failure no dependent answers to still happened: seen at the
+			// root, it is a chain of one, or no strategy could conclude it.
+			if len(chains) == 0 && len(gc.Observes) > 0 {
+				chains = [][]Step{{{Component: name, State: state.Name, Observes: gc.Observes}}}
+			}
+			for _, chain := range chains {
 				out = append(out, Scenario{Root: RootRef{Component: name, State: state.Name}, Chain: chain})
 			}
 		}

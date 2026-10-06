@@ -54,6 +54,11 @@ type exportComp struct {
 	Depends      []exportDep         `json:"depends"`
 	Healthy      []string            `json:"healthy"`
 	FailureModes map[string][]string `json:"failure_modes"`
+	// States are the component's own states, checked before its type's,
+	// each broken whatever the rules say; HealthyIn names type states in
+	// which it is healthy whatever they say. Both absent when unused.
+	States    []exportState `json:"states,omitempty"`
+	HealthyIn []string      `json:"healthy_in,omitempty"`
 }
 
 type exportDep struct {
@@ -85,6 +90,9 @@ type exportState struct {
 	Name        string   `json:"name"`
 	When        string   `json:"when"`
 	TriggeredBy []string `json:"triggered_by"`
+	// Verdict decides health in the state whatever the rules say: healthy
+	// for a type's healthy_in state, broken for a component's own.
+	Verdict string `json:"verdict,omitempty"`
 }
 
 // ExportJSON renders the resolved model as the versioned JSON document.
@@ -117,6 +125,9 @@ func ExportJSON(m *Model, reg *providersupport.Registry) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("component %s: resolve type %q: %w", c.Name, c.Type, err)
 		}
+		// The type as its provider defines it: a component's own word
+		// travels with the component, not into the type others share.
+		raw, _, _ := reg.ResolveType(c.EffectiveProviders(m), c.Type)
 		if owner == providersupport.GenericProviderName {
 			doc.Declines = append(doc.Declines, exportDecline{
 				What: c.Name,
@@ -126,9 +137,9 @@ func ExportJSON(m *Model, reg *providersupport.Registry) ([]byte, error) {
 			})
 		}
 		doc.Components = append(doc.Components, exportComponent(c, typ))
-		if !seen[typ.Name] {
-			seen[typ.Name] = true
-			doc.Types = append(doc.Types, exportProviderType(typ, owner))
+		if !seen[raw.Name] {
+			seen[raw.Name] = true
+			doc.Types = append(doc.Types, exportProviderType(raw, owner))
 		}
 	}
 
@@ -146,8 +157,9 @@ func ExportJSON(m *Model, reg *providersupport.Registry) ([]byte, error) {
 	return append(out, '\n'), nil
 }
 
-// exportComponent applies the override rule: a component-level healthy or
-// failure_modes list replaces the type's, and an empty one inherits it.
+// exportComponent writes a component with its effective healthy rules and
+// failure_modes (the type's, with the component's merged in) and its own
+// states and healthy_in. typ is the component's effective type.
 func exportComponent(c *Component, typ *providersupport.Type) exportComp {
 	out := exportComp{
 		Name:    c.Name,
@@ -157,11 +169,11 @@ func exportComponent(c *Component, typ *providersupport.Type) exportComp {
 
 	out.Healthy = appendCopy(c.HealthyRulesRaw(typ))
 
-	modes := c.FailureModes
-	if len(modes) == 0 {
-		modes = typ.FailureModes
+	out.FailureModes = sortedModes(typ.FailureModes)
+	for _, st := range c.States {
+		out.States = append(out.States, exportState{Name: st.Name, When: st.WhenRaw, TriggeredBy: []string{}, Verdict: st.Verdict})
 	}
-	out.FailureModes = sortedModes(modes)
+	out.HealthyIn = appendCopy(c.HealthyIn)
 
 	// One depends clause may name several targets; the seam carries one edge
 	// per target, since that is the granularity a consumer reasons at.
@@ -210,6 +222,7 @@ func exportProviderType(t *providersupport.Type, owner string) exportType {
 			Name:        s.Name,
 			When:        s.WhenRaw,
 			TriggeredBy: triggered,
+			Verdict:     s.Verdict,
 		})
 	}
 	return out

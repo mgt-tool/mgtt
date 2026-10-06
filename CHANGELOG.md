@@ -44,6 +44,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A failure no dependent answers to is still a scenario.** When every failure state of every dependent named `triggered_by` labels the failing component never emits, enumeration produced no chain for it, so scenario-guided diagnosis could never conclude it. It is now a chain of one, seen at the component itself. Models where every dependent takes the failure, which includes any type without `triggered_by`, enumerate exactly as before.
 - **A probe command's `{name}` is the resource the probe reads.** It was always the component's key, so a component with `resource:` rendered its command against the wrong object, and ran it so when no provider runner was installed; the runner already received the resource.
 - **An operator's "not healthy" on a generic component is believed.** A component no provider types falls back to the generic component, whose one fact is `operator_says_healthy`. The type had states but no healthy rule, and a component without rules is never unhealthy: confirmed broken, it was cleared (`simulate` concluded `root_cause: none` and eliminated it), so `plan`, `simulate` and MCP could never name it. Its healthy rule is now `operator_says_healthy == true`; unanswered, it stays unknown, as before.
 - `mgtt simulate` and MCP `scenario_simulate` loaded and expanded the scenario sidecar for every scenario they ran, to suggest a next probe a simulation never reads: 0.15 s a scenario on the storefront. They now stop at the conclusion (`engine.Conclude`).

@@ -64,6 +64,8 @@ type rawComponent struct {
 	Depends      []rawDependency        `yaml:"depends"`
 	Healthy      rawHealthy             `yaml:"healthy"`
 	FailureModes map[string]rawFailMode `yaml:"failure_modes"`
+	States       yaml.Node              `yaml:"states"`
+	HealthyIn    []string               `yaml:"healthy_in"`
 	Vars         map[string]string      `yaml:"vars"`
 }
 
@@ -188,6 +190,10 @@ func compileRawComponent(name string, rc *rawComponent) (*Component, error) {
 		for state, fm := range rc.FailureModes {
 			comp.FailureModes[state] = fm.CanCause
 		}
+	}
+	comp.HealthyIn = rc.HealthyIn
+	if err := compileModelStates(comp, &rc.States); err != nil {
+		return nil, fmt.Errorf("component %s: %w", name, err)
 	}
 	for _, rawExpr := range rc.Healthy.Rules {
 		node, err := expr.Parse(rawExpr)

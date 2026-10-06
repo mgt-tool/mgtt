@@ -316,6 +316,7 @@ type rawTypeFields struct {
 	Description        string                 `yaml:"description"`
 	Healthy            any                    `yaml:"healthy"`
 	DefaultActiveState string                 `yaml:"default_active_state"`
+	HealthyIn          []string               `yaml:"healthy_in"`
 	FailureModes       map[string]rawFailMode `yaml:"failure_modes"`
 	Facts              map[string]*rawFact    `yaml:"facts"`
 }
@@ -343,6 +344,13 @@ func parseType(name string, node *yaml.Node) (*Type, error) {
 	}
 	for state, fm := range rf.FailureModes {
 		t.FailureModes[state] = fm.CanCause
+	}
+	for _, h := range rf.HealthyIn {
+		i := slices.IndexFunc(t.States, func(s StateDef) bool { return s.Name == h })
+		if i < 0 {
+			return nil, fmt.Errorf("healthy_in names %q, which is not a state of the type", h)
+		}
+		t.States[i].Verdict = VerdictHealthy
 	}
 	if err := compileTypeExpressions(name, t); err != nil {
 		return nil, err

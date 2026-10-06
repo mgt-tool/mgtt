@@ -28,11 +28,16 @@ components:
       add: [restart_count < 3]     # the type's rules AND these
     failure_modes:                 # extra propagation the type doesn't declare
       degraded: { can_cause: [upstream_5xx] }
+    states:                        # the model's own failure states, checked first
+      drained: { when: "desired_replicas == 0", can_cause: [upstream_failure] }
+    healthy_in: [rolling]          # type states that are not a failure for this node
 ```
 
 A probe reads `resource:` when it is set, else the component's key, and a command's `{name}` is what it reads. A Deployment and the Service in front of it often share a name: key them by kind, `deployment/shop-api` and `service/shop-api`, and probes read `shop-api` for both, as `kubectl get service/shop-api` does. The prefix must be the component's type; `svc/shop-api` reads whole, and validate says so. Expressions name such a component whole: `service/shop-api.endpoint_count > 0`.
 
 `source:` says where a component came from. `mgtt model build` writes `source: discovered` on what it found. Any other component is authored: business processes, external services, hand-written wiring. A rebuild keeps authored components whether discovery returns them or not, and names them as kept. Only a discovered component that discovery stops returning goes through the deletion gate (`--allow-deletes`, `--tombstone`).
+
+The provider decides what facts mean; the model decides what they mean for this component. A state under `states:` is a failure whatever the type's rules say: a drained deployment the provider calls healthy is broken for the worker that must always run. `healthy_in:` does the reverse for a type state. Simulation, scenarios, impact and diagnosis all apply both.
 
 ### Health rules
 

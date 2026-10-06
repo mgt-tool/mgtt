@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 	"time"
 )
 
@@ -966,5 +968,22 @@ func TestParseFact_Derived(t *testing.T) {
 		if _, err := parseFact(&bad); err == nil {
 			t.Errorf("%+v: want an error", bad)
 		}
+	}
+}
+
+func TestParseType_HealthyIn(t *testing.T) {
+	parse := func(src string) (*Type, error) {
+		var n yaml.Node
+		if err := yaml.Unmarshal([]byte(src), &n); err != nil {
+			t.Fatal(err)
+		}
+		return parseType("deployment", n.Content[0])
+	}
+	ty, err := parse("facts: {desired: {type: mgtt.int}}\nstates:\n  scaled_to_zero: {when: \"desired == 0\"}\n  live: {when: \"desired > 0\"}\ndefault_active_state: live\nhealthy_in: [scaled_to_zero]\n")
+	if err != nil || ty.States[0].Verdict != VerdictHealthy || ty.States[1].Verdict != "" {
+		t.Fatalf("got %+v, %v", ty, err)
+	}
+	if _, err := parse("states:\n  live: {when: \"x == 1\"}\nhealthy_in: [sleeping]\n"); err == nil {
+		t.Error("healthy_in naming no state must be an error")
 	}
 }

@@ -154,7 +154,17 @@ type StateDef struct {
 	When        expr.Node
 	Description string
 	TriggeredBy []string
+	// Verdict, when set, decides health in this state whatever the healthy
+	// rules say: VerdictHealthy for a state that is not a failure (a type's
+	// or a component's healthy_in), VerdictBroken for a state a model
+	// declares on a component. A healthy state starts no failure chain.
+	Verdict string
 }
+
+const (
+	VerdictHealthy = "healthy"
+	VerdictBroken  = "broken"
+)
 
 type Variable struct {
 	Description string

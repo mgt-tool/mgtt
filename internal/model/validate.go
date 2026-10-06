@@ -25,6 +25,7 @@ func Validate(m *Model, reg *providersupport.Registry) *ValidationResult {
 		pass7HealthyOverride(m, reg, result)
 		pass8UnsetVars(m, reg, result)
 		pass9HealthMatchesStates(m, reg, result)
+		pass10ModelStates(m, reg, result)
 	}
 	pass3DepRefs(m, result)
 	pass4Cycles(m, result)
@@ -500,4 +501,65 @@ func pass4Cycles(m *Model, result *ValidationResult) {
 			Message:   fmt.Sprintf("circular dependency detected: %s", strings.Join(cycle, " → ")),
 		})
 	}
+}
+
+// pass10ModelStates checks the model's word on a node against its type: a
+// component's own state may not reuse a type state's name, healthy_in must
+// name a state of the type, and an own state's when: reads only facts the
+// type has.
+func pass10ModelStates(m *Model, reg *providersupport.Registry, result *ValidationResult) {
+	for _, name := range m.Order {
+		comp := m.Components[name]
+		if comp == nil || (len(comp.States) == 0 && len(comp.HealthyIn) == 0) {
+			continue
+		}
+		t, _, err := reg.ResolveType(comp.EffectiveProviders(m), comp.Type)
+		if err != nil || t == nil {
+			continue
+		}
+		typeState := map[string]bool{}
+		for _, st := range t.States {
+			typeState[st.Name] = true
+		}
+		for _, st := range comp.States {
+			if typeState[st.Name] {
+				result.Errors = append(result.Errors, ValidationError{Component: name, Field: "states",
+					Message: fmt.Sprintf("state %q is already a state of type %s: name the model's own state apart", st.Name, comp.Type)})
+			}
+			for _, f := range factRefs(st.When) {
+				if t.Facts[f] == nil {
+					result.Errors = append(result.Errors, ValidationError{Component: name, Field: "states",
+						Message: fmt.Sprintf("state %q reads fact %q, which type %s does not have", st.Name, f, comp.Type)})
+				}
+			}
+		}
+		for _, h := range comp.HealthyIn {
+			if !typeState[h] {
+				result.Errors = append(result.Errors, ValidationError{Component: name, Field: "healthy_in",
+					Message: fmt.Sprintf("%q is not a state of type %s", h, comp.Type)})
+			}
+		}
+	}
+}
+
+// factRefs lists the facts of the component itself an expression reads.
+func factRefs(n expr.Node) []string {
+	var out []string
+	var walk func(expr.Node)
+	walk = func(n expr.Node) {
+		switch v := n.(type) {
+		case *expr.AndNode:
+			walk(v.L)
+			walk(v.R)
+		case *expr.OrNode:
+			walk(v.L)
+			walk(v.R)
+		case *expr.CmpNode:
+			if v.Component == "" && v.Fact != "state" {
+				out = append(out, v.Fact)
+			}
+		}
+	}
+	walk(n)
+	return out
 }

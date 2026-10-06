@@ -59,7 +59,7 @@ COPY downstream/provider.sh /usr/local/bin/provider.sh
 # One RUN per repository, ARGs just above it, so a new commit in one reclones
 # only that one.
 ARG AWS_REPO=https://github.com/mgt-tool/mgtt-provider-aws.git
-ARG AWS_REF=434b4e2fccd405213c85d342a9efcca2256d548f
+ARG AWS_REF=2d8737c33c71855ce966062957a0460fc4e93976
 RUN provider.sh aws "$AWS_REPO" "$AWS_REF"
 
 ARG DOCKER_REPO=https://github.com/mgt-tool/mgtt-provider-docker.git
@@ -67,7 +67,7 @@ ARG DOCKER_REF=cd95d3d92487fde670dc04e2f47a6383b1e54afe
 RUN provider.sh docker "$DOCKER_REPO" "$DOCKER_REF"
 
 ARG KUBERNETES_REPO=https://github.com/mgt-tool/mgtt-provider-kubernetes.git
-ARG KUBERNETES_REF=af53815f87f89ca013a72a71bb2fa1b15b8757be
+ARG KUBERNETES_REF=4d9bafd774fbcf2569780ec3d02dd6abf6a96d9d
 RUN provider.sh kubernetes "$KUBERNETES_REPO" "$KUBERNETES_REF"
 
 ARG QUICKWIT_REPO=https://github.com/mgt-tool/mgtt-provider-quickwit.git

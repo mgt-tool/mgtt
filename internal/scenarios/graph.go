@@ -4,7 +4,6 @@
 package scenarios
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/mgt-tool/mgtt/internal/model"
@@ -160,10 +159,9 @@ func Expand(g *Graph) []Scenario {
 			}
 		}
 	}
+	out = dropDuplicateChains(out)
 	sortScenarios(out)
-	for i := range out {
-		out[i].ID = fmt.Sprintf("s-%04d", i+1)
-	}
+	assignIDs(out)
 	return out
 }
 
@@ -233,6 +231,25 @@ func (w walk) chainsThrough(name string, state GraphState, d string, gd *GraphCo
 		if len(gd.Observes) > 0 {
 			out = append(out, []Step{head, {Component: d, State: dstate.Name, Observes: gd.Observes}})
 		}
+	}
+	return out
+}
+
+// dropDuplicateChains keeps the first of chains with the same steps. A
+// failure that reaches a dependent nothing depends on came back twice --
+// once as the dependent's own one-step suffix, once as the chain that stops
+// at the dependent's symptom layer -- and a duplicate counts twice wherever
+// chains are counted.
+func dropDuplicateChains(scs []Scenario) []Scenario {
+	seen := make(map[string]bool, len(scs))
+	out := scs[:0]
+	for _, s := range scs {
+		k := chainKey(s.Chain)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, s)
 	}
 	return out
 }

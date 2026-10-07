@@ -4,6 +4,9 @@
 package scenarios
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"sort"
 
 	"github.com/mgt-tool/mgtt/internal/model"
@@ -27,18 +30,43 @@ func sortedComponentNames(m *model.Model) []string {
 }
 
 func sortScenarios(out []Scenario) {
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Length() != out[j].Length() {
-			return out[i].Length() < out[j].Length()
+	sort.SliceStable(out, func(i, j int) bool { return Less(out[i], out[j]) })
+}
+
+// Less is scenario order: shorter chains first, then by root, root state
+// and the chain's steps. It is the order listings use and the order a
+// strategy breaks ties by, so ties never depend on an ID.
+func Less(a, b Scenario) bool {
+	if a.Length() != b.Length() {
+		return a.Length() < b.Length()
+	}
+	if a.Root.Component != b.Root.Component {
+		return a.Root.Component < b.Root.Component
+	}
+	if a.Root.State != b.Root.State {
+		return a.Root.State < b.Root.State
+	}
+	return chainKey(a.Chain) < chainKey(b.Chain)
+}
+
+// assignIDs names each chain by its content: s- and the first 12 hex digits
+// of the SHA-256 of its steps. An ID survives any change to the model that
+// leaves the chain itself alone, so incident snapshots and eliminated lists
+// compare across model revisions. Should two chains ever share a prefix,
+// the later one in scenario order takes a numbered suffix.
+func assignIDs(out []Scenario) {
+	seen := map[string]int{}
+	for i := range out {
+		sum := sha256.Sum256([]byte(chainKey(out[i].Chain)))
+		id := "s-" + hex.EncodeToString(sum[:])[:12]
+		if n := seen[id]; n > 0 {
+			seen[id] = n + 1
+			id = fmt.Sprintf("%s-%d", id, n+1)
+		} else {
+			seen[id] = 1
 		}
-		if out[i].Root.Component != out[j].Root.Component {
-			return out[i].Root.Component < out[j].Root.Component
-		}
-		if out[i].Root.State != out[j].Root.State {
-			return out[i].Root.State < out[j].Root.State
-		}
-		return chainKey(out[i].Chain) < chainKey(out[j].Chain)
-	})
+		out[i].ID = id
+	}
 }
 
 // inverseDeps returns the reverse adjacency: component → sorted list of

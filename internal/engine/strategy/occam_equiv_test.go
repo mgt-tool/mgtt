@@ -46,7 +46,7 @@ func legacyOccamSuggest(in Input) Decision {
 		if ei != ej {
 			return ei > ej
 		}
-		return live[i].ID < live[j].ID
+		return scenarios.Less(live[i], live[j])
 	})
 	chosen := live[0]
 	probe := pickSymptomInward(chosen, in.Store, in.Model, in.Registry)
@@ -165,7 +165,7 @@ func randomStore(rng *rand.Rand, m *model.Model) *facts.Store {
 func TestOccam_MatchesLegacyDecisions(t *testing.T) {
 	m, reg := layeredModel(t)
 	scs := scenarios.Enumerate(m, reg)
-	if len(scs) < 500 {
+	if len(scs) < 300 { // 352 unique chains; duplicates once made it 500+
 		t.Fatalf("layered model enumerates %d scenarios; want enough for ties", len(scs))
 	}
 	rng := rand.New(rand.NewPCG(1, 2))

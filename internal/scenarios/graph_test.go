@@ -101,3 +101,40 @@ func TestExpand_FailureNoDependentAnswersTo(t *testing.T) {
 		t.Fatalf("worker.stopped chains end at %v; want one chain ending at worker", got)
 	}
 }
+
+// An ID names a chain by its content, so a change elsewhere in the model
+// leaves it alone: adding an unrelated component renumbered every chain
+// sorted after it, when IDs were positions.
+func TestExpand_IDsSurviveUnrelatedChanges(t *testing.T) {
+	g := &Graph{Components: map[string]*GraphComponent{
+		"db":  {Observes: []string{"up"}, States: []GraphState{{Name: "down", Emits: []string{"x"}}}, Dependents: []GraphLink{{To: "api"}}},
+		"api": {Observes: []string{"up"}, States: []GraphState{{Name: "down"}}},
+	}}
+	before := map[string]string{}
+	for _, s := range Expand(g) {
+		before[chainKey(s.Chain)] = s.ID
+		if len(s.ID) != len("s-")+12 || s.ID[:2] != "s-" {
+			t.Errorf("ID %q: want s- and 12 hex digits", s.ID)
+		}
+	}
+	g.Components["aaa-cache"] = &GraphComponent{Observes: []string{"up"}, States: []GraphState{{Name: "down"}}}
+	for _, s := range Expand(g) {
+		if id, ok := before[chainKey(s.Chain)]; ok && id != s.ID {
+			t.Errorf("%s: ID %s became %s after adding an unrelated component", chainKey(s.Chain), id, s.ID)
+		}
+	}
+}
+
+func TestExpand_NoChainTwice(t *testing.T) {
+	g := &Graph{Components: map[string]*GraphComponent{
+		"db":  {Observes: []string{"up"}, States: []GraphState{{Name: "down", Emits: []string{"x"}}}, Dependents: []GraphLink{{To: "api"}}},
+		"api": {Observes: []string{"up"}, States: []GraphState{{Name: "down"}}},
+	}}
+	seen := map[string]bool{}
+	for _, s := range Expand(g) {
+		if seen[chainKey(s.Chain)] {
+			t.Errorf("%s enumerated twice", chainKey(s.Chain))
+		}
+		seen[chainKey(s.Chain)] = true
+	}
+}

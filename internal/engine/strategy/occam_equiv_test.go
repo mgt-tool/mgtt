@@ -241,3 +241,44 @@ func TestOccamOnGraph_DoneMatches(t *testing.T) {
 		t.Fatalf("Done differs\n got: %+v\nwant: %+v", describe(got), describe(want))
 	}
 }
+
+// Listings group chains into classes over the graph. Under random facts the
+// live and eliminated classes must be what FilterLive's split of every
+// chain gives: same classes, order, counts and representatives.
+func TestLiveness_ClassesMatchFilterLive(t *testing.T) {
+	m, reg := layeredModel(t)
+	g := scenarios.BuildGraph(m, reg)
+	all := scenarios.Expand(g)
+	rng := rand.New(rand.NewPCG(5, 8))
+	split := 0
+	for i := 0; i < 200; i++ {
+		store := randomStoreOf(rng, m, i%2 == 1)
+		kept := FilterLive(all, store, m, reg)
+		in := map[string]bool{}
+		for _, s := range kept {
+			in[s.ID] = true
+		}
+		var gone []scenarios.Scenario
+		for _, s := range all {
+			if !in[s.ID] {
+				gone = append(gone, s)
+			}
+		}
+		alive, dead, err := scenarios.Classes(g, Liveness(m, reg, store))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(alive, scenarios.Representatives(kept)) {
+			t.Fatalf("store %d: live classes differ", i)
+		}
+		if !reflect.DeepEqual(dead, scenarios.Representatives(gone)) {
+			t.Fatalf("store %d: eliminated classes differ", i)
+		}
+		if len(kept) > 0 && len(gone) > 0 {
+			split++
+		}
+	}
+	if split < 50 {
+		t.Fatalf("only %d stores split the chains; the test needs facts that eliminate some", split)
+	}
+}

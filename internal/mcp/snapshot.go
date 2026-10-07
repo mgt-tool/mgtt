@@ -15,7 +15,6 @@ import (
 	"github.com/mgt-tool/mgtt/internal/incident"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
-	"github.com/mgt-tool/mgtt/internal/scenarios"
 )
 
 // IncidentSnapshotParams — Phase 1 has no include/depth selectors;
@@ -86,24 +85,11 @@ func (h *Handler) IncidentSnapshot(p IncidentSnapshotParams) (*IncidentSnapshotR
 			out.EndedAt = &ended
 		}
 
-		// Scenarios: enumerate once, split into surviving vs eliminated.
-		// FilterLive returns the survivors; the complement gets a light
-		// reason so agents can tell a contradiction from a dead branch.
-		all := scenarios.Enumerate(m, reg)
-		alive := strategy.FilterLive(all, inc.Store, m, reg)
-		aliveByID := make(map[string]struct{}, len(alive))
-		for _, s := range alive {
-			aliveByID[s.ID] = struct{}{}
-		}
-		var eliminated []scenarios.Scenario
-		for _, s := range all {
-			if _, ok := aliveByID[s.ID]; !ok {
-				eliminated = append(eliminated, s)
-			}
-		}
-		surviving, gone := scenarios.Representatives(alive), scenarios.Representatives(eliminated)
-		out.SurvivingChains, out.SurvivingClasses = len(alive), len(surviving)
-		out.EliminatedChains, out.EliminatedClasses = len(eliminated), len(gone)
+		// Scenarios: classes of the surviving and the eliminated chains,
+		// from the graph, so a deep model does not list its chains.
+		surviving, gone := classes(m, reg, inc.Store)
+		out.SurvivingChains, out.SurvivingClasses = chainsIn(surviving), len(surviving)
+		out.EliminatedChains, out.EliminatedClasses = chainsIn(gone), len(gone)
 		out.SurvivingScenarios = mapRepresentatives(surviving[:min(len(surviving), snapshotClasses)])
 		out.EliminatedScenarios = make([]EliminatedScenarioInfo, 0)
 		for _, r := range gone[:min(len(gone), snapshotClasses)] {

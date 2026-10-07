@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/mgt-tool/mgtt/internal/engine/strategy"
+	"github.com/mgt-tool/mgtt/internal/facts"
 	"github.com/mgt-tool/mgtt/internal/incident"
 	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
@@ -86,7 +87,7 @@ type ScenariosListResult struct {
 // combine this with `scenarios_alive` for a live/eliminated split.
 func (h *Handler) ScenariosList(p ScenariosListParams) (*ScenariosListResult, error) {
 	return withModelContext(p.IncidentID, false, func(_ *incident.Incident, m *model.Model, reg *providersupport.Registry) (*ScenariosListResult, error) {
-		return listScenarios(scenarios.Enumerate(m, reg), p.ListParams)
+		return listScenarios(m, reg, nil, p.ListParams)
 	})
 }
 
@@ -101,32 +102,83 @@ type ScenariosAliveParams struct {
 // scenarios stay in — no facts means no eliminations.
 func (h *Handler) ScenariosAlive(p ScenariosAliveParams) (*ScenariosListResult, error) {
 	return withModelContext(p.IncidentID, false, func(inc *incident.Incident, m *model.Model, reg *providersupport.Registry) (*ScenariosListResult, error) {
-		alive := strategy.FilterLive(scenarios.Enumerate(m, reg), inc.Store, m, reg)
-		return listScenarios(alive, p.ListParams)
+		return listScenarios(m, reg, inc.Store, p.ListParams)
 	})
 }
 
-// listScenarios is the page of scs that p asks for: representatives by
-// default, chains with p.All.
-func listScenarios(scs []scenarios.Scenario, p ListParams) (*ScenariosListResult, error) {
-	out := &ScenariosListResult{Chains: len(scs), Scenarios: []ScenarioInfo{}}
+// listScenarios is the page of the model's chains that p asks for, those
+// the facts in store leave live when store is given: representatives by
+// default, chains with p.All. Representatives come from the graph, so a
+// deep model lists its classes without listing its chains; only p.All
+// lists chains.
+func listScenarios(m *model.Model, reg *providersupport.Registry, store *facts.Store, p ListParams) (*ScenariosListResult, error) {
 	if p.All {
-		start, end, next, err := page(len(scs), p.Limit, p.PageToken)
-		if err != nil {
-			return nil, err
+		scs := scenarios.Enumerate(m, reg)
+		if store != nil {
+			scs = strategy.FilterLive(scs, store, m, reg)
 		}
-		out.Total, out.NextPageToken = len(scs), next
-		out.Scenarios = mapScenarios(scs[start:end])
-		return out, nil
+		return pageChains(scs, p)
 	}
-	reps := scenarios.Representatives(scs)
+	reps, _ := classes(m, reg, store)
+	return pageClasses(reps, p)
+}
+
+// pageChains is the page of scs that p asks for, one entry per chain.
+func pageChains(scs []scenarios.Scenario, p ListParams) (*ScenariosListResult, error) {
+	start, end, next, err := page(len(scs), p.Limit, p.PageToken)
+	if err != nil {
+		return nil, err
+	}
+	return &ScenariosListResult{Scenarios: mapScenarios(scs[start:end]), Chains: len(scs), Total: len(scs), NextPageToken: next}, nil
+}
+
+// pageClasses is the page of reps that p asks for, one entry per class.
+func pageClasses(reps []scenarios.Representative, p ListParams) (*ScenariosListResult, error) {
 	start, end, next, err := page(len(reps), p.Limit, p.PageToken)
 	if err != nil {
 		return nil, err
 	}
-	out.Total, out.NextPageToken = len(reps), next
-	out.Scenarios = mapRepresentatives(reps[start:end])
-	return out, nil
+	return &ScenariosListResult{Scenarios: mapRepresentatives(reps[start:end]), Chains: chainsIn(reps), Total: len(reps), NextPageToken: next}, nil
+}
+
+// classes are the representatives of the chains the facts in store leave
+// live and of those they eliminate (all live without a store), from the
+// graph. A cyclic graph falls back to listing its chains.
+func classes(m *model.Model, reg *providersupport.Registry, store *facts.Store) (alive, dead []scenarios.Representative) {
+	g := scenarios.BuildGraph(m, reg)
+	live := scenarios.Liveness{}
+	if store != nil {
+		live = strategy.Liveness(m, reg, store)
+	}
+	alive, dead, err := scenarios.Classes(g, live)
+	if err == nil {
+		return alive, dead
+	}
+	all := scenarios.Expand(g)
+	if store == nil {
+		return scenarios.Representatives(all), nil
+	}
+	kept := strategy.FilterLive(all, store, m, reg)
+	in := make(map[string]bool, len(kept))
+	for _, s := range kept {
+		in[s.ID] = true
+	}
+	var gone []scenarios.Scenario
+	for _, s := range all {
+		if !in[s.ID] {
+			gone = append(gone, s)
+		}
+	}
+	return scenarios.Representatives(kept), scenarios.Representatives(gone)
+}
+
+// chainsIn is how many chains reps stand for.
+func chainsIn(reps []scenarios.Representative) int {
+	n := 0
+	for _, r := range reps {
+		n += r.Count
+	}
+	return n
 }
 
 // page returns the bounds of the page of an n-entry listing that limit and

@@ -4,6 +4,7 @@
 package scenarios
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -116,6 +117,37 @@ func LoadSiblingOf(modelPath string) ([]Scenario, string, error) {
 	}
 	defer f.Close()
 	return Read(f)
+}
+
+// Set is the scenarios diagnosis reasons over: the failure graph when the
+// sidecar stores one, so nothing is expanded, else the older list of chains.
+type Set struct {
+	Graph  *Graph
+	Chains []Scenario
+}
+
+// Empty reports whether there is nothing to reason over.
+func (s Set) Empty() bool { return s.Graph == nil && len(s.Chains) == 0 }
+
+// LoadSiblingSet reads scenarios.yaml next to modelPath as diagnosis wants
+// it, the graph unexpanded. An absent file is an empty Set.
+func LoadSiblingSet(modelPath string) (Set, error) {
+	data, err := os.ReadFile(SiblingPath(modelPath))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Set{}, nil
+		}
+		return Set{}, err
+	}
+	var g diskGraph
+	if err := yaml.Unmarshal(data, &g); err != nil {
+		return Set{}, fmt.Errorf("scenarios.yaml: %w", err)
+	}
+	if g.Format == graphFormat {
+		return Set{Graph: &Graph{Components: g.Components}}, nil
+	}
+	scs, _, err := Read(bytes.NewReader(data))
+	return Set{Chains: scs}, err
 }
 
 // Read loads scenarios.yaml in either form: graph/v1, expanded to its

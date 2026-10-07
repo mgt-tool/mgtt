@@ -82,4 +82,16 @@ func BenchmarkScale(b *testing.B) {
 			}
 		})
 	}
+	// Counting over the graph needs no chains at all, so it goes deeper
+	// than listing can.
+	for _, layers := range []int{4, 5, 6, 7, 8, 10} {
+		m, reg := layeredSynth(b, layers, 10, 2)
+		g := scenarios.BuildGraph(m, reg)
+		b.Run(fmt.Sprintf("decision-graph/layers=%d", layers), func(b *testing.B) {
+			in := Input{Model: m, Registry: reg, Store: facts.NewInMemory(), Graph: g}
+			for i := 0; i < b.N; i++ {
+				Occam().SuggestProbe(in)
+			}
+		})
+	}
 }

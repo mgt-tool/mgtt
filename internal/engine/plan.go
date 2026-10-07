@@ -164,11 +164,13 @@ func hasUnhealthyUpstream(p Path, m *model.Model, reg *providersupport.Registry,
 // store + scenarios. AutoSelect returns Occam when scenarios are
 // available, BFS otherwise.
 func suggestNextProbe(m *model.Model, reg *providersupport.Registry, store *facts.Store, suspects []strategy.SuspectHint) *Probe {
+	set := loadScenariosIfPresent(m)
 	input := strategy.Input{
 		Model:     m,
 		Registry:  reg,
 		Store:     store,
-		Scenarios: loadScenariosIfPresent(m),
+		Scenarios: set.Chains,
+		Graph:     set.Graph,
 		Suspects:  suspects,
 	}
 	return decisionToProbe(strategy.AutoSelect(input).SuggestProbe(input))
@@ -184,12 +186,12 @@ func decisionToProbe(d strategy.Decision) *Probe { return d.Probe }
 // any error (parse failure, permission) so the engine continues with an
 // empty scenario set and falls back to BFS. SourcePath-less models are a
 // no-op by design.
-func loadScenariosIfPresent(m *model.Model) []scenarios.Scenario {
+func loadScenariosIfPresent(m *model.Model) scenarios.Set {
 	if m == nil || m.SourcePath == "" {
-		return nil
+		return scenarios.Set{}
 	}
-	scs, _, _ := scenarios.LoadSiblingOf(m.SourcePath)
-	return scs
+	set, _ := scenarios.LoadSiblingSet(m.SourcePath)
+	return set
 }
 
 // enumeratePaths does a BFS from entry through the dependency graph and

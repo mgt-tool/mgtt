@@ -55,10 +55,10 @@ var (
 // defaultDiagnoseLoader resolves the model file and scenarios sidecar
 // for the diagnose path. Tests replace diagnoseLoader (declared above)
 // to inject synthetic fixtures without touching disk.
-func defaultDiagnoseLoader(modelPathHint string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error) {
+func defaultDiagnoseLoader(modelPathHint string) (*model.Model, *providersupport.Registry, scenarios.Set, error) {
 	modelPath, err := resolveModelPath(modelPathHint)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, scenarios.Set{}, err
 	}
 	return loadModelAndScenarios(modelPath)
 }
@@ -160,7 +160,7 @@ type diagnoseLoop struct {
 	f        *diagnoseFlags
 	m        *model.Model
 	reg      *providersupport.Registry
-	scs      []scenarios.Scenario
+	scs      scenarios.Set
 	store    *facts.Store
 	suspects []strategy.SuspectHint
 	runner   probeRunner
@@ -185,7 +185,7 @@ func (l *diagnoseLoop) unseen() []strategy.Unseen {
 // (success, stuck, or an early-exit report); err for hard failures.
 // probesRun is incremented when the iteration actually burned budget.
 func (l *diagnoseLoop) step(ctx context.Context, probesRun *int) (done bool, err error) {
-	input := strategy.Input{Model: l.m, Registry: l.reg, Store: l.store, Scenarios: l.scs, Suspects: l.suspects}
+	input := strategy.Input{Model: l.m, Registry: l.reg, Store: l.store, Scenarios: l.scs.Chains, Graph: l.scs.Graph, Suspects: l.suspects}
 	decision := strategy.AutoSelect(input).SuggestProbe(input)
 	switch {
 	case decision.Done:
@@ -288,24 +288,24 @@ func resolveModelPath(explicit string) (string, error) {
 // resolves provider refs, and reads a sibling scenarios.yaml when one
 // exists. Missing scenarios.yaml is not an error — AutoSelect falls back
 // to BFS when Scenarios is nil.
-func loadModelAndScenarios(path string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error) {
+func loadModelAndScenarios(path string) (*model.Model, *providersupport.Registry, scenarios.Set, error) {
 	m, err := model.Load(path)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load model: %w", err)
+		return nil, nil, scenarios.Set{}, fmt.Errorf("load model: %w", err)
 	}
 	reg, err := loadRegistryForUse()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, scenarios.Set{}, err
 	}
 	if err := resolveModelProviders(m, os.Stderr); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, scenarios.Set{}, err
 	}
 
-	scs, _, err := scenarios.LoadSiblingOf(path)
+	set, err := scenarios.LoadSiblingSet(path)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load scenarios: %w", err)
+		return nil, nil, scenarios.Set{}, fmt.Errorf("load scenarios: %w", err)
 	}
-	return m, reg, scs, nil
+	return m, reg, set, nil
 }
 
 // parseSuspectHints delegates to strategy.ParseSuspectHints — kept as a

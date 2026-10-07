@@ -61,6 +61,7 @@ func legacyOccamSuggest(in Input) Decision {
 			}
 		}
 	}
+	probe.EliminatesCount = len(probe.Eliminates)
 	return Decision{Probe: probe}
 }
 
@@ -127,7 +128,11 @@ func layeredModel(t testing.TB) (*model.Model, *providersupport.Registry) {
 
 // randomStore observes a random subset of components with random values,
 // and sometimes records a fact as unreadable instead.
-func randomStore(rng *rand.Rand, m *model.Model) *facts.Store {
+func randomStore(rng *rand.Rand, m *model.Model) *facts.Store { return randomStoreOf(rng, m, false) }
+
+// randomStoreOf observes some components, or with dense every one, which
+// narrows the live set far enough to reach Done.
+func randomStoreOf(rng *rand.Rand, m *model.Model, dense bool) *facts.Store {
 	values := map[string]func() any{
 		"upstream_count":   func() any { return rng.IntN(4) },
 		"ready_replicas":   func() any { return rng.IntN(4) },
@@ -144,7 +149,7 @@ func randomStore(rng *rand.Rand, m *model.Model) *facts.Store {
 	sort.Strings(keys)
 	store := facts.NewInMemory()
 	for _, comp := range m.Order {
-		if rng.IntN(3) != 0 {
+		if !dense && rng.IntN(3) != 0 {
 			continue
 		}
 		for _, k := range keys {
@@ -165,6 +170,7 @@ func randomStore(rng *rand.Rand, m *model.Model) *facts.Store {
 func TestOccam_MatchesLegacyDecisions(t *testing.T) {
 	m, reg := layeredModel(t)
 	scs := scenarios.Enumerate(m, reg)
+	g := scenarios.BuildGraph(m, reg)
 	if len(scs) < 300 { // 352 unique chains; duplicates once made it 500+
 		t.Fatalf("layered model enumerates %d scenarios; want enough for ties", len(scs))
 	}
@@ -172,7 +178,7 @@ func TestOccam_MatchesLegacyDecisions(t *testing.T) {
 	suspects := []SuspectHint{{Component: "api-b"}, {Component: "store-a", State: "stopped"}}
 	kinds := map[string]int{}
 	for i := 0; i < 300; i++ {
-		in := Input{Model: m, Registry: reg, Store: randomStore(rng, m), Scenarios: scs}
+		in := Input{Model: m, Registry: reg, Store: randomStoreOf(rng, m, i%2 == 1), Scenarios: scs}
 		if rng.IntN(3) == 0 {
 			in.Suspects = suspects[:1+rng.IntN(2)]
 		}
@@ -180,6 +186,17 @@ func TestOccam_MatchesLegacyDecisions(t *testing.T) {
 		got := Occam().SuggestProbe(in)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("store %d: decisions differ\n got: %+v\nwant: %+v", i, describe(got), describe(want))
+		}
+		// Counting over the graph decides the same, naming the first few
+		// eliminated scenarios and counting all of them.
+		onGraph := Occam().SuggestProbe(Input{Model: m, Registry: reg, Store: in.Store, Suspects: in.Suspects, Graph: g})
+		if want.Probe != nil && len(want.Probe.Eliminates) > eliminatesNamed {
+			trimmed := *want.Probe
+			trimmed.Eliminates = trimmed.Eliminates[:eliminatesNamed]
+			want.Probe = &trimmed
+		}
+		if !reflect.DeepEqual(onGraph, want) {
+			t.Fatalf("store %d: counting over the graph decides differently\n got: %+v\nwant: %+v", i, describe(onGraph), describe(want))
 		}
 		switch {
 		case got.Probe != nil:
@@ -205,4 +222,22 @@ func describe(d Decision) string {
 		s += " root=" + d.RootCause.ID
 	}
 	return s
+}
+
+// Done -- exactly one live chain left -- names the same chain whether the
+// chains are listed or counted over the graph.
+func TestOccamOnGraph_DoneMatches(t *testing.T) {
+	m, reg := threeCompModel(t)
+	g := scenarios.BuildGraph(m, reg)
+	store := facts.NewInMemory()
+	store.Append("api", facts.Fact{Key: "status", Value: "up", At: time.Now()})
+	store.Append("db", facts.Fact{Key: "status", Value: "up", At: time.Now()})
+	want := Occam().SuggestProbe(Input{Model: m, Registry: reg, Store: store, Scenarios: scenarios.Expand(g)})
+	got := Occam().SuggestProbe(Input{Model: m, Registry: reg, Store: store, Graph: g})
+	if !want.Done || want.RootCause.Root.Component != "web" {
+		t.Fatalf("fixture: want Done on web, got %+v", describe(want))
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Done differs\n got: %+v\nwant: %+v", describe(got), describe(want))
+	}
 }

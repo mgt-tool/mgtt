@@ -279,9 +279,33 @@ suite_mcp_authoring() {
   echo "authoring toolset: listed, described, validated, simulated ($(grep '"id":5' "$tmp/mcp.out" | grep -o 'passed[^,]*' | tr -d '\\"')), guided, drafted ($(grep '"id":7' "$tmp/mcp.out" | grep -o 'total[^,]*' | head -n 1 | tr -d '\\"'))"
 }
 
+# An agent with no shell composes the tools as the minishop pipe does: mgtt's
+# model_export, then mgtt2writ's mgtt_to_writ with the document exactly as it
+# came back, then writ on the model file that wrote. The clean model must
+# certify, as it does through the pipe.
+suite_mcp_chain() {
+  printf '%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
+    '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+    "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"model_export\",\"arguments\":{\"model_path\":\"$root/examples/minishop/model.yaml\"}}}" \
+    | MGTT_HOME="$root/examples/minishop/mgtt-home" timeout 30 mgtt mcp serve --toolset authoring 2>"$tmp/mcp.err" >"$tmp/mcp.out"
+  # The tool's text, still a JSON string literal: handed on, never decoded.
+  doc=$(grep '"id":2[,}]' "$tmp/mcp.out" | sed -n 's/.*"text":\("\([^"\\]\|\\.\)*"\).*/\1/p')
+  [ -n "$doc" ] || { echo "model_export answered no document"; cat "$tmp/mcp.out" "$tmp/mcp.err"; return 1; }
+  printf '%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"downstream","version":"0"}}}' \
+    "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"mgtt_to_writ\",\"arguments\":{\"export\":$doc,\"out_dir\":\"$tmp/chain\"}}}" \
+    | timeout 30 mgtt2writ mcp >"$tmp/m2w.out"
+  [ -s "$tmp/chain/minishop.writ" ] || { echo "mgtt_to_writ wrote no model"; cat "$tmp/m2w.out"; return 1; }
+  writ check "$tmp/chain/minishop.writ" >"$tmp/chain.check" ||
+    { echo "writ rejected the chained model"; cat "$tmp/chain.check"; return 1; }
+  grep -q '^certified' "$tmp/chain.check" || { echo "the chained model did not certify"; cat "$tmp/chain.check"; return 1; }
+  echo "model_export -> mgtt_to_writ -> writ check: certified"
+}
+
 suites="providers"
 for p in $providers; do suites="$suites provider-$p"; done
-suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe mcp-authoring mcp-scenarios"
+suites="$suites minishop storefront storefront-speed redundant-web mgtt2writ mcp mcp-probe mcp-authoring mcp-scenarios mcp-chain"
 
 # Suites are suite_* functions, so none can shadow the tool it runs.
 dispatch() {

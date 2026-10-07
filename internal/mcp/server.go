@@ -88,6 +88,7 @@ func buildServer(cfg Config) *server.MCPServer {
 		registerGuide(s, h)
 		registerModelImpact(s, h)
 		registerModelDiff(s, h)
+		registerModelExport(s, h)
 	}
 
 	return s
@@ -209,6 +210,21 @@ func registerModelDiff(s *server.MCPServer, h *Handler) {
 			}
 		},
 		h.ModelDiff,
+	))
+}
+
+func registerModelExport(s *server.MCPServer, h *Handler) {
+	tool := mcpgo.NewTool("model_export",
+		mcpgo.WithDescription("The resolved model as one versioned JSON document, as `mgtt model export --json` emits it: provider types merged into the components that use them, component overrides applied, and declines naming what the document could not carry. For tools outside mgtt, which then need no providers of their own. Hand the document on unchanged. Model by path or inline; no live system, no writes."),
+		mcpgo.WithString("model_path", mcpgo.Description("path to system.model.yaml on the server")),
+		mcpgo.WithString("model_source", mcpgo.Description("the model YAML itself (max 512 KiB)")),
+		rawOutput(ModelExportOutputSchema),
+	)
+	s.AddTool(tool, dispatch("model_export",
+		func(req mcpgo.CallToolRequest) ModelExportParams {
+			return ModelExportParams{ModelPath: req.GetString("model_path", ""), ModelSource: req.GetString("model_source", "")}
+		},
+		h.ModelExport,
 	))
 }
 

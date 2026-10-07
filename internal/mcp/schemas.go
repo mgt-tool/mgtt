@@ -269,6 +269,21 @@ const TypesDescribeOutputSchema = `{
   "required":["provider","type","facts","healthy","states"]
 }`
 
+// ModelExportOutputSchema describes the export document; its components
+// and types are mgtt model export's, versioned by mgtt_export_version.
+const ModelExportOutputSchema = `{
+  "type":"object",
+  "properties":{
+    "mgtt_export_version":{"type":"integer"},
+    "name":{"type":"string"},
+    "components":{"type":"array","items":{"type":"object"}},
+    "types":{"type":"array","items":{"type":"object"}},
+    "declines":{"type":"array","items":{"type":"object","properties":{
+      "what":{"type":"string"},"why":{"type":"string"}}}}
+  },
+  "required":["mgtt_export_version","name","components","types","declines"]
+}`
+
 // ModelValidateOutputSchema describes a validation report.
 const ModelValidateOutputSchema = `{
   "type":"object",

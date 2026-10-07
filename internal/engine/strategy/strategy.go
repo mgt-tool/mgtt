@@ -29,7 +29,10 @@ type Input struct {
 	Registry  *providersupport.Registry
 	Store     *facts.Store
 	Scenarios []scenarios.Scenario // may be empty for bfs
-	Suspects  []SuspectHint        // optional operator hints
+	// Graph, when set, is the failure graph the scenarios expand from;
+	// occam then counts over it instead of listing Scenarios.
+	Graph    *scenarios.Graph
+	Suspects []SuspectHint // optional operator hints
 }
 
 // SuspectHint is one --suspect value. State is optional (empty = any).
@@ -142,7 +145,10 @@ type Probe struct {
 	Window     time.Duration     // a derived fact's window, passed to the runner as --window
 	Derive     string            // and its derivation (delta, rate, max), as --derive
 	Vars       map[string]string // model.meta.vars forwarded for {key} substitution
-	Eliminates []string          // scenario IDs this probe would invalidate (display only)
+	Eliminates []string          // scenario IDs this probe would invalidate, best-ranked first (display only)
+	// EliminatesCount is how many there are; over the graph, Eliminates
+	// names only the first few.
+	EliminatesCount int
 }
 
 // Target is the resource the probe reads, which a command's {name} stands

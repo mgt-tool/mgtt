@@ -4,8 +4,6 @@
 package scenarios
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
 
@@ -57,8 +55,7 @@ func Less(a, b Scenario) bool {
 func assignIDs(out []Scenario) {
 	seen := map[string]int{}
 	for i := range out {
-		sum := sha256.Sum256([]byte(chainKey(out[i].Chain)))
-		id := "s-" + hex.EncodeToString(sum[:])[:12]
+		id := IDOf(out[i].Chain)
 		if n := seen[id]; n > 0 {
 			seen[id] = n + 1
 			id = fmt.Sprintf("%s-%d", id, n+1)

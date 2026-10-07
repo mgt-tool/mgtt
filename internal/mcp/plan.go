@@ -123,7 +123,7 @@ func toSuggested(p *engine.Probe, _ *model.Model) *SuggestedProbe {
 		Fact:            p.Fact,
 		Provider:        p.Provider,
 		Eliminates:      p.Eliminates[:min(len(p.Eliminates), eliminatesShown)],
-		EliminatesCount: len(p.Eliminates),
+		EliminatesCount: max(p.EliminatesCount, len(p.Eliminates)),
 		Cost:            p.Cost,
 		Access:          p.Access,
 		RenderedCommand: probe.Substitute(p.Command, p.Target(), p.Vars, nil),

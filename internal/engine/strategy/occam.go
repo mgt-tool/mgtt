@@ -21,6 +21,12 @@ func Occam() Strategy { return occamStrategy{} }
 func (occamStrategy) Name() string { return "occam" }
 
 func (occamStrategy) SuggestProbe(in Input) Decision {
+	if in.Graph != nil && len(in.Scenarios) == 0 {
+		if d, ok := occamOnGraph(in); ok {
+			return d
+		}
+		in.Scenarios = scenarios.Expand(in.Graph) // a cycle: count by listing
+	}
 	live := FilterLive(in.Scenarios, in.Store, in.Model, in.Registry)
 
 	switch len(live) {
@@ -77,6 +83,7 @@ func (occamStrategy) SuggestProbe(in Input) Decision {
 			}
 		}
 	}
+	probe.EliminatesCount = len(probe.Eliminates)
 	return Decision{Probe: probe}
 }
 

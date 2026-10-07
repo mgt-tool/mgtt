@@ -94,8 +94,8 @@ func diagnoseFixture(t *testing.T) (*model.Model, *providersupport.Registry) {
 func withLoader(t *testing.T, m *model.Model, reg *providersupport.Registry, scs []scenarios.Scenario) {
 	t.Helper()
 	prev := diagnoseLoader
-	diagnoseLoader = func(_ string) (*model.Model, *providersupport.Registry, []scenarios.Scenario, error) {
-		return m, reg, scs, nil
+	diagnoseLoader = func(_ string) (*model.Model, *providersupport.Registry, scenarios.Set, error) {
+		return m, reg, scenarios.Set{Chains: scs}, nil
 	}
 	t.Cleanup(func() { diagnoseLoader = prev })
 }

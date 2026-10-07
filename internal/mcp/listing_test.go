@@ -21,6 +21,14 @@ func chainOf(id string, steps ...string) scenarios.Scenario {
 	return s
 }
 
+// listFrom pages a fixed list of chains as listScenarios pages the model's.
+func listFrom(scs []scenarios.Scenario, p ListParams) (*ScenariosListResult, error) {
+	if p.All {
+		return pageChains(scs, p)
+	}
+	return pageClasses(scenarios.Representatives(scs), p)
+}
+
 func TestListScenarios_RepresentativesByDefault(t *testing.T) {
 	scs := []scenarios.Scenario{
 		chainOf("s-1", "db", "down", "api", "crashed", "edge", "degraded"),
@@ -28,7 +36,7 @@ func TestListScenarios_RepresentativesByDefault(t *testing.T) {
 		chainOf("s-3", "cache", "down", "api", "crashed"),
 		chainOf("s-4", "db", "down", "api", "degraded", "edge", "degraded"),
 	}
-	got, err := listScenarios(scs, ListParams{})
+	got, err := listFrom(scs, ListParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +47,7 @@ func TestListScenarios_RepresentativesByDefault(t *testing.T) {
 		t.Errorf("got %+v, want s-2 standing for 3, then cache's 1", got.Scenarios)
 	}
 
-	all, err := listScenarios(scs, ListParams{All: true})
+	all, err := listFrom(scs, ListParams{All: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +64,7 @@ func TestListScenarios_PagesThroughEveryEntryOnce(t *testing.T) {
 	seen := map[string]bool{}
 	token, pages := "", 0
 	for {
-		got, err := listScenarios(scs, ListParams{PageToken: token})
+		got, err := listFrom(scs, ListParams{PageToken: token})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +86,7 @@ func TestListScenarios_PagesThroughEveryEntryOnce(t *testing.T) {
 		t.Errorf("got %d pages covering %d entries, want 3 covering 120", pages, len(seen))
 	}
 
-	big, _ := listScenarios(scs, ListParams{Limit: 100000})
+	big, _ := listFrom(scs, ListParams{Limit: 100000})
 	if len(big.Scenarios) != 120 || big.NextPageToken != "" {
 		t.Errorf("a limit over the cap: got %d entries, next %q; want all 120 under the %d cap", len(big.Scenarios), big.NextPageToken, maxPageSize)
 	}
@@ -87,7 +95,7 @@ func TestListScenarios_PagesThroughEveryEntryOnce(t *testing.T) {
 func TestListScenarios_RejectsATokenItDidNotIssue(t *testing.T) {
 	scs := []scenarios.Scenario{chainOf("s-1", "db", "down")}
 	for _, tok := range []string{"abc", "-1", "2"} {
-		if _, err := listScenarios(scs, ListParams{PageToken: tok}); err == nil {
+		if _, err := listFrom(scs, ListParams{PageToken: tok}); err == nil {
 			t.Errorf("page_token %q: want an error", tok)
 		}
 	}

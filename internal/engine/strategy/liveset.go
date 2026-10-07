@@ -32,6 +32,12 @@ func FilterLive(scs []scenarios.Scenario, store *facts.Store, m *model.Model, re
 	return live
 }
 
+// Liveness is FilterLive's test over the graph, for callers outside a
+// decision: what the facts in store leave live.
+func Liveness(m *model.Model, reg *providersupport.Registry, store *facts.Store) scenarios.Liveness {
+	return graphLiveness(Input{Model: m, Registry: reg, Store: store})
+}
+
 func isLive(s scenarios.Scenario, store *facts.Store, m *model.Model, reg *providersupport.Registry) bool {
 	for i, step := range s.Chain {
 		if !stepConsistent(step, store, m, reg) {

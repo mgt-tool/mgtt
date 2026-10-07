@@ -13,6 +13,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Scenario listings group chains over the graph.** `scenarios_list`, `scenarios_alive` and `incident_snapshot` listed every chain, filtered it against the facts, and only then grouped it into classes, so on a deep model the incident's one-call summary never returned. Each class's count and shortest chain now come from the failure graph, for the live and the eliminated chains alike: 37 ms for the 1,261 classes of six tiers (listing alone took 3.2 s), 0.46 s for ten tiers' 5,501 classes over 354 million chains. The replies are unchanged, which a property test over random graphs and a differential test over random facts check; `all: true`, which asks for every chain, still lists them.
+
 - **Writing, validating and diffing count chains without listing them.** `model validate --write-scenarios`, the staleness check in `model validate` and `model diff` listed every chain the model allows only to count it, and the scenarios writer did so twice. They now count over the failure graph as diagnosis decides: 18 ms for the 273,511 chains of six tiers (listing took 3.2 s), and 73 ms for the 354 million of ten, which listing could not reach. The staleness check reads only the file's hash.
 
 - **MCP `model_export`: the export document over MCP.** The authoring toolset returns the resolved model as `mgtt model export --json` emits it, from a model by path or inline, so an agent with no shell can hand it to a checker that serves MCP itself. The downstream harness chains it into `mgtt2writ mcp` and `writ check` on the minishop model, which certifies as it does through the pipe.

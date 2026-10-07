@@ -28,6 +28,7 @@ func TestOutputSchemas_ParseAsJSON(t *testing.T) {
 		"probe":             ProbeOutputSchema,
 		"scenarios_list":    ScenariosListOutputSchema,
 		"incident_snapshot": IncidentSnapshotOutputSchema,
+		"model_export":      ModelExportOutputSchema,
 	}
 	for tool, schema := range cases {
 		if schema == "" {

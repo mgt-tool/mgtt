@@ -4,6 +4,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -231,6 +232,29 @@ func (h *Handler) ModelValidate(p ModelValidateParams) (*ModelValidateResult, er
 		})
 	}
 	return out, nil
+}
+
+// ModelExportParams takes the model as a path the server can read or as
+// inline YAML: exactly one.
+type ModelExportParams struct {
+	ModelPath   string `json:"model_path,omitempty"`
+	ModelSource string `json:"model_source,omitempty"`
+}
+
+// ModelExport returns the resolved model as `mgtt model export --json`
+// emits it: provider types merged in, overrides applied, declines inside.
+// The document is for tools outside mgtt, which then need no registry of
+// their own.
+func (h *Handler) ModelExport(p ModelExportParams) (json.RawMessage, error) {
+	m, err := loadModelParam(p.ModelPath, p.ModelSource)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	return model.ExportJSON(m, reg)
 }
 
 // loadModelParam loads a model from exactly one of a server-side path or

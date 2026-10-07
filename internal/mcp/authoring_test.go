@@ -4,11 +4,13 @@
 package mcp
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mgt-tool/mgtt/internal/model"
 	"github.com/mgt-tool/mgtt/internal/simulate"
 )
 
@@ -263,6 +265,34 @@ func TestModelDiff_Inline(t *testing.T) {
 	}
 	if _, err := h.ModelDiff(ModelDiffParams{OldModelSource: oldSrc}); err == nil || !strings.Contains(err.Error(), "new model") {
 		t.Errorf("a missing revision names which: %v", err)
+	}
+}
+
+// model_export returns the command's document, carrying the types the
+// components use so a consumer needs no providers.
+func TestModelExport_Inline(t *testing.T) {
+	h := authoringHandler(t)
+	src := "meta:\n  name: e\n  version: \"1\"\n  providers: [testwriter]\ncomponents:\n  api:\n    type: service\n"
+	raw, err := h.ModelExport(ModelExportParams{ModelSource: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Version    int    `json:"mgtt_export_version"`
+		Name       string `json:"name"`
+		Components []any  `json:"components"`
+		Types      []struct {
+			Name string `json:"name"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Version != model.ExportVersion || doc.Name != "e" || len(doc.Components) != 1 || len(doc.Types) != 1 || doc.Types[0].Name != "service" {
+		t.Fatalf("export: %s", raw)
+	}
+	if _, err := h.ModelExport(ModelExportParams{}); err == nil {
+		t.Error("a model is required")
 	}
 }
 

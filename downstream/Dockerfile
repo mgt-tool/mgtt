@@ -88,7 +88,7 @@ FROM ${OCAML_IMAGE} AS mgtt2writ
 # `opam update`, so this resolves to the same dune every time.
 RUN opam install -y dune.3.24.2
 ARG MGTT2WRIT_REPO=https://github.com/mgt-tool/mgtt2writ.git
-ARG MGTT2WRIT_REF=2c6ef85abc469f06cb5dbb194a2afbe3742b49c4
+ARG MGTT2WRIT_REF=eb0dbbd3ef4829d53ec5cae369dd6634c015a750
 WORKDIR /home/opam
 RUN git clone -q "$MGTT2WRIT_REPO" mgtt2writ \
  && cd mgtt2writ && git checkout -q "$MGTT2WRIT_REF" \
@@ -175,6 +175,9 @@ RUN /downstream/run.sh mcp-authoring && touch /tmp/passed
 FROM suites AS check-mcp-scenarios
 RUN /downstream/run.sh mcp-scenarios && touch /tmp/passed
 
+FROM suites AS check-mcp-chain
+RUN /downstream/run.sh mcp-chain && touch /tmp/passed
+
 # ---- all: the default target -------------------------------------------------
 # BuildKit skips stages nothing depends on, so a check not COPYed here would
 # silently stop running.
@@ -195,6 +198,7 @@ COPY --from=check-mcp                  /tmp/passed /tmp/passed-mcp
 COPY --from=check-mcp-probe            /tmp/passed /tmp/passed-mcp-probe
 COPY --from=check-mcp-authoring        /tmp/passed /tmp/passed-mcp-authoring
 COPY --from=check-mcp-scenarios        /tmp/passed /tmp/passed-mcp-scenarios
+COPY --from=check-mcp-chain            /tmp/passed /tmp/passed-mcp-chain
 
 ENTRYPOINT ["/downstream/run.sh"]
 CMD ["all"]

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mgt-tool/mgtt/internal/expr"
 	"github.com/mgt-tool/mgtt/internal/providersupport"
 )
 
@@ -280,5 +281,72 @@ func TestExportJSON_TypesCarryFactsAndStates(t *testing.T) {
 	}
 	if ds.States[0].When != "available == true" {
 		t.Errorf("datastore.states[0].when = %q, want %q", ds.States[0].When, "available == true")
+	}
+}
+
+// A component's own states and healthy_in travel with the component; the
+// type stays as its provider defines it, with its own healthy_in states
+// marked, so one component's word never reaches another's.
+func TestExportJSON_ModelStates(t *testing.T) {
+	when := func(s string) expr.Node {
+		n, err := expr.Parse(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	reg := providersupport.NewRegistry()
+	reg.Register(&providersupport.Provider{Meta: providersupport.ProviderMeta{Name: "p"}, Types: map[string]*providersupport.Type{
+		"deploy": {
+			Name:    "deploy",
+			Facts:   map[string]*providersupport.FactSpec{"desired": {TypeName: "mgtt.int"}},
+			Healthy: []expr.Node{when("desired > 0")}, HealthyRaw: []string{"desired > 0"},
+			States: []providersupport.StateDef{
+				{Name: "drained", WhenRaw: "desired == 0", When: when("desired == 0"), Verdict: providersupport.VerdictHealthy},
+				{Name: "live", WhenRaw: "desired > 0", When: when("desired > 0")},
+			},
+			DefaultActiveState: "live",
+		},
+	}})
+	m, err := LoadBytes([]byte(`meta: {name: m, version: "1.0", providers: [p], scenarios: none}
+components:
+  worker:
+    type: deploy
+    states:
+      gone: {when: "desired == 0", can_cause: [upstream_failure]}
+  idle:
+    type: deploy
+    healthy_in: [drained]
+`), "system.model.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := ExportJSON(m, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Components []struct {
+			Name         string              `json:"name"`
+			FailureModes map[string][]string `json:"failure_modes"`
+			States       []struct{ Name, Verdict string }
+			HealthyIn    []string `json:"healthy_in"`
+		}
+		Types []struct {
+			States []struct{ Name, Verdict string }
+		}
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	idle, worker := doc.Components[0], doc.Components[1]
+	if len(worker.States) != 1 || worker.States[0].Name != "gone" || worker.States[0].Verdict != "broken" || len(worker.FailureModes["gone"]) != 1 {
+		t.Errorf("worker: %+v", worker)
+	}
+	if len(idle.HealthyIn) != 1 || idle.States != nil {
+		t.Errorf("idle: %+v", idle)
+	}
+	if ts := doc.Types[0].States; len(ts) != 2 || ts[0].Verdict != "healthy" || ts[1].Name != "live" {
+		t.Errorf("the type must be the provider's own, drained marked healthy: %+v", ts)
 	}
 }

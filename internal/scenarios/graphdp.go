@@ -285,3 +285,13 @@ func IDOf(chain []Step) string {
 	sum := sha256.Sum256([]byte(chainKey(chain)))
 	return "s-" + hex.EncodeToString(sum[:])[:12]
 }
+
+// CountChains is how many chains g allows, Expand's count without listing
+// them. A cyclic graph is counted by listing.
+func CountChains(g *Graph) int {
+	c, err := Count(g, Liveness{})
+	if err != nil {
+		return len(Expand(g))
+	}
+	return c.Live
+}

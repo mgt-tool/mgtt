@@ -51,17 +51,18 @@ func layeredSynth(tb testing.TB, layers, width, fan int) (*model.Model, *provide
 }
 
 // Chain count grows about 6x per tier at width 10, fan-out 2: depth, not
-// size, is what scenario-guided diagnosis pays for, because every chain is
-// materialised. Measured 2026-10-04 (4 cores):
+// size, is what listing chains pays for. Counting and deciding over the
+// graph do not list them. Measured 2026-10-08 (4 cores):
 //
-//	layers  components  chains     expand  one decision
-//	4       41          10,921     50ms    15ms
-//	5       51          66,181     0.4s    128ms
-//	6       61          397,921    2.7s    0.7s
-//	7       71          2,388,541  20s     5.5s
-//	8       81          did not finish in 60s
+//	layers  chains       list   count  decision (list)  decision (graph)
+//	4       7,471        55ms   4ms    23ms             7ms
+//	5       45,451       0.4s   9ms    0.2s             14ms
+//	6       273,511      3.2s   18ms   0.9s             27ms
+//	7       1,642,051    -      23ms   -                46ms
+//	8       9,853,471    -      38ms   -                70ms
+//	10      354,734,551  -      73ms   -                132ms
 //
-// Layers 7 and 8 are left out of the benchmark for its run time.
+// Listing stops at 6 layers for the benchmark's run time.
 //
 // go test ./internal/engine/strategy -run '^$' -bench Scale -benchtime 1x
 func BenchmarkScale(b *testing.B) {
@@ -92,6 +93,14 @@ func BenchmarkScale(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				Occam().SuggestProbe(in)
 			}
+		})
+		// What --write-scenarios, validate and diff pay to count the chains.
+		b.Run(fmt.Sprintf("count/layers=%d", layers), func(b *testing.B) {
+			n := 0
+			for i := 0; i < b.N; i++ {
+				n = scenarios.CountChains(g)
+			}
+			b.ReportMetric(float64(n), "chains")
 		})
 	}
 }

@@ -48,7 +48,7 @@ func (d *Diff) Empty() bool {
 func Compare(old, new *model.Model, reg *providersupport.Registry) *Diff {
 	d := &Diff{}
 	og, ng := scenarios.BuildGraph(old, reg), scenarios.BuildGraph(new, reg)
-	d.OldScenarios, d.NewScenarios = len(scenarios.Expand(og)), len(scenarios.Expand(ng))
+	d.OldScenarios, d.NewScenarios = scenarios.CountChains(og), scenarios.CountChains(ng)
 
 	for _, n := range new.Order {
 		if old.Components[n] == nil {

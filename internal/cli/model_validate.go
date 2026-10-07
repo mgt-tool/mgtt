@@ -159,7 +159,7 @@ func checkScenariosDrift(m *model.Model, modelPath string, reg *providersupport.
 	if _, err := os.Stat(scenariosPath); err != nil {
 		return nil
 	}
-	_, committedHash, err := scenarios.LoadSiblingOf(modelPath)
+	committedHash, err := scenarios.SiblingHash(modelPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", scenariosPath, err)
 	}
@@ -210,7 +210,7 @@ func runScenariosDriftOnly(cmd *cobra.Command, path string) error {
 // into scenarios.index.yaml when called from a workspace walk.
 func regenerateScenariosFor(cmd *cobra.Command, m *model.Model, reg *providersupport.Registry, modelPath string) (scenarios.IndexEntry, error) {
 	g := scenarios.BuildGraph(m, reg)
-	scs := scenarios.Expand(g)
+	count := scenarios.CountChains(g)
 	hash := scenarios.GraphHash(g)
 	outPath := filepath.Join(filepath.Dir(modelPath), "scenarios.yaml")
 	f, err := os.Create(outPath)
@@ -224,13 +224,13 @@ func regenerateScenariosFor(cmd *cobra.Command, m *model.Model, reg *providersup
 	if err := f.Close(); err != nil {
 		return scenarios.IndexEntry{}, err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "wrote %d scenarios to %s\n", len(scs), outPath)
+	fmt.Fprintf(cmd.OutOrStdout(), "wrote %d scenarios to %s\n", count, outPath)
 	return scenarios.IndexEntry{
 		Name:          m.Meta.Name,
 		ModelPath:     modelPath,
 		ScenariosPath: outPath,
 		Hash:          hash,
-		Count:         len(scs),
+		Count:         count,
 	}, nil
 }
 

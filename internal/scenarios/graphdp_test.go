@@ -126,6 +126,9 @@ func TestGraphDP_EqualsEnumeration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if j == 0 && CountChains(g) != len(want) {
+				t.Fatalf("graph %d: CountChains says %d, enumeration %d", i, CountChains(g), len(want))
+			}
 			if got.Live != len(want) {
 				t.Fatalf("graph %d/%d: DP counts %d live chains, enumeration %d", i, j, got.Live, len(want))
 			}
@@ -148,5 +151,21 @@ func TestGraphDP_EqualsEnumeration(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// A cycle defeats the DP, so CountChains falls back to listing and still
+// agrees with Expand.
+func TestCountChains_CycleCountsByListing(t *testing.T) {
+	st := []GraphState{{Name: "down", Emits: []string{"x"}}}
+	g := &Graph{Components: map[string]*GraphComponent{
+		"a": {States: st, Observes: []string{"f"}, Dependents: []GraphLink{{To: "b"}}},
+		"b": {States: st, Observes: []string{"f"}, Dependents: []GraphLink{{To: "a"}}},
+	}}
+	if _, err := Count(g, Liveness{}); err != ErrCycle {
+		t.Fatalf("want ErrCycle, got %v", err)
+	}
+	if n, want := CountChains(g), len(Expand(g)); n != want || n == 0 {
+		t.Fatalf("CountChains %d, Expand %d", n, want)
 	}
 }

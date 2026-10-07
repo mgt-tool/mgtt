@@ -341,7 +341,7 @@ func TestDiagnose_WritePauseTriggered(t *testing.T) {
 }
 
 func TestDiagnose_GenericComponentPrompt(t *testing.T) {
-	// Fixture with two components: a "widget" backed by the generic
+	// Fixture with two components: a "cache-widget" backed by the generic
 	// provider, and a "db" backed by a normal provider. Two scenarios
 	// force occam to suggest a probe — the widget-targeted one triggers
 	// the operator prompt.
@@ -382,15 +382,17 @@ func TestDiagnose_GenericComponentPrompt(t *testing.T) {
 	m := &model.Model{
 		Meta: model.Meta{Providers: []string{"generic", "np"}},
 		Components: map[string]*model.Component{
-			"widget": {Name: "widget", Type: "thing"},
-			"db":     {Name: "db", Type: "db"},
+			"cache-widget": {Name: "cache-widget", Type: "thing"},
+			"db":           {Name: "db", Type: "db"},
 		},
-		Order: []string{"widget", "db"},
+		Order: []string{"cache-widget", "db"},
 	}
 	m.BuildGraph()
 
+	// The two chains tie on every ranking key, so scenario order decides:
+	// cache-widget sorts before db, and its probe is the operator prompt.
 	scs := []scenarios.Scenario{
-		{ID: "s1", Root: scenarios.RootRef{Component: "widget", State: "down"}, Chain: []scenarios.Step{{Component: "widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
+		{ID: "s1", Root: scenarios.RootRef{Component: "cache-widget", State: "down"}, Chain: []scenarios.Step{{Component: "cache-widget", State: "down", Observes: []string{"operator_says_healthy"}}}},
 		{ID: "s2", Root: scenarios.RootRef{Component: "db", State: "down"}, Chain: []scenarios.Step{{Component: "db", State: "down", Observes: []string{"status"}}}},
 	}
 	withLoader(t, m, reg, scs)
@@ -406,7 +408,7 @@ func TestDiagnose_GenericComponentPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runDiagnose: %v\nout: %s", err, out)
 	}
-	if !strings.Contains(out, "Is 'widget' healthy?") {
+	if !strings.Contains(out, "Is 'cache-widget' healthy?") {
 		t.Errorf("want prompt in output; got:\n%s", out)
 	}
 	// The operator-answer trail line must appear in the final report.

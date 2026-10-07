@@ -58,7 +58,7 @@ func (occamStrategy) SuggestProbe(in Input) Decision {
 		if rs[i].elim != rs[j].elim {
 			return rs[i].elim > rs[j].elim
 		}
-		return rs[i].s.ID < rs[j].s.ID
+		return scenarios.Less(rs[i].s, rs[j].s)
 	})
 	for i := range rs {
 		live[i] = rs[i].s

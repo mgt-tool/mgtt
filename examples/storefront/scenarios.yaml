@@ -1,7 +1,7 @@
 # GENERATED — rebuild via `mgtt validate --write-scenarios`. Do not hand-edit.
 source_hash: sha256:fb5d795ecf9ee2fe8ed6b4f3baea20950c6116e8d91017831d4ce4c2b6de8bb3
 format: graph/v1
-scenario_count: 19569
+scenario_count: 14429
 components:
   acme-shop-consumer-blue:
     observes:

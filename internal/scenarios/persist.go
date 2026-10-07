@@ -48,7 +48,7 @@ func WriteGraph(w io.Writer, sourceHash string, g *Graph) error {
 	}
 	enc := yaml.NewEncoder(w)
 	enc.SetIndent(2)
-	doc := diskGraph{SourceHash: sourceHash, Format: graphFormat, ScenarioCount: len(Expand(g)), Components: g.Components}
+	doc := diskGraph{SourceHash: sourceHash, Format: graphFormat, ScenarioCount: CountChains(g), Components: g.Components}
 	if err := enc.Encode(&doc); err != nil {
 		_ = enc.Close()
 		return err
@@ -117,6 +117,30 @@ func LoadSiblingOf(modelPath string) ([]Scenario, string, error) {
 	}
 	defer f.Close()
 	return Read(f)
+}
+
+// SiblingHash reads only the source hash of the scenarios.yaml next to
+// modelPath, which is all a staleness check needs: nothing is expanded.
+// An absent file is "".
+func SiblingHash(modelPath string) (string, error) {
+	data, err := os.ReadFile(SiblingPath(modelPath))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	var head struct {
+		SourceHash string `yaml:"source_hash"`
+		Format     string `yaml:"format"`
+	}
+	if err := yaml.Unmarshal(data, &head); err != nil {
+		return "", fmt.Errorf("scenarios.yaml: %w", err)
+	}
+	if head.Format != "" && head.Format != graphFormat {
+		return "", fmt.Errorf("scenarios.yaml: unknown format %q (this mgtt reads %s and the chain list)", head.Format, graphFormat)
+	}
+	return head.SourceHash, nil
 }
 
 // Set is the scenarios diagnosis reasons over: the failure graph when the

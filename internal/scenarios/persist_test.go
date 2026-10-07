@@ -84,3 +84,42 @@ func TestWriteIndexYAML_RoundTrip(t *testing.T) {
 		t.Errorf("unexpected: %+v", got)
 	}
 }
+
+// SiblingHash reads the hash a full read reports, in both formats, without
+// expanding anything; an absent file is "" and an unknown format an error.
+func TestSiblingHash_MatchesFullRead(t *testing.T) {
+	g := &Graph{Components: map[string]*GraphComponent{
+		"api": {States: []GraphState{{Name: "down"}}, Observes: []string{"f"}},
+	}}
+	for name, write := range map[string]func(*bytes.Buffer) error{
+		"graph": func(b *bytes.Buffer) error { return WriteGraph(b, "h-graph", g) },
+		"list":  func(b *bytes.Buffer) error { return Write(b, "h-list", Expand(g)) },
+	} {
+		dir := t.TempDir()
+		model := dir + "/system.model.yaml"
+		if got, err := SiblingHash(model); got != "" || err != nil {
+			t.Fatalf("%s: absent file: %q, %v", name, got, err)
+		}
+		var b bytes.Buffer
+		if err := write(&b); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(SiblingPath(model), b.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, want, err := LoadSiblingOf(model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, err := SiblingHash(model); got != want || err != nil || got == "" {
+			t.Fatalf("%s: SiblingHash %q (%v), full read %q", name, got, err, want)
+		}
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/scenarios.yaml", []byte("source_hash: x\nformat: graph/v9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SiblingHash(dir + "/system.model.yaml"); err == nil {
+		t.Error("an unknown format is an error")
+	}
+}

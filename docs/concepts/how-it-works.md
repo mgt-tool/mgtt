@@ -11,7 +11,7 @@ The **engine** only reasons. It has no network access and no credentials. **Prov
 
 ## Failure chains
 
-Every failure the model allows is a chain, `root state → effect → … → symptom`. `mgtt model validate --write-scenarios` saves them to `scenarios.yaml` in compact form: the graph of failure states, not one entry per chain. Even a 20-component model fits in about 10 KB. Commit the file. Validate rejects a stale copy, so a model change and its consequences land in the same diff. Cost grows with depth, not component count. Diagnosis expands every chain into memory: about 400k chains for six tiers of fan-out 2, and about 2.4M for seven, which takes seconds per decision. Past that depth, set `meta.scenarios: none`, and `diagnose` walks the dependency graph instead.
+Every failure the model allows is a chain, `root state → effect → … → symptom`. `mgtt model validate --write-scenarios` saves them to `scenarios.yaml` in compact form: the graph of failure states, not one entry per chain. Even a 20-component model fits in about 10 KB. Commit the file. Validate rejects a stale copy, so a model change and its consequences land in the same diff. The number of chains grows with depth, not component count: about 270k for six tiers of fan-out 2, and about 350M for ten. Diagnosis, `validate` and `model diff` count and rank them over the graph without listing them, so a probe decision on ten tiers takes about 0.1 s. Only the commands that check chains one by one, such as `simulate --from-scenarios`, still list them.
 
 ## Diagnose: narrowing to one chain
 
